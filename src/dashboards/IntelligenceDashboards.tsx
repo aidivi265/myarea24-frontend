@@ -713,6 +713,8 @@ export const WeatherDashboard: React.FC<DashboardCommonProps> = ({
    ============================================================================ */
 export const AirQualityDashboard: React.FC<DashboardCommonProps> = ({
   onAskAi,
+  selectedArea,
+  onOpenLocationPicker,
 }) => {
   const [trendRange, setTrendRange] = useState<'24h' | '7d' | '30d'>('24h');
 
@@ -723,7 +725,7 @@ export const AirQualityDashboard: React.FC<DashboardCommonProps> = ({
         tag={
           <>
             <MapPin className="w-3.5 h-3.5 text-blue-300" />
-            <span>Outer North Delhi, Delhi</span>
+            <span>{selectedArea}</span>
           </>
         }
         title="Air Quality"
@@ -757,8 +759,14 @@ export const AirQualityDashboard: React.FC<DashboardCommonProps> = ({
                 </p>
               </div>
               <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-slate-50 text-xs">
-                <span className="font-semibold text-slate-700">📍 Outer North Delhi, Delhi</span>
-                <span className="text-blue-600 font-semibold cursor-pointer">Change Location ›</span>
+                <span className="font-semibold text-slate-700">📍 {selectedArea}</span>
+                <button
+                  type="button"
+                  onClick={() => onOpenLocationPicker?.()}
+                  className="text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
+                >
+                  Change Location ›
+                </button>
               </div>
               <div className="grid grid-cols-5 gap-1 text-center text-[9px] pt-1">
                 {[

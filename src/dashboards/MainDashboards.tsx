@@ -54,6 +54,7 @@ export interface DashboardCommonProps {
   searchQuery: string;
   selectedArea: string;
   onAddToCart?: (item: { name: string; price: number }) => void;
+  onOpenLocationPicker?: () => void;
 }
 
 /* ============================================================================
@@ -66,6 +67,7 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
   savedIds,
   onToggleSave,
   selectedArea,
+  onOpenLocationPicker,
 }) => {
   const exploreCategories = [
     { label: 'Restaurants', icon: Utensils, bg: 'bg-orange-50 text-orange-500', target: 'businesses' as DashboardId },
@@ -163,13 +165,17 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
         description="Live local signals, AI-powered insights and everything you need to make better everyday decisions."
         rightWidget={
           <div className="flex flex-col items-end gap-2.5">
-            <div className="bg-slate-900/55 backdrop-blur-md border border-white/20 rounded-full px-3.5 py-1.5 flex items-center gap-2 text-xs">
+            <button
+              type="button"
+              onClick={() => onOpenLocationPicker?.()}
+              className="bg-slate-900/55 hover:bg-slate-900/75 backdrop-blur-md border border-white/20 rounded-full px-3.5 py-1.5 flex items-center gap-2 text-xs transition cursor-pointer"
+            >
               <MapPin className="w-3.5 h-3.5 text-blue-300" />
               <span className="font-medium text-white">{selectedArea}</span>
-              <span className="text-blue-200/80 ml-1 text-[11px] bg-white/10 px-2 py-0.5 rounded-full">
+              <span className="text-blue-200/90 ml-1 text-[11px] bg-white/15 hover:bg-white/25 px-2 py-0.5 rounded-full font-semibold">
                 Change ›
               </span>
-            </div>
+            </button>
             <div
               onClick={() => onNavigate('weather')}
               className="cursor-pointer bg-slate-900/55 hover:bg-slate-900/70 backdrop-blur-md border border-white/20 rounded-2xl px-4 py-3 flex items-center gap-5 transition"
@@ -666,10 +672,13 @@ export const BusinessesDashboard: React.FC<DashboardCommonProps> = ({
   onAskAi,
   savedIds,
   onToggleSave,
+  selectedArea,
 }) => {
   const [selectedCat, setSelectedCat] = useState('All');
   const [localSearch, setLocalSearch] = useState('');
   const [openNowOnly, setOpenNowOnly] = useState(true);
+  const [sortBy, setSortBy] = useState<'Relevance' | 'Top Rated' | 'Nearest'>('Relevance');
+  const [minRating, setMinRating] = useState<'Any' | '4.5+' | '4.0+'>('Any');
 
   const categories = [
     'All',
@@ -727,14 +736,22 @@ export const BusinessesDashboard: React.FC<DashboardCommonProps> = ({
     },
   ];
 
-  const filteredBiz = popularBusinesses.filter((b) => {
-    const matchesCat = selectedCat === 'All' || b.cat === selectedCat;
-    const matchesQuery =
-      !localSearch ||
-      b.name.toLowerCase().includes(localSearch.toLowerCase()) ||
-      b.sub.toLowerCase().includes(localSearch.toLowerCase());
-    return matchesCat && matchesQuery;
-  });
+  const filteredBiz = popularBusinesses
+    .filter((b) => {
+      const matchesCat = selectedCat === 'All' || b.cat === selectedCat;
+      const matchesQuery =
+        !localSearch ||
+        b.name.toLowerCase().includes(localSearch.toLowerCase()) ||
+        b.sub.toLowerCase().includes(localSearch.toLowerCase());
+      const numRating = parseFloat(b.rating);
+      const matchesRating =
+        minRating === 'Any' || (minRating === '4.5+' ? numRating >= 4.5 : numRating >= 4.0);
+      return matchesCat && matchesQuery && matchesRating;
+    })
+    .sort((a, b) => {
+      if (sortBy === 'Top Rated') return parseFloat(b.rating) - parseFloat(a.rating);
+      return 0;
+    });
 
   const browseGrid = [
     { name: 'Restaurants', count: '320+ places', icon: Utensils, color: 'bg-orange-50 text-orange-600' },
@@ -756,7 +773,7 @@ export const BusinessesDashboard: React.FC<DashboardCommonProps> = ({
         tag={
           <>
             <MapPin className="w-3.5 h-3.5 text-blue-300" />
-            <span>Businesses in Outer North Delhi</span>
+            <span>Businesses in {selectedArea}</span>
           </>
         }
         title="Discover Local Businesses"
@@ -807,7 +824,7 @@ export const BusinessesDashboard: React.FC<DashboardCommonProps> = ({
 
       {/* Search & Filters Bar */}
       <div className="bg-white rounded-xl p-2.5 shadow-card border border-slate-200/70 flex flex-wrap items-center gap-2.5">
-        <div className="flex-1 min-w-[220px] flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200/70">
+        <div className="flex-1 min-w-[200px] flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200/70">
           <Search className="w-4 h-4 text-slate-400" />
           <input
             type="text"
@@ -818,32 +835,56 @@ export const BusinessesDashboard: React.FC<DashboardCommonProps> = ({
           />
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200/80 font-medium text-slate-700 flex items-center gap-1.5">
-            <MapPin className="w-3.5 h-3.5 text-blue-600" /> Outer North Delhi ⌄
-          </span>
-          <span className="px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200/80 font-medium text-slate-700">
-            <span className="text-slate-400 mr-1">Sort by:</span> Relevance ⌄
-          </span>
-          <span className="px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200/80 font-medium text-slate-700">
-            <span className="text-slate-400 mr-1">Rating:</span> Any ⌄
-          </span>
+          <button
+            type="button"
+            onClick={() =>
+              setSortBy((prev) =>
+                prev === 'Relevance' ? 'Top Rated' : prev === 'Top Rated' ? 'Nearest' : 'Relevance'
+              )
+            }
+            className="px-3 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200/80 font-medium text-slate-700 transition cursor-pointer"
+          >
+            <span className="text-slate-400 mr-1">Sort by:</span>{' '}
+            <strong className="text-slate-800">{sortBy}</strong> ⌄
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              setMinRating((prev) => (prev === 'Any' ? '4.5+' : prev === '4.5+' ? '4.0+' : 'Any'))
+            }
+            className={`px-3 py-1.5 rounded-lg border font-medium transition cursor-pointer ${
+              minRating !== 'Any'
+                ? 'bg-amber-50 border-amber-200 text-amber-800 font-bold'
+                : 'bg-slate-50 hover:bg-slate-100 border-slate-200/80 text-slate-700'
+            }`}
+          >
+            <span className="text-slate-400 mr-1">Rating:</span> {minRating} ⌄
+          </button>
           <button
             type="button"
             onClick={() => setOpenNowOnly((v) => !v)}
-            className={`px-3 py-1.5 rounded-lg border font-semibold transition ${
+            className={`px-3 py-1.5 rounded-lg border font-semibold transition cursor-pointer ${
               openNowOnly
                 ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
                 : 'bg-slate-50 border-slate-200/80 text-slate-700'
             }`}
           >
-            Open Now ⌄
+            {openNowOnly ? '● Open Now' : 'Open Now'}
           </button>
-          <button
-            type="button"
-            className="px-3 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200/80 font-semibold text-slate-700 flex items-center gap-1.5"
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5" /> Filters
-          </button>
+          {(selectedCat !== 'All' || localSearch || minRating !== 'Any' || sortBy !== 'Relevance') && (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedCat('All');
+                setLocalSearch('');
+                setMinRating('Any');
+                setSortBy('Relevance');
+              }}
+              className="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 font-semibold text-rose-600 text-[11px]"
+            >
+              Reset
+            </button>
+          )}
         </div>
       </div>
 

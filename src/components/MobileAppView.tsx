@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { DashboardId, ActionModalData, SavedEntry, RenderFidelityMode } from '../types';
+import { DashboardId, ActionModalData, SavedEntry } from '../types';
 import { NAV_ITEMS } from '../data/mockData';
 import { InteractiveMap } from './InteractiveMap';
+import { UserLocation } from './LocationPickerModal';
 import {
   MapPin,
   Bell,
@@ -11,6 +12,7 @@ import {
   Sun,
   Sparkles,
   ChevronRight,
+  ChevronDown,
   Heart,
   Home,
   Compass,
@@ -29,13 +31,34 @@ import {
   TrendingUp,
   Fuel,
   FileText,
-  Wifi,
-  BatteryFull,
-  Signal,
   X,
   Plus,
   Send,
+  Navigation,
 } from 'lucide-react';
+
+const ICON_MAP: Record<DashboardId, React.ElementType> = {
+  home: Home,
+  businesses: Store,
+  products: Package,
+  services: Wrench,
+  offers: Tag,
+  events: Calendar,
+  intelligence: BarChart3,
+  weather: Sun,
+  'air-quality': Wind,
+  traffic: Car,
+  alerts: Bell,
+  'ai-assistant': Bot,
+  map: MapIcon,
+  emergency: ShieldAlert,
+  'market-rates': TrendingUp,
+  'fuel-rates': Fuel,
+  bulletins: FileText,
+  saved: Heart,
+};
+
+const EXPLORE_IDS: DashboardId[] = ['businesses', 'products', 'services', 'offers', 'events'];
 
 interface MobileAppViewProps {
   activeDashboard: DashboardId;
@@ -46,7 +69,10 @@ interface MobileAppViewProps {
   savedEntries: SavedEntry[];
   onToggleSave: (entry: SavedEntry) => void;
   selectedArea: string;
-  fidelityMode: RenderFidelityMode;
+  currentLocation: UserLocation;
+  onOpenLocationPicker: () => void;
+  onOpenNotifications: () => void;
+  onOpenProfile: () => void;
 }
 
 export const MobileAppView: React.FC<MobileAppViewProps> = ({
@@ -56,61 +82,19 @@ export const MobileAppView: React.FC<MobileAppViewProps> = ({
   onAskAi,
   savedEntries,
   selectedArea,
-  fidelityMode,
+  currentLocation,
+  onOpenLocationPicker,
+  onOpenNotifications,
+  onOpenProfile,
 }) => {
   const [moreDrawerOpen, setMoreDrawerOpen] = useState(false);
   const [mobileSearch, setMobileSearch] = useState('');
   const [aiInput, setAiInput] = useState('');
 
   const currentNav = NAV_ITEMS.find((n) => n.id === activeDashboard) || NAV_ITEMS[0];
-
-  const getBottomTabs = (): { id: DashboardId | 'more'; label: string; icon: React.ElementType; badge?: boolean }[] => {
-    if (activeDashboard === 'home') {
-      return [
-        { id: 'home', label: 'Home', icon: Home },
-        { id: 'map', label: 'Map', icon: MapPin },
-        { id: 'businesses', label: 'Explore', icon: Compass },
-        { id: 'alerts', label: 'Alerts', icon: Bell, badge: true },
-        { id: 'more', label: 'More', icon: LayoutGrid },
-      ];
-    }
-    if (['map', 'emergency', 'market-rates', 'fuel-rates', 'bulletins', 'saved'].includes(activeDashboard)) {
-      const fifth: { id: DashboardId | 'more'; label: string; icon: React.ElementType } =
-        activeDashboard === 'bulletins'
-          ? { id: 'bulletins', label: 'Bulletins', icon: FileText }
-          : activeDashboard === 'saved'
-          ? { id: 'saved', label: 'Saved', icon: Heart }
-          : activeDashboard === 'fuel-rates'
-          ? { id: 'fuel-rates', label: 'Fuel Rates', icon: Fuel }
-          : { id: 'more', label: 'More', icon: LayoutGrid };
-      return [
-        { id: 'home', label: 'Home', icon: Home },
-        { id: 'map', label: 'Map', icon: MapIcon },
-        { id: 'emergency', label: 'Emergency', icon: ShieldAlert },
-        { id: 'market-rates', label: 'Market Rates', icon: TrendingUp },
-        fifth,
-      ];
-    }
-    const fifthMap: Record<string, { id: DashboardId | 'more'; label: string; icon: React.ElementType }> = {
-      offers: { id: 'offers', label: 'Offers', icon: Tag },
-      events: { id: 'events', label: 'Events', icon: Calendar },
-      intelligence: { id: 'intelligence', label: 'Intelligence', icon: BarChart3 },
-      weather: { id: 'weather', label: 'Weather', icon: Sun },
-      'air-quality': { id: 'air-quality', label: 'Air Quality', icon: Wind },
-      traffic: { id: 'traffic', label: 'Traffic', icon: Car },
-      alerts: { id: 'alerts', label: 'Alerts', icon: Bell },
-      'ai-assistant': { id: 'ai-assistant', label: 'AI Assistant', icon: Bot },
-    };
-    return [
-      { id: 'home', label: 'Home', icon: Home },
-      { id: 'businesses', label: 'Businesses', icon: Store },
-      { id: 'products', label: 'Products', icon: Package },
-      { id: 'services', label: 'Services', icon: Wrench },
-      fifthMap[activeDashboard] || { id: 'more', label: 'More', icon: LayoutGrid },
-    ];
-  };
-
-  const bottomTabs = getBottomTabs();
+  const isExploreSection = EXPLORE_IDS.includes(activeDashboard);
+  const isMoreSection =
+    !['home', 'map', 'alerts'].includes(activeDashboard) && !isExploreSection;
 
   // Dedicated Mobile Body Renderer for all 18 screens matching Odd Pages (3..37) of the Visual Guide PDF
   const renderMobileScreenBody = () => {
@@ -609,8 +593,312 @@ export const MobileAppView: React.FC<MobileAppViewProps> = ({
           </div>
         );
 
+      case 'map':
+        return (
+          <div className="p-3 space-y-3">
+            <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
+              {['All', '🍴 Food', '🏥 Hospitals', '🛍️ Shopping', '⛽ Fuel', '🏧 ATMs'].map((c, i) => (
+                <span
+                  key={c}
+                  className={`px-3 py-1 rounded-xl text-[10px] font-bold whitespace-nowrap ${
+                    i === 0 ? 'bg-blue-600 text-white' : 'bg-white text-slate-700 border border-slate-200'
+                  }`}
+                >
+                  {c}
+                </span>
+              ))}
+            </div>
+            <div className="bg-white rounded-2xl p-2 shadow-xs border border-slate-200/70">
+              <InteractiveMap
+                heightClass="h-64"
+                showLiveViewBadge
+                showTrafficRoutes
+                centerLabel={`${currentLocation.areaName}\nLive Map`}
+              />
+            </div>
+            <div className="bg-white rounded-2xl p-3 shadow-xs border border-slate-200/70">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-extrabold text-slate-900">📍 Popular Places Around You</h4>
+                <button
+                  type="button"
+                  onClick={() => onNavigate('businesses')}
+                  className="text-[10px] font-bold text-blue-600"
+                >
+                  Explore All ›
+                </button>
+              </div>
+              <div className="space-y-2">
+                {[
+                  { n: 'The Urban Chai Café', s: 'Café • Open Now', d: '800 m', img: './assets/crops/biz-card-chai.webp' },
+                  { n: 'Bikanervala', s: 'Restaurant • Open Now', d: '1.2 km', img: './assets/crops/biz-card-bikanervala.webp' },
+                  { n: 'Rohini Sports Complex', s: 'Sports & Park • Open', d: '1.5 km', img: './assets/crops/biz-sports-complex.webp' },
+                ].map((pl) => (
+                  <div
+                    key={pl.n}
+                    onClick={() =>
+                      onOpenModal({
+                        title: pl.n,
+                        subtitle: pl.s,
+                        category: 'Live Area Map Pin',
+                        location: `${pl.d} from ${currentLocation.areaName}`,
+                        description: 'Tap below to launch turn-by-turn navigation or view live crowd status.',
+                        primaryActionLabel: 'Start Navigation',
+                        image: pl.img,
+                      })
+                    }
+                    className="cursor-pointer flex items-center justify-between gap-2.5 p-2 rounded-xl bg-slate-50 hover:bg-indigo-50/40 transition"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <img src={pl.img} alt={pl.n} className="w-11 h-11 rounded-lg object-cover shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-extrabold text-slate-900 truncate">{pl.n}</p>
+                        <p className="text-[10px] text-slate-500 truncate">{pl.s}</p>
+                      </div>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 text-[10px] font-bold shrink-0">
+                      {pl.d} ›
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'alerts':
+        return (
+          <div className="p-3 space-y-3">
+            <div className="p-3 rounded-2xl bg-gradient-to-r from-rose-600 to-orange-500 text-white shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="px-2 py-0.5 rounded bg-white/20 text-[9px] font-extrabold uppercase">
+                  Critical Area Alert
+                </span>
+                <span className="text-[10px] text-rose-100">12 mins ago</span>
+              </div>
+              <h4 className="text-xs font-extrabold mt-1.5">
+                Heavy Traffic & Waterlogging Near Madhuban Chowk Underpass
+              </h4>
+              <p className="text-[10px] text-rose-100 mt-0.5">
+                Expect 15–20 min delay on Outer Ring Road. Use Sector 9 internal road as alternate route.
+              </p>
+            </div>
+
+            <div className="bg-white rounded-2xl p-3 shadow-xs border border-slate-200/70">
+              <div className="flex items-center justify-between mb-2.5">
+                <h4 className="text-xs font-extrabold text-slate-900">
+                  🔔 Active Alerts in {currentLocation.areaName}
+                </h4>
+                <span className="px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 text-[9px] font-extrabold">
+                  4 Active
+                </span>
+              </div>
+              <div className="space-y-2">
+                {[
+                  {
+                    t: 'Planned Water Supply Maintenance',
+                    s: 'Sector 8, 9 & 10 • Tomorrow 10 AM – 2 PM',
+                    b: 'Civic',
+                    cls: 'bg-sky-50 text-sky-700',
+                  },
+                  {
+                    t: 'High UV Index Advisory (UV 7)',
+                    s: 'Peak sun hours 12 PM – 3 PM. Carry sunglasses & water.',
+                    b: 'Weather',
+                    cls: 'bg-amber-50 text-amber-700',
+                  },
+                  {
+                    t: 'Metro Feeder Bus Route Diversion',
+                    s: 'Due to Rohini Summer Fest near District Park Gate 2.',
+                    b: 'Transit',
+                    cls: 'bg-indigo-50 text-indigo-700',
+                  },
+                  {
+                    t: 'Night Police Patrol & Beat Box Active',
+                    s: 'Verified PCR van stationed near Sector 10 Main Market.',
+                    b: 'Safety',
+                    cls: 'bg-emerald-50 text-emerald-700',
+                  },
+                ].map((al) => (
+                  <div
+                    key={al.t}
+                    className="p-2.5 rounded-xl border border-slate-200/70 flex items-start justify-between gap-2 bg-slate-50/50"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-xs font-extrabold text-slate-900">{al.t}</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">{al.s}</p>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold shrink-0 ${al.cls}`}>
+                      {al.b}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'weather':
+        return (
+          <div className="p-3 space-y-3">
+            <div className="bg-white rounded-2xl p-3.5 shadow-xs border border-slate-200/70">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold text-blue-600 uppercase">Current Conditions</span>
+                  <h3 className="text-2xl font-extrabold text-slate-900 mt-0.5">28°C • Clear Sky</h3>
+                  <p className="text-[11px] text-slate-500">Feels like 30°C • High 32° / Low 20°</p>
+                </div>
+                <Sun className="w-12 h-12 text-amber-400 fill-amber-400" />
+              </div>
+              <div className="grid grid-cols-4 gap-2 mt-3 pt-3 border-t border-slate-100 text-center">
+                {[
+                  ['💧 Humidity', '42%'],
+                  ['🌬️ Wind', '12 km/h'],
+                  ['☀️ UV Index', '6 Mod'],
+                  ['🌧️ Rain', '10%'],
+                ].map(([k, v]) => (
+                  <div key={k} className="p-2 rounded-xl bg-slate-50">
+                    <p className="text-[9px] text-slate-500">{k}</p>
+                    <p className="text-xs font-extrabold text-slate-900 mt-0.5">{v}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl p-3 shadow-xs border border-slate-200/70">
+              <h4 className="text-xs font-extrabold text-slate-900 mb-2">🕒 Hourly Forecast</h4>
+              <div className="grid grid-cols-5 gap-1.5 text-center">
+                {[
+                  ['Now', '28°', '☀️'],
+                  ['2 PM', '31°', '☀️'],
+                  ['5 PM', '29°', '⛅'],
+                  ['8 PM', '25°', '🌙'],
+                  ['11 PM', '22°', '🌧️'],
+                ].map(([t, d, ic]) => (
+                  <div key={t} className="p-2 rounded-xl bg-slate-50">
+                    <p className="text-[9px] text-slate-500 font-semibold">{t}</p>
+                    <p className="text-base my-0.5">{ic}</p>
+                    <p className="text-xs font-extrabold text-slate-900">{d}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'air-quality':
+        return (
+          <div className="p-3 space-y-3">
+            <div className="bg-white rounded-2xl p-3.5 shadow-xs border border-slate-200/70 flex items-center gap-4">
+              <div className="w-20 h-20 rounded-full border-8 border-emerald-500 flex flex-col items-center justify-center shrink-0">
+                <span className="text-xl font-extrabold text-slate-900 leading-none">82</span>
+                <span className="text-[10px] font-bold text-emerald-600">Good</span>
+              </div>
+              <div>
+                <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[9px] font-extrabold">
+                  SATISFACTORY AIR
+                </span>
+                <h4 className="text-xs font-extrabold text-slate-900 mt-1">
+                  Safe for outdoor walks & sports in {currentLocation.areaName}
+                </h4>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  PM2.5: 34 µg/m³ • PM10: 68 µg/m³
+                </p>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'traffic':
+        return (
+          <div className="p-3 space-y-3">
+            <div className="bg-white rounded-2xl p-2 shadow-xs border border-slate-200/70">
+              <InteractiveMap
+                heightClass="h-52"
+                showTrafficRoutes
+                showLiveViewBadge
+                centerLabel={`${currentLocation.areaName}\nLive Traffic`}
+              />
+            </div>
+            <div className="bg-white rounded-2xl p-3 shadow-xs border border-slate-200/70 space-y-2">
+              <h4 className="text-xs font-extrabold text-slate-900">🚗 Live Corridor Status</h4>
+              {[
+                ['Outer Ring Road (Madhuban Chowk)', '+14 min delay', 'text-rose-600 bg-rose-50'],
+                ['Rithala Metro Station Road', 'Moderate (+5m)', 'text-amber-700 bg-amber-50'],
+                ['Sector 10 Internal Market Road', 'Smooth Flow', 'text-emerald-700 bg-emerald-50'],
+              ].map(([rd, st, cls]) => (
+                <div key={rd} className="flex items-center justify-between p-2 rounded-xl bg-slate-50 text-xs">
+                  <span className="font-bold text-slate-800 truncate">{rd}</span>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold shrink-0 ${cls}`}>{st}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+
+      case 'market-rates':
+      case 'fuel-rates':
+      case 'bulletins':
+        return (
+          <div className="p-3 space-y-3">
+            <div className="bg-white rounded-2xl p-3 shadow-xs border border-slate-200/70 space-y-2">
+              <h4 className="text-xs font-extrabold text-slate-900">
+                {activeDashboard === 'fuel-rates'
+                  ? '⛽ Today’s Fuel Rates in Delhi NCR'
+                  : activeDashboard === 'market-rates'
+                  ? '📈 Daily Mandi & Commodity Rates'
+                  : '📢 Official Civic Bulletins'}
+              </h4>
+              {activeDashboard === 'fuel-rates'
+                ? [
+                    ['Petrol (1 L)', '₹94.72', 'No change'],
+                    ['Diesel (1 L)', '₹87.62', 'No change'],
+                    ['CNG (1 kg)', '₹74.09', '↓ ₹0.50'],
+                    ['Domestic LPG (14.2 kg)', '₹803.00', 'Subsidized'],
+                  ].map(([n, p, c]) => (
+                    <div key={n} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50">
+                      <span className="text-xs font-bold text-slate-800">{n}</span>
+                      <div className="text-right">
+                        <p className="text-xs font-extrabold text-slate-900">{p}</p>
+                        <p className="text-[9px] text-emerald-600 font-bold">{c}</p>
+                      </div>
+                    </div>
+                  ))
+                : activeDashboard === 'market-rates'
+                ? [
+                    ['🍅 Tomato (Hybrid)', '₹30 / kg', '↓ 15% today'],
+                    ['🧅 Onion (Nashik)', '₹28 / kg', '↓ 10% today'],
+                    ['🥔 Potato (Fresh)', '₹24 / kg', 'Stable'],
+                    ['🥛 Amul Full Cream Milk', '₹66 / L', 'MRP'],
+                  ].map(([n, p, c]) => (
+                    <div key={n} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50">
+                      <span className="text-xs font-bold text-slate-800">{n}</span>
+                      <div className="text-right">
+                        <p className="text-xs font-extrabold text-slate-900">{p}</p>
+                        <p className="text-[9px] text-emerald-600 font-bold">{c}</p>
+                      </div>
+                    </div>
+                  ))
+                : [
+                    ['Water Supply Maintenance', 'Tomorrow 10 AM – 2 PM in Sec 9 & 10', 'DJB Notice'],
+                    ['Free Dengue Checkup Camp', 'Sunday 9 AM at Sector 10 Dispensary', 'Health Dept'],
+                    ['Solar Rooftop Subsidy Registration', 'Apply before 30th of this month', 'Civic Portal'],
+                  ].map(([t, s, b]) => (
+                    <div key={t} className="p-2.5 rounded-xl bg-slate-50 flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-xs font-extrabold text-slate-900">{t}</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5">{s}</p>
+                      </div>
+                      <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 text-[9px] font-bold shrink-0">
+                        {b}
+                      </span>
+                    </div>
+                  ))}
+            </div>
+          </div>
+        );
+
       default:
-        // Default rich mobile view (Home, Intelligence, Weather, Air Quality, Traffic, Alerts, Map, Market Rates, Fuel Rates, Bulletins)
+        // Default rich mobile view (Home & Intelligence Overview)
         return (
           <div className="p-3 space-y-3">
             <div className="grid grid-cols-3 gap-2">
@@ -657,7 +945,7 @@ export const MobileAppView: React.FC<MobileAppViewProps> = ({
             <div className="bg-gradient-to-r from-indigo-50 via-blue-50 to-purple-50 rounded-2xl p-3 border border-indigo-200/70 shadow-xs">
               <div className="flex items-center gap-2.5">
                 <img
-                  src="/assets/crops/ai-robot-umbrella.webp"
+                  src="./assets/crops/ai-robot-umbrella.webp"
                   alt="AI Robot"
                   className="w-12 h-12 rounded-xl object-contain bg-white/80 p-1 shrink-0"
                 />
@@ -670,7 +958,7 @@ export const MobileAppView: React.FC<MobileAppViewProps> = ({
                     </span>
                   </div>
                   <p className="text-[10px] text-slate-700 mt-0.5 leading-snug">
-                    Rain is expected after 10 PM in Rohini which may slow down traffic near Sector 10.
+                    Rain is expected after 10 PM in {currentLocation.areaName} which may slow down traffic near Sector 10.
                   </p>
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
@@ -755,7 +1043,7 @@ export const MobileAppView: React.FC<MobileAppViewProps> = ({
                   <span className="text-[9px] font-bold text-blue-600">See All ›</span>
                 </div>
                 <img
-                  src="/assets/crops/event-summer-fest.webp"
+                  src="./assets/crops/event-summer-fest.webp"
                   alt="Rohini Summer Fest"
                   className="w-full h-16 rounded-lg object-cover mb-1.5"
                 />
@@ -773,7 +1061,7 @@ export const MobileAppView: React.FC<MobileAppViewProps> = ({
                   <span className="text-[9px] font-bold text-blue-600">See All ›</span>
                 </div>
                 <img
-                  src="/assets/crops/civic-water.webp"
+                  src="./assets/crops/civic-water.webp"
                   alt="Water supply"
                   className="w-full h-16 rounded-lg object-cover mb-1.5"
                 />
@@ -790,268 +1078,473 @@ export const MobileAppView: React.FC<MobileAppViewProps> = ({
   };
 
   return (
-    <div className="flex flex-col items-center justify-center py-2">
-      <div className="relative w-[390px] sm:w-[412px] h-[845px] rounded-[52px] bg-[#141726] p-[11px] shadow-[0_25px_70px_-15px_rgba(15,23,42,0.45)] ring-2 ring-slate-700/70 select-none overflow-hidden">
-        <div className="relative w-full h-full rounded-[42px] bg-[#F3F5FB] overflow-hidden flex flex-col">
-          {fidelityMode === 'visual-guide' ? (
-            <div className="relative w-full h-full overflow-y-auto no-scrollbar bg-[#0B1739]">
-              <img
-                src={`./assets/screens/${activeDashboard}-app-screen.webp`}
-                alt={`${currentNav.label} Mobile App`}
-                className="w-full h-auto block"
-              />
+    <div className="w-full min-h-screen bg-[#F3F5FB] flex flex-col pb-20 select-none">
+      {/* Dark Navy Mobile Header + Hero */}
+      <div className="relative bg-gradient-to-b from-[#0D1B42] via-[#1B2B65] to-[#2A2968] text-white px-4 pt-3.5 pb-4 rounded-b-3xl shadow-md overflow-hidden">
+        <div
+          className="absolute inset-0 bg-cover bg-center opacity-40 mix-blend-lighten pointer-events-none"
+          style={{
+            backgroundImage: `url('./assets/crops/hero-art-${activeDashboard}.webp'), url('./assets/crops/hero-skyline-art.webp')`,
+          }}
+        />
+        <div className="relative z-10">
+          {/* Top Bar: Logo + Weather + Bell + Profile */}
+          <div className="flex items-center justify-between mb-2">
+            <button
+              type="button"
+              onClick={() => onNavigate('home')}
+              className="cursor-pointer flex items-center gap-1.5 text-left"
+            >
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-indigo-500 to-purple-400 flex items-center justify-center shadow-xs">
+                <Sparkles className="w-4 h-4 text-white" />
+              </div>
+              <span className="text-base font-extrabold tracking-tight">
+                MyArea<span className="text-indigo-300">24</span>
+              </span>
+            </button>
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => onNavigate('alerts')}
-                className="absolute top-[5%] right-[16%] w-9 h-9 rounded-full bg-transparent hover:bg-white/15 transition"
-                title="View Alerts"
-              />
+                onClick={() => onNavigate('weather')}
+                className="px-2.5 py-1 rounded-full bg-white/10 hover:bg-white/15 border border-white/15 text-[11px] font-semibold flex items-center gap-1"
+              >
+                <Sun className="w-3.5 h-3.5 text-amber-300 fill-amber-300" /> 28°C
+              </button>
               <button
                 type="button"
-                onClick={() => setMoreDrawerOpen(true)}
-                className="absolute top-[5%] right-[5%] w-9 h-9 rounded-full bg-transparent hover:bg-white/15 transition"
-                title="Open All 18 Screens Drawer"
+                onClick={onOpenNotifications}
+                className="relative w-7 h-7 rounded-full bg-white/10 hover:bg-white/15 border border-white/15 flex items-center justify-center"
+              >
+                <Bell className="w-3.5 h-3.5" />
+                <span className="w-2 h-2 rounded-full bg-rose-500 absolute top-1 right-1" />
+              </button>
+              <button
+                type="button"
+                onClick={onOpenProfile}
+                className="w-7 h-7 rounded-full bg-indigo-500 border border-white/40 text-xs font-extrabold flex items-center justify-center"
+              >
+                D
+              </button>
+            </div>
+          </div>
+
+          {/* Blinkit / Uber Style Location Selector Pill */}
+          <button
+            type="button"
+            onClick={onOpenLocationPicker}
+            className="w-full mb-2.5 px-3 py-1.5 rounded-xl bg-slate-950/35 hover:bg-slate-950/50 border border-white/15 flex items-center justify-between gap-2 text-left transition"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <MapPin className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+              <div className="min-w-0">
+                <div className="flex items-center gap-1">
+                  <span className="text-xs font-extrabold text-white">{currentLocation.label}</span>
+                  <span className="text-[11px] font-semibold text-sky-300 truncate">
+                    • {currentLocation.areaName}
+                  </span>
+                  <ChevronDown className="w-3.5 h-3.5 text-blue-200 shrink-0" />
+                </div>
+                <p className="text-[10px] text-blue-100/75 truncate max-w-[240px]">
+                  {currentLocation.fullAddress}
+                </p>
+              </div>
+            </div>
+            <span className="px-2 py-0.5 rounded-full bg-white/15 text-[10px] font-bold text-blue-100 shrink-0">
+              Change ›
+            </span>
+          </button>
+
+          {/* Search Bar + Quick More Trigger */}
+          <div className="flex items-center gap-1.5 mb-3">
+            <div className="flex-1 bg-white/95 text-slate-800 rounded-xl px-3 py-2 flex items-center gap-2 shadow-xs">
+              <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <input
+                type="text"
+                value={mobileSearch}
+                onChange={(e) => setMobileSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && mobileSearch.trim()) {
+                    onAskAi(mobileSearch);
+                  }
+                }}
+                placeholder={currentNav.appSearchPlaceholder}
+                className="bg-transparent text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none w-full"
               />
-              <div className="sticky bottom-0 left-0 right-0 h-16 grid grid-cols-5 bg-transparent">
-                {bottomTabs.map((t) => (
+              <Mic className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            </div>
+            <button
+              type="button"
+              onClick={() => setMoreDrawerOpen(true)}
+              className="w-9 h-9 rounded-xl bg-white/95 text-slate-700 flex items-center justify-center shadow-xs shrink-0"
+              title="All Categories & Sections"
+            >
+              <SlidersHorizontal className="w-4 h-4" />
+            </button>
+          </div>
+
+          {activeDashboard === 'home' ? (
+            <div>
+              <p className="text-[11px] text-blue-100">Good Evening, Divyansh 👋</p>
+              <div className="flex items-start justify-between gap-2 mt-0.5">
+                <div>
+                  <h2 className="text-xl font-extrabold leading-tight">
+                    Your neighbourhood,
+                    <br />
+                    <span className="text-[#93C5FD]">in the know.</span>
+                  </h2>
+                  <p className="text-[10px] text-blue-100/90 mt-1 max-w-[230px]">
+                    Live local signals and AI insights to help you make better decisions every day.
+                  </p>
+                </div>
+                <div
+                  onClick={() => onNavigate('weather')}
+                  className="cursor-pointer bg-slate-900/50 backdrop-blur border border-white/20 rounded-xl px-2.5 py-1.5 text-center shrink-0"
+                >
+                  <p className="text-sm font-extrabold">28°C</p>
+                  <p className="text-[9px] text-blue-200">Clear Sky</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 mt-3 overflow-x-auto no-scrollbar">
+                {[
+                  { icon: '🚗', label: 'Traffic?', nav: 'traffic' as DashboardId },
+                  { icon: '🌧️', label: 'Rain today?', nav: 'weather' as DashboardId },
+                  { icon: '📅', label: 'Events?', nav: 'events' as DashboardId },
+                ].map((p) => (
                   <button
-                    key={t.label}
+                    key={p.label}
                     type="button"
-                    onClick={() => {
-                      if (t.id === 'more') setMoreDrawerOpen(true);
-                      else onNavigate(t.id);
-                    }}
-                    className="w-full h-full hover:bg-indigo-500/10 transition"
-                    title={t.label}
-                  />
+                    onClick={() => onNavigate(p.nav)}
+                    className="px-2.5 py-1 rounded-full bg-white text-slate-800 text-[10px] font-bold flex items-center gap-1 shrink-0 shadow-xs"
+                  >
+                    <span>{p.icon}</span> {p.label}
+                  </button>
                 ))}
+                <button
+                  type="button"
+                  onClick={() => onNavigate('ai-assistant')}
+                  className="px-3 py-1 rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-[10px] font-bold flex items-center gap-1 shrink-0 shadow"
+                >
+                  <Sparkles className="w-3 h-3" /> Ask AI
+                </button>
               </div>
             </div>
           ) : (
-            <>
-              {/* iOS Status Bar (9:41 + Dynamic Island) */}
-              <div className="bg-[#0D1B42] text-white px-6 pt-3 pb-2 flex items-center justify-between shrink-0 relative z-20">
-                <span className="text-xs font-bold tracking-tight">9:41</span>
-                <div className="w-24 h-5 rounded-full bg-black absolute left-1/2 -translate-x-1/2 top-2.5 flex items-center justify-end pr-2">
-                  <span className="w-2 h-2 rounded-full bg-indigo-950 border border-indigo-700/50" />
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <Signal className="w-3.5 h-3.5" />
-                  <Wifi className="w-3.5 h-3.5" />
-                  <BatteryFull className="w-4 h-4" />
-                </div>
-              </div>
-
-              <div className="flex-1 overflow-y-auto no-scrollbar pb-20">
-                {/* Dark Navy Mobile Header + Hero */}
-                <div className="relative bg-gradient-to-b from-[#0D1B42] via-[#1B2B65] to-[#2A2968] text-white px-4 pt-1 pb-4 rounded-b-3xl shadow-md overflow-hidden">
-                  <div
-                    className="absolute inset-0 bg-cover bg-center opacity-40 mix-blend-lighten pointer-events-none"
-                    style={{
-                      backgroundImage: `url('./assets/crops/hero-art-${activeDashboard}.webp'), url('./assets/crops/hero-skyline-art.webp')`,
-                    }}
-                  />
-                  <div className="relative z-10">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div
-                        onClick={() => onNavigate('home')}
-                        className="cursor-pointer flex items-center gap-1.5"
-                      >
-                        <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-indigo-500 to-purple-400 flex items-center justify-center">
-                          <Sparkles className="w-3.5 h-3.5 text-white" />
-                        </div>
-                        <span className="text-base font-extrabold tracking-tight">
-                          MyArea<span className="text-indigo-300">24</span>
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2.5">
-                        <button
-                          type="button"
-                          onClick={() => onNavigate('weather')}
-                          className="px-2 py-0.5 rounded-full bg-white/10 text-[11px] font-semibold flex items-center gap-1"
-                        >
-                          <Sun className="w-3 h-3 text-amber-300 fill-amber-300" /> 28°C
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onNavigate('alerts')}
-                          className="relative w-7 h-7 rounded-full bg-white/10 flex items-center justify-center"
-                        >
-                          <Bell className="w-3.5 h-3.5" />
-                          <span className="w-2 h-2 rounded-full bg-rose-500 absolute top-1 right-1" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setMoreDrawerOpen(true)}
-                          className="w-7 h-7 rounded-full bg-indigo-500 border border-white/40 text-xs font-extrabold flex items-center justify-center"
-                        >
-                          D
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1 text-[11px] text-blue-100 mb-2.5">
-                      <MapPin className="w-3 h-3 text-blue-300" />
-                      <span className="font-medium">{selectedArea}</span>
-                      <span>⌄</span>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 mb-3">
-                      <div className="flex-1 bg-white/95 text-slate-800 rounded-xl px-3 py-2 flex items-center gap-2 shadow-xs">
-                        <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <input
-                          type="text"
-                          value={mobileSearch}
-                          onChange={(e) => setMobileSearch(e.target.value)}
-                          placeholder={currentNav.appSearchPlaceholder}
-                          className="bg-transparent text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none w-full"
-                        />
-                        <Mic className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setMoreDrawerOpen(true)}
-                        className="w-9 h-9 rounded-xl bg-white/95 text-slate-700 flex items-center justify-center shadow-xs shrink-0"
-                      >
-                        <SlidersHorizontal className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    {activeDashboard === 'home' ? (
-                      <div>
-                        <p className="text-[11px] text-blue-100">Good Evening, Divyansh 👋</p>
-                        <div className="flex items-start justify-between gap-2 mt-0.5">
-                          <div>
-                            <h2 className="text-xl font-extrabold leading-tight">
-                              Your neighbourhood,
-                              <br />
-                              <span className="text-[#93C5FD]">in the know.</span>
-                            </h2>
-                            <p className="text-[10px] text-blue-100/90 mt-1 max-w-[220px]">
-                              Live local signals and AI insights to help you make better decisions every day.
-                            </p>
-                          </div>
-                          <div className="bg-slate-900/50 backdrop-blur border border-white/20 rounded-xl px-2.5 py-1.5 text-center shrink-0">
-                            <p className="text-sm font-extrabold">28°C</p>
-                            <p className="text-[9px] text-blue-200">Clear Sky</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1.5 mt-3 overflow-x-auto no-scrollbar">
-                          {[
-                            { icon: '🚗', label: 'Traffic?', nav: 'traffic' as DashboardId },
-                            { icon: '🌧️', label: 'Rain today?', nav: 'weather' as DashboardId },
-                            { icon: '📅', label: 'Events?', nav: 'events' as DashboardId },
-                          ].map((p) => (
-                            <button
-                              key={p.label}
-                              type="button"
-                              onClick={() => onNavigate(p.nav)}
-                              className="px-2.5 py-1 rounded-full bg-white text-slate-800 text-[10px] font-bold flex items-center gap-1 shrink-0 shadow-xs"
-                            >
-                              <span>{p.icon}</span> {p.label}
-                            </button>
-                          ))}
-                          <button
-                            type="button"
-                            onClick={() => onNavigate('ai-assistant')}
-                            className="px-3 py-1 rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-[10px] font-bold flex items-center gap-1 shrink-0 shadow"
-                          >
-                            <Sparkles className="w-3 h-3" /> Ask AI
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <h2 className="text-xl font-extrabold leading-tight">{currentNav.label}</h2>
-                        <p className="text-[11px] text-blue-100/90 mt-0.5">
-                          Real-time hyperlocal updates & AI intelligence for {selectedArea.split(',')[0]}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {renderMobileScreenBody()}
-              </div>
-
-              {/* 5-Tab Bottom Navigation Bar */}
-              <div className="absolute bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200/80 px-2 pt-1.5 pb-4 z-30">
-                <div className="grid grid-cols-5">
-                  {bottomTabs.map((tab) => {
-                    const isActive = tab.id === activeDashboard;
-                    return (
-                      <button
-                        key={tab.label}
-                        type="button"
-                        onClick={() => {
-                          if (tab.id === 'more') setMoreDrawerOpen(true);
-                          else onNavigate(tab.id);
-                        }}
-                        className={`flex flex-col items-center justify-center gap-0.5 py-1 rounded-xl transition relative ${
-                          isActive ? 'text-indigo-600 font-extrabold' : 'text-slate-400 hover:text-slate-700 font-medium'
-                        }`}
-                      >
-                        <tab.icon className="w-4 h-4" />
-                        <span className="text-[9px]">{tab.label}</span>
-                        {tab.badge && (
-                          <span className="w-2 h-2 rounded-full bg-rose-500 absolute top-1 right-5" />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-                <div className="w-28 h-1 rounded-full bg-slate-900/80 mx-auto mt-1.5" />
-              </div>
-            </>
+            <div>
+              <h2 className="text-xl font-extrabold leading-tight">{currentNav.label}</h2>
+              <p className="text-[11px] text-blue-100/90 mt-0.5">
+                Real-time hyperlocal updates & AI intelligence for {currentLocation.areaName}
+              </p>
+            </div>
           )}
 
-          {moreDrawerOpen && (
-            <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-xs z-50 flex flex-col justify-end">
-              <div className="bg-white rounded-t-3xl p-4 max-h-[80%] overflow-y-auto">
-                <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
-                  <div>
-                    <h3 className="text-sm font-extrabold text-slate-900">All 18 MyArea24 Screens</h3>
-                    <p className="text-[10px] text-slate-500">Jump to any mobile app screen from the Visual Guide</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setMoreDrawerOpen(false)}
-                    className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-slate-600"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {NAV_ITEMS.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => {
-                        onNavigate(item.id);
-                        setMoreDrawerOpen(false);
-                      }}
-                      className={`p-2.5 rounded-xl border text-left transition ${
-                        activeDashboard === item.id
-                          ? 'bg-indigo-600 text-white border-indigo-600 font-bold'
-                          : 'bg-slate-50 text-slate-700 border-slate-200/70 hover:bg-indigo-50'
-                      }`}
-                    >
-                      <p className="text-xs font-bold truncate">{item.label}</p>
-                      <p
-                        className={`text-[9px] capitalize mt-0.5 ${
-                          activeDashboard === item.id ? 'text-indigo-200' : 'text-slate-400'
-                        }`}
-                      >
-                        {item.section}
-                      </p>
-                    </button>
-                  ))}
-                </div>
-              </div>
+          {/* Contextual Sub-Navigation Pills when browsing Explore sections */}
+          {isExploreSection && (
+            <div className="flex items-center gap-1.5 mt-3 pt-2.5 border-t border-white/15 overflow-x-auto no-scrollbar">
+              {[
+                { id: 'businesses' as DashboardId, label: 'Businesses', icon: '🏪' },
+                { id: 'products' as DashboardId, label: 'Products', icon: '🛍️' },
+                { id: 'services' as DashboardId, label: 'Services', icon: '🔧' },
+                { id: 'offers' as DashboardId, label: 'Offers', icon: '🏷️' },
+                { id: 'events' as DashboardId, label: 'Events', icon: '📅' },
+              ].map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => onNavigate(t.id)}
+                  className={`px-2.5 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 whitespace-nowrap transition ${
+                    activeDashboard === t.id
+                      ? 'bg-white text-indigo-950 shadow-xs'
+                      : 'bg-white/10 text-blue-100 hover:bg-white/20'
+                  }`}
+                >
+                  <span>{t.icon}</span>
+                  <span>{t.label}</span>
+                </button>
+              ))}
             </div>
           )}
         </div>
       </div>
+
+      {/* Main Mobile Screen Body */}
+      <div className="flex-1">{renderMobileScreenBody()}</div>
+
+      {/* =====================================================================
+          FIXED 5-BUTTON BOTTOM NAVIGATION BAR
+          Strictly matches user's screenshot:
+          Home | Map | Explore | Alerts (with red dot) | More
+         ===================================================================== */}
+      <nav
+        aria-label="Mobile bottom navigation"
+        className="fixed bottom-0 inset-x-0 bg-white border-t border-slate-200/90 shadow-[0_-4px_20px_rgba(15,23,42,0.06)] px-2 py-1.5 z-40"
+      >
+        <div className="grid grid-cols-5 items-center max-w-md mx-auto">
+          {/* 1. Home */}
+          <button
+            type="button"
+            onClick={() => {
+              setMoreDrawerOpen(false);
+              onNavigate('home');
+            }}
+            className={`flex flex-col items-center justify-center py-1 gap-0.5 transition ${
+              activeDashboard === 'home' && !moreDrawerOpen
+                ? 'text-[#2563EB] font-extrabold'
+                : 'text-slate-500 hover:text-slate-800 font-medium'
+            }`}
+          >
+            <Home
+              className={`w-5 h-5 ${
+                activeDashboard === 'home' && !moreDrawerOpen ? 'stroke-[2.5]' : 'stroke-[1.8]'
+              }`}
+            />
+            <span className="text-[11px] leading-tight">Home</span>
+          </button>
+
+          {/* 2. Map */}
+          <button
+            type="button"
+            onClick={() => {
+              setMoreDrawerOpen(false);
+              onNavigate('map');
+            }}
+            className={`flex flex-col items-center justify-center py-1 gap-0.5 transition ${
+              activeDashboard === 'map' && !moreDrawerOpen
+                ? 'text-[#2563EB] font-extrabold'
+                : 'text-slate-500 hover:text-slate-800 font-medium'
+            }`}
+          >
+            <MapPin
+              className={`w-5 h-5 ${
+                activeDashboard === 'map' && !moreDrawerOpen ? 'stroke-[2.5]' : 'stroke-[1.8]'
+              }`}
+            />
+            <span className="text-[11px] leading-tight">Map</span>
+          </button>
+
+          {/* 3. Explore */}
+          <button
+            type="button"
+            onClick={() => {
+              setMoreDrawerOpen(false);
+              onNavigate(isExploreSection ? activeDashboard : 'businesses');
+            }}
+            className={`flex flex-col items-center justify-center py-1 gap-0.5 transition ${
+              isExploreSection && !moreDrawerOpen
+                ? 'text-[#2563EB] font-extrabold'
+                : 'text-slate-500 hover:text-slate-800 font-medium'
+            }`}
+          >
+            <Compass
+              className={`w-5 h-5 ${
+                isExploreSection && !moreDrawerOpen ? 'stroke-[2.5]' : 'stroke-[1.8]'
+              }`}
+            />
+            <span className="text-[11px] leading-tight">Explore</span>
+          </button>
+
+          {/* 4. Alerts (with red notification dot) */}
+          <button
+            type="button"
+            onClick={() => {
+              setMoreDrawerOpen(false);
+              onNavigate('alerts');
+            }}
+            className={`flex flex-col items-center justify-center py-1 gap-0.5 transition ${
+              activeDashboard === 'alerts' && !moreDrawerOpen
+                ? 'text-[#2563EB] font-extrabold'
+                : 'text-slate-500 hover:text-slate-800 font-medium'
+            }`}
+          >
+            <div className="relative">
+              <Bell
+                className={`w-5 h-5 ${
+                  activeDashboard === 'alerts' && !moreDrawerOpen ? 'stroke-[2.5]' : 'stroke-[1.8]'
+                }`}
+              />
+              <span className="w-2 h-2 rounded-full bg-rose-500 absolute -top-0.5 -right-0.5 ring-2 ring-white" />
+            </div>
+            <span className="text-[11px] leading-tight">Alerts</span>
+          </button>
+
+          {/* 5. More (4-squares grid icon — opens drawer with all leftover sections) */}
+          <button
+            type="button"
+            onClick={() => setMoreDrawerOpen((v) => !v)}
+            className={`flex flex-col items-center justify-center py-1 gap-0.5 transition ${
+              moreDrawerOpen || isMoreSection
+                ? 'text-[#2563EB] font-extrabold'
+                : 'text-slate-500 hover:text-slate-800 font-medium'
+            }`}
+          >
+            <LayoutGrid
+              className={`w-5 h-5 ${
+                moreDrawerOpen || isMoreSection ? 'stroke-[2.5]' : 'stroke-[1.8]'
+              }`}
+            />
+            <span className="text-[11px] leading-tight">More</span>
+          </button>
+        </div>
+      </nav>
+
+      {/* =====================================================================
+          "MORE" CATEGORIZED BOTTOM SHEET DRAWER (All Leftover Sections)
+         ===================================================================== */}
+      {moreDrawerOpen && (
+        <div
+          onClick={() => setMoreDrawerOpen(false)}
+          className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 flex flex-col justify-end"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-t-3xl p-4 max-h-[82vh] overflow-y-auto pb-8 animate-in slide-in-from-bottom-5 duration-200"
+          >
+            <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <LayoutGrid className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold text-slate-900">More Sections & Services</h3>
+                  <p className="text-[11px] text-slate-500">
+                    All local discovery, intelligence & community tools
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMoreDrawerOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Location Bar inside More Drawer */}
+            <div
+              onClick={() => {
+                setMoreDrawerOpen(false);
+                onOpenLocationPicker();
+              }}
+              className="mb-4 p-3 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center justify-between gap-2 cursor-pointer"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0">
+                  <Navigation className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-extrabold text-slate-900">
+                    {currentLocation.label} • {currentLocation.areaName}
+                  </p>
+                  <p className="text-[10px] text-slate-500 truncate">{currentLocation.fullAddress}</p>
+                </div>
+              </div>
+              <span className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-600 text-[10px] font-bold shrink-0">
+                Change ›
+              </span>
+            </div>
+
+            <div className="space-y-4">
+              {/* Explore & Local Commerce */}
+              <div>
+                <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-2 px-1">
+                  Explore & Local Commerce
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {NAV_ITEMS.filter((i) => i.section === 'main' && i.id !== 'home').map((item) => {
+                    const Icon = ICON_MAP[item.id];
+                    const active = activeDashboard === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          onNavigate(item.id);
+                          setMoreDrawerOpen(false);
+                        }}
+                        className={`p-2.5 rounded-2xl border flex flex-col items-center text-center gap-1.5 transition ${
+                          active
+                            ? 'bg-indigo-600 text-white border-indigo-600 font-bold'
+                            : 'bg-slate-50 text-slate-700 border-slate-200/70 hover:bg-indigo-50'
+                        }`}
+                      >
+                        <Icon className="w-4 h-4" />
+                        <span className="text-[11px] font-bold leading-tight">{item.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Local Intelligence */}
+              <div>
+                <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-2 px-1">
+                  Neighbourhood Intelligence & AI
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {NAV_ITEMS.filter((i) => i.section === 'intelligence').map((item) => {
+                    const Icon = ICON_MAP[item.id];
+                    const active = activeDashboard === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          onNavigate(item.id);
+                          setMoreDrawerOpen(false);
+                        }}
+                        className={`p-2.5 rounded-2xl border flex flex-col items-center text-center gap-1.5 transition relative ${
+                          active
+                            ? 'bg-indigo-600 text-white border-indigo-600 font-bold'
+                            : 'bg-slate-50 text-slate-700 border-slate-200/70 hover:bg-indigo-50'
+                        }`}
+                      >
+                        {item.badge && (
+                          <span className="absolute top-1.5 right-1.5 px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[8px] font-extrabold">
+                            {item.badge}
+                          </span>
+                        )}
+                        <Icon className="w-4 h-4" />
+                        <span className="text-[11px] font-bold leading-tight">{item.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Community & Emergency */}
+              <div>
+                <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-2 px-1">
+                  Community, Rates & Emergency
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {NAV_ITEMS.filter((i) => i.section === 'community').map((item) => {
+                    const Icon = ICON_MAP[item.id];
+                    const active = activeDashboard === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          onNavigate(item.id);
+                          setMoreDrawerOpen(false);
+                        }}
+                        className={`p-2.5 rounded-2xl border flex flex-col items-center text-center gap-1.5 transition ${
+                          active
+                            ? 'bg-indigo-600 text-white border-indigo-600 font-bold'
+                            : 'bg-slate-50 text-slate-700 border-slate-200/70 hover:bg-indigo-50'
+                        }`}
+                      >
+                        <Icon className="w-4 h-4" />
+                        <span className="text-[11px] font-bold leading-tight">{item.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
