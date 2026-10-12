@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+myarea24.db*
+MyArea24-VisualGuide - Google Docs.pdf
+MyArea24_Pitch_Deck.pptx
+
