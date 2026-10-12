@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   MapPin,
   Search,
@@ -6,14 +6,15 @@ import {
   Home,
   Briefcase,
   Bookmark,
-  Clock,
   Plus,
   Check,
   X,
   ChevronRight,
   Navigation,
   Loader2,
+  Globe,
 } from 'lucide-react';
+import { reverseGeocodeLive, searchLocationsLive } from '../services/liveIntelligence';
 
 export interface UserLocation {
   id: string;
@@ -28,23 +29,26 @@ export const DEFAULT_SAVED_LOCATIONS: UserLocation[] = [
   {
     id: 'loc-home',
     label: 'Home',
-    areaName: 'Outer North Delhi, Delhi',
+    areaName: 'Rohini Sector 10, Delhi',
     fullAddress: 'Pocket B-4, Rohini Sector 10, Outer North Delhi, Delhi 110085',
     pincode: '110085',
+    coords: { lat: 28.7196, lng: 77.1186 },
   },
   {
     id: 'loc-work',
     label: 'Work',
-    areaName: 'Pitampura, Delhi',
-    fullAddress: 'Netaji Subhash Place (NSP), Pitampura, North West Delhi 110034',
-    pincode: '110034',
+    areaName: 'Connaught Place, New Delhi',
+    fullAddress: 'Inner Circle, Rajiv Chowk, Connaught Place, New Delhi 110001',
+    pincode: '110001',
+    coords: { lat: 28.6315, lng: 77.2167 },
   },
   {
-    id: 'loc-other',
-    label: 'Other',
-    areaName: 'Shalimar Bagh, Delhi',
-    fullAddress: 'Block BQ Market, Shalimar Bagh, Delhi 110088',
-    pincode: '110088',
+    id: 'loc-akgec',
+    label: 'Campus',
+    areaName: 'AKGEC, Ghaziabad, Uttar Pradesh',
+    fullAddress: '27th Km Milestone, Delhi-Meerut Expressway, Adhyatmik Nagar, Ghaziabad 201009',
+    pincode: '201009',
+    coords: { lat: 28.6757, lng: 77.5020 },
   },
 ];
 
@@ -55,48 +59,63 @@ export const POPULAR_AREAS: UserLocation[] = [
     areaName: 'Rohini Sector 10, Delhi',
     fullAddress: 'Near Japanese Park & Rohini West Metro, Outer North Delhi 110085',
     pincode: '110085',
+    coords: { lat: 28.7196, lng: 77.1186 },
   },
   {
     id: 'pop-2',
-    label: 'Rohini Sector 9',
-    areaName: 'Rohini Sector 9, Delhi',
-    fullAddress: 'DDA Community Centre, Sector 9, Rohini, Delhi 110085',
-    pincode: '110085',
-  },
-  {
-    id: 'pop-3',
-    label: 'Rithala',
-    areaName: 'Rithala, Rohini, Delhi',
-    fullAddress: 'Rithala Metro Corridor, Outer North Delhi 110085',
-    pincode: '110085',
-  },
-  {
-    id: 'pop-4',
-    label: 'Model Town',
-    areaName: 'Model Town, Delhi',
-    fullAddress: 'Model Town Phase II, Ring Road Corridor, North Delhi 110009',
-    pincode: '110009',
-  },
-  {
-    id: 'pop-5',
-    label: 'Azadpur',
-    areaName: 'Azadpur, Delhi',
-    fullAddress: 'NH-44 GT Karnal Road, Azadpur, Delhi 110033',
-    pincode: '110033',
-  },
-  {
-    id: 'pop-6',
-    label: 'Keshav Puram',
-    areaName: 'Keshav Puram, Delhi',
-    fullAddress: 'Lawrence Road Industrial & Residential Area, Delhi 110035',
-    pincode: '110035',
-  },
-  {
-    id: 'pop-7',
     label: 'Connaught Place',
     areaName: 'Connaught Place, New Delhi',
     fullAddress: 'Inner Circle, Rajiv Chowk, Central Delhi 110001',
     pincode: '110001',
+    coords: { lat: 28.6315, lng: 77.2167 },
+  },
+  {
+    id: 'pop-3',
+    label: 'Noida Sector 62',
+    areaName: 'Noida Sector 62, Uttar Pradesh',
+    fullAddress: 'Electronic City Metro Corridor, Sector 62, Noida 201309',
+    pincode: '201309',
+    coords: { lat: 28.6280, lng: 77.3649 },
+  },
+  {
+    id: 'pop-4',
+    label: 'Indiranagar, Bengaluru',
+    areaName: 'Indiranagar, Bengaluru',
+    fullAddress: '100 Feet Road, HAL 2nd Stage, Indiranagar, Bengaluru, Karnataka 560038',
+    pincode: '560038',
+    coords: { lat: 12.9784, lng: 77.6408 },
+  },
+  {
+    id: 'pop-5',
+    label: 'Bandra Kurla Complex, Mumbai',
+    areaName: 'Bandra Kurla Complex, Mumbai',
+    fullAddress: 'G Block BKC, Bandra East, Mumbai, Maharashtra 400051',
+    pincode: '400051',
+    coords: { lat: 19.0657, lng: 72.8679 },
+  },
+  {
+    id: 'pop-6',
+    label: 'Hitec City, Hyderabad',
+    areaName: 'Hitec City, Hyderabad',
+    fullAddress: 'Cyber Towers, Madhapur, Hyderabad, Telangana 500081',
+    pincode: '500081',
+    coords: { lat: 17.4504, lng: 78.3808 },
+  },
+  {
+    id: 'pop-7',
+    label: 'Hazratganj, Lucknow',
+    areaName: 'Hazratganj, Lucknow',
+    fullAddress: 'Hazratganj Chauraha, Central Lucknow, Uttar Pradesh 226001',
+    pincode: '226001',
+    coords: { lat: 26.8467, lng: 80.9462 },
+  },
+  {
+    id: 'pop-8',
+    label: 'Hinjewadi, Pune',
+    areaName: 'Hinjewadi Phase 1, Pune',
+    fullAddress: 'Rajiv Gandhi Infotech Park, Hinjewadi, Pune, Maharashtra 411057',
+    pincode: '411057',
+    coords: { lat: 18.5913, lng: 73.7389 },
   },
 ];
 
@@ -114,16 +133,45 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
   onSelectLocation,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [liveResults, setLiveResults] = useState<UserLocation[]>([]);
+  const [searchingLive, setSearchingLive] = useState(false);
   const [savedLocations, setSavedLocations] = useState<UserLocation[]>(DEFAULT_SAVED_LOCATIONS);
   const [detectingGps, setDetectingGps] = useState(false);
+  const [gpsError, setGpsError] = useState<string | null>(null);
   const [addingNew, setAddingNew] = useState(false);
   const [newLabel, setNewLabel] = useState<'Home' | 'Work' | 'Other'>('Home');
   const [newArea, setNewArea] = useState('');
   const [newAddress, setNewAddress] = useState('');
 
+  // Debounced Pan-India + Nominatim Live Search
+  useEffect(() => {
+    if (!isOpen) return;
+    const q = searchQuery.trim();
+    if (q.length < 2) {
+      setLiveResults([]);
+      setSearchingLive(false);
+      return;
+    }
+
+    let cancelled = false;
+    setSearchingLive(true);
+    const timer = setTimeout(async () => {
+      const found = await searchLocationsLive(q);
+      if (!cancelled) {
+        setLiveResults(found);
+        setSearchingLive(false);
+      }
+    }, 280);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [searchQuery, isOpen]);
+
   if (!isOpen) return null;
 
-  const filteredAreas = POPULAR_AREAS.filter(
+  const localFiltered = POPULAR_AREAS.filter(
     (a) =>
       !searchQuery.trim() ||
       a.areaName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -131,45 +179,69 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
       a.pincode.includes(searchQuery.trim())
   );
 
+  const displayAreas =
+    searchQuery.trim().length >= 2
+      ? [...liveResults, ...localFiltered.filter((l) => !liveResults.some((r) => r.areaName === l.areaName))]
+      : POPULAR_AREAS;
+
   const handleUseCurrentGps = () => {
     setDetectingGps(true);
-    const finishGps = (lat?: number, lng?: number) => {
-      setTimeout(() => {
-        setDetectingGps(false);
-        const gpsLoc: UserLocation = {
-          id: 'loc-gps',
-          label: 'Current Location',
-          areaName: 'Outer North Delhi, Delhi',
-          fullAddress: lat
-            ? `GPS Pin (${lat.toFixed(4)}°N, ${lng?.toFixed(4)}°E) • Rohini Sector 10, Outer North Delhi 110085`
-            : 'Live GPS • Rohini Sector 10, Near Japanese Park, Outer North Delhi 110085',
-          pincode: '110085',
-        };
-        onSelectLocation(gpsLoc);
-        onClose();
-      }, 650);
-    };
+    setGpsError(null);
 
-    if ('geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => finishGps(pos.coords.latitude, pos.coords.longitude),
-        () => finishGps(),
-        { timeout: 3000 }
-      );
-    } else {
-      finishGps();
+    if (!('geolocation' in navigator)) {
+      setDetectingGps(false);
+      setGpsError('Browser geolocation is not supported on this device.');
+      return;
     }
+
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const resolved = await reverseGeocodeLive(pos.coords.latitude, pos.coords.longitude);
+          setDetectingGps(false);
+          onSelectLocation(resolved);
+          onClose();
+        } catch {
+          setDetectingGps(false);
+          const fallbackGps: UserLocation = {
+            id: 'loc-gps',
+            label: 'Current Location',
+            areaName: `GPS (${pos.coords.latitude.toFixed(3)}°N, ${pos.coords.longitude.toFixed(3)}°E)`,
+            fullAddress: `Live GPS Coordinates: ${pos.coords.latitude.toFixed(4)}°N, ${pos.coords.longitude.toFixed(4)}°E`,
+            pincode: '',
+            coords: { lat: pos.coords.latitude, lng: pos.coords.longitude },
+          };
+          onSelectLocation(fallbackGps);
+          onClose();
+        }
+      },
+      (err) => {
+        setDetectingGps(false);
+        setGpsError(
+          err.code === 1
+            ? 'Location permission denied. Please allow location access in browser settings or search your area above.'
+            : 'Unable to lock GPS signal. Please search your locality or city above.'
+        );
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
   };
 
-  const handleSaveNewAddress = (e: React.FormEvent) => {
+  const handleSaveNewAddress = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newArea.trim()) return;
+    setSearchingLive(true);
+    const geocoded = await searchLocationsLive(newArea.trim());
+    setSearchingLive(false);
+    const best = geocoded[0];
+
     const created: UserLocation = {
       id: `loc-${Date.now()}`,
       label: newLabel,
-      areaName: newArea.trim(),
-      fullAddress: newAddress.trim() || `${newArea.trim()}, Delhi NCR`,
-      pincode: '110085',
+      areaName: best ? best.areaName : newArea.trim(),
+      fullAddress: newAddress.trim() || best?.fullAddress || `${newArea.trim()}, India`,
+      pincode: best?.pincode || '',
+      coords: best?.coords || currentLocation.coords || { lat: 28.7196, lng: 77.1186 },
     };
     setSavedLocations((prev) => [created, ...prev]);
     onSelectLocation(created);
@@ -193,7 +265,7 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
           <div>
             <h3 className="text-base font-extrabold text-slate-900">Select Your Location</h3>
             <p className="text-xs text-slate-500">
-              Hyperlocal signals, traffic, weather & stores sync to your exact area
+              Live weather, CPCB AQI, TomTom traffic & NDMA alerts sync to your exact coordinates
             </p>
           </div>
           <button
@@ -208,13 +280,17 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
         {/* Search Input Bar (Blinkit / Uber style) */}
         <div className="p-4 border-b border-slate-100 bg-slate-50/60">
           <div className="bg-white border-2 border-indigo-500/80 focus-within:border-indigo-600 rounded-xl px-3.5 py-2.5 flex items-center gap-2.5 shadow-xs">
-            <Search className="w-4 h-4 text-indigo-600 shrink-0" />
+            {searchingLive ? (
+              <Loader2 className="w-4 h-4 text-indigo-600 animate-spin shrink-0" />
+            ) : (
+              <Search className="w-4 h-4 text-indigo-600 shrink-0" />
+            )}
             <input
               type="text"
               autoFocus
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search for area, sector, street name, metro or pincode..."
+              placeholder="Search any city, sector, landmark, village or pincode in India..."
               className="flex-1 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none"
             />
             {searchQuery && (
@@ -245,15 +321,23 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
               </div>
               <div>
                 <p className="text-xs font-extrabold text-indigo-600">
-                  {detectingGps ? 'Detecting your live GPS coordinates...' : 'Use current location'}
+                  {detectingGps ? 'Detecting live GPS & reverse-geocoding...' : 'Use current location'}
                 </p>
                 <p className="text-[11px] text-slate-500">
-                  Using GPS • Rohini Sector 10, Outer North Delhi
+                  {currentLocation.coords
+                    ? `Active: ${currentLocation.areaName} (${currentLocation.coords.lat.toFixed(3)}°N, ${currentLocation.coords.lng.toFixed(3)}°E)`
+                    : 'Auto-detect via browser GPS + OpenStreetMap Nominatim'}
                 </p>
               </div>
             </div>
             <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
           </button>
+
+          {gpsError && (
+            <p className="mt-2 text-[11px] font-semibold text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-1.5">
+              {gpsError}
+            </p>
+          )}
         </div>
 
         {/* Scrollable Content */}
@@ -300,7 +384,7 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
                     required
                     value={newArea}
                     onChange={(e) => setNewArea(e.target.value)}
-                    placeholder="Locality / Sector (e.g. Rohini Sector 15, Delhi)"
+                    placeholder="City / Sector / Locality (e.g. Indirapuram Ghaziabad, Koramangala Bengaluru)"
                     className="w-full px-3 py-2 rounded-lg bg-white border border-slate-200 text-xs focus:outline-none"
                   />
                   <input
@@ -322,7 +406,7 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
                       type="submit"
                       className="px-3.5 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-bold"
                     >
-                      Save & Select
+                      Geocode & Save
                     </button>
                   </div>
                 </form>
@@ -330,7 +414,8 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
 
               <div className="space-y-2">
                 {savedLocations.map((loc) => {
-                  const isSelected = currentLocation.areaName === loc.areaName && currentLocation.label === loc.label;
+                  const isSelected =
+                    currentLocation.areaName === loc.areaName && currentLocation.label === loc.label;
                   const Icon =
                     loc.label === 'Home' ? Home : loc.label === 'Work' ? Briefcase : Bookmark;
                   return (
@@ -379,13 +464,21 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
             </div>
           )}
 
-          {/* Popular / Searched Localities */}
+          {/* Live Searched / Popular Pan-India Localities */}
           <div>
-            <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 mb-2.5">
-              {searchQuery ? 'Matching Areas & Sectors' : 'Nearby Sectors & Localities'}
-            </p>
+            <div className="flex items-center justify-between mb-2.5">
+              <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                <Globe className="w-3.5 h-3.5 text-indigo-500" />
+                {searchQuery
+                  ? `Live Geocoded Locations (${displayAreas.length})`
+                  : 'Popular Pan-India Hubs & Localities'}
+              </p>
+              {searchingLive && (
+                <span className="text-[10px] font-semibold text-indigo-600">Searching India...</span>
+              )}
+            </div>
             <div className="space-y-1.5">
-              {filteredAreas.map((area) => {
+              {displayAreas.map((area) => {
                 const isSelected = currentLocation.areaName === area.areaName;
                 return (
                   <button
@@ -400,50 +493,48 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
                     }`}
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
-                        <MapPin className="w-4 h-4 text-indigo-600" />
+                      <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
+                        <Navigation className="w-3.5 h-3.5" />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-xs font-bold text-slate-900 truncate">{area.areaName}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs font-bold text-slate-900 truncate">{area.areaName}</p>
+                          {area.coords && (
+                            <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 shrink-0">
+                              {area.coords.lat.toFixed(2)}°N, {area.coords.lng.toFixed(2)}°E
+                            </span>
+                          )}
+                        </div>
                         <p className="text-[11px] text-slate-500 truncate">{area.fullAddress}</p>
                       </div>
                     </div>
-                    <span className="text-[10px] font-semibold text-slate-400 shrink-0">
-                      {area.pincode}
-                    </span>
+                    {isSelected ? (
+                      <span className="text-[10px] font-extrabold text-indigo-600 shrink-0">Selected</span>
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                    )}
                   </button>
                 );
               })}
 
-              {/* Custom typed location fallback if user types any new city/area */}
-              {searchQuery.trim().length > 2 && filteredAreas.length === 0 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onSelectLocation({
-                      id: `custom-${Date.now()}`,
-                      label: searchQuery.trim(),
-                      areaName: searchQuery.trim(),
-                      fullAddress: `${searchQuery.trim()}, India`,
-                      pincode: '110001',
-                    });
-                    onClose();
-                  }}
-                  className="w-full p-3 rounded-xl border border-indigo-200 bg-indigo-50/50 flex items-center justify-between text-left"
-                >
-                  <div className="flex items-center gap-3">
-                    <Navigation className="w-4 h-4 text-indigo-600" />
-                    <div>
-                      <p className="text-xs font-extrabold text-indigo-950">
-                        Set location to "{searchQuery.trim()}"
-                      </p>
-                      <p className="text-[11px] text-slate-500">
-                        Switch MyArea24 intelligence feed to this area
-                      </p>
-                    </div>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-indigo-600" />
-                </button>
+              {displayAreas.length === 0 && !searchingLive && (
+                <div className="text-center py-6">
+                  <MapPin className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                  <p className="text-xs font-bold text-slate-700">
+                    No matching locality found for "{searchQuery}"
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddingNew(true);
+                      setNewArea(searchQuery);
+                      setSearchQuery('');
+                    }}
+                    className="mt-3 px-4 py-1.5 rounded-full bg-indigo-600 text-white text-xs font-bold"
+                  >
+                    + Use "{searchQuery}" as Custom Location
+                  </button>
+                </div>
               )}
             </div>
           </div>

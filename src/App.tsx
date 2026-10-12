@@ -4,7 +4,11 @@ import {
   ActionModalData,
   SavedEntry,
 } from './types';
-import { NAV_ITEMS, INITIAL_SAVED_ITEMS, AI_KNOWLEDGE_BASE } from './data/mockData';
+import { NAV_ITEMS, INITIAL_SAVED_ITEMS } from './data/mockData';
+import {
+  useLiveIntelligence,
+  askLiveAiAssistant,
+} from './services/liveIntelligence';
 import {
   HomeDashboard,
   BusinessesDashboard,
@@ -97,6 +101,9 @@ export function App() {
   const [currentLocation, setCurrentLocation] = useState<UserLocation>(DEFAULT_SAVED_LOCATIONS[0]);
   const [locationModalOpen, setLocationModalOpen] = useState(false);
 
+  // Unified Live Location Intelligence Engine (FastAPI Backend + Open-Meteo + OpenStreetMap)
+  const liveIntel = useLiveIntelligence(currentLocation);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [commandOpen, setCommandOpen] = useState(false);
 
@@ -147,7 +154,7 @@ export function App() {
 
   const handleSelectLocation = (loc: UserLocation) => {
     setCurrentLocation(loc);
-    showToast(`Location updated to ${loc.label} (${loc.areaName})`);
+    showToast(`Location updated to ${loc.label} (${loc.areaName}) — syncing live telemetry`);
   };
 
   const handleToggleSave = (entry: SavedEntry) => {
@@ -168,24 +175,18 @@ export function App() {
     showToast(`Added ${item.name} (₹${item.price}) to local shopping list`);
   };
 
-  const handleAskAi = (prompt: string) => {
-    const lower = prompt.toLowerCase();
-    let reply = AI_KNOWLEDGE_BASE.default;
-    if (lower.includes('weather') || lower.includes('rain') || lower.includes('umbrella') || lower.includes('heat')) {
-      reply = AI_KNOWLEDGE_BASE.weather;
-    } else if (lower.includes('traffic') || lower.includes('route') || lower.includes('leave') || lower.includes('parking')) {
-      reply = AI_KNOWLEDGE_BASE.traffic;
-    } else if (lower.includes('air') || lower.includes('aqi')) {
-      reply = AI_KNOWLEDGE_BASE.air;
-    } else if (lower.includes('event') || lower.includes('fest')) {
-      reply = AI_KNOWLEDGE_BASE.events;
-    } else if (lower.includes('alert') || lower.includes('safe') || lower.includes('pharmac')) {
-      reply = AI_KNOWLEDGE_BASE.alerts;
-    } else if (lower.includes('restaurant') || lower.includes('cafe') || lower.includes('dinner') || lower.includes('food')) {
-      reply = AI_KNOWLEDGE_BASE.restaurants;
-    }
+  const handleAskAi = async (prompt: string) => {
     setAiModalPrompt(prompt);
-    setAiModalReply(reply);
+    setAiModalReply(`Synthesizing live weather, CPCB AQI, and road corridor telemetry for ${selectedArea}...`);
+    const res = await askLiveAiAssistant(prompt, liveIntel);
+    const fullText = [
+      res.responseText,
+      res.recommendations.length > 0 ? `\nRecommendations:\n• ${res.recommendations.join('\n• ')}` : '',
+      res.sources.length > 0 ? `\n[Sources: ${res.sources.join(' • ')}]` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+    setAiModalReply(fullText);
   };
 
   const currentNav = NAV_ITEMS.find((n) => n.id === activeDashboard) || NAV_ITEMS[0];
@@ -198,6 +199,8 @@ export function App() {
     onToggleSave: handleToggleSave,
     searchQuery,
     selectedArea,
+    currentLocation,
+    liveIntel,
     onAddToCart: handleAddToCart,
     onOpenLocationPicker: () => setLocationModalOpen(true),
   };
@@ -263,6 +266,7 @@ export function App() {
           onToggleSave={handleToggleSave}
           selectedArea={selectedArea}
           currentLocation={currentLocation}
+          liveIntel={liveIntel}
           onOpenLocationPicker={() => setLocationModalOpen(true)}
           onOpenNotifications={() => {
             setNotificationsOpen((v) => !v);
@@ -347,7 +351,7 @@ export function App() {
                       </span>
                       {item.badge && (
                         <span className="px-1.5 py-0.2 rounded-full bg-rose-100 text-rose-600 text-[10px] font-extrabold">
-                          {item.badge}
+                          {item.id === 'alerts' ? liveIntel.alerts.length : item.badge}
                         </span>
                       )}
                     </button>
@@ -482,17 +486,19 @@ export function App() {
 
             {/* Right Header Pills */}
             <div className="flex items-center gap-2.5 shrink-0">
-              {/* Weather Pill */}
+              {/* Live Weather + AQI Pill */}
               <button
                 type="button"
                 onClick={() => handleNavigate('weather')}
                 className="px-3 py-1.5 rounded-full bg-[#F4F6FB] hover:bg-amber-50 border border-slate-200/80 text-xs font-bold text-slate-700 flex items-center gap-1.5 transition cursor-pointer"
-                title="View Live Local Weather"
+                title="View Live Local Weather & AQI"
               >
                 <Sun className="w-4 h-4 text-amber-400 fill-amber-400" />
-                <span>28°C</span>
-                <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.2 rounded-full">
-                  AQI 82
+                <span>{liveIntel.weather.temperatureC}°C</span>
+                <span
+                  className={`text-[10px] font-semibold ${liveIntel.airQuality.colorText} ${liveIntel.airQuality.colorBg} px-1.5 py-0.2 rounded-full`}
+                >
+                  AQI {liveIntel.airQuality.aqiValue}
                 </span>
               </button>
 
@@ -578,53 +584,28 @@ export function App() {
                 </h4>
               </div>
               <span className="px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 text-[10px] font-extrabold">
-                3 New
+                {liveIntel.alerts.length} Active
               </span>
             </div>
             <div className="divide-y divide-slate-100 max-h-80 overflow-y-auto">
-              {[
-                {
-                  title: 'Heavy Traffic near Madhuban Chowk',
-                  sub: 'Delay of ~18 mins reported on Outer Ring Road. Use Sector 9 internal road.',
-                  time: '8 mins ago',
-                  badge: 'Traffic',
-                  cls: 'bg-rose-50 text-rose-600',
-                  target: 'traffic' as DashboardId,
-                },
-                {
-                  title: 'Rohini Summer Fest Starts at 6 PM',
-                  sub: 'Live music & 25+ food stalls at District Park, Sector 10.',
-                  time: '25 mins ago',
-                  badge: 'Event',
-                  cls: 'bg-indigo-50 text-indigo-600',
-                  target: 'events' as DashboardId,
-                },
-                {
-                  title: 'Tomato & Onion Mandi Rates Dropped',
-                  sub: 'Fresh vegetable prices down 15% today at Sharma Fresh Mart.',
-                  time: '1 hour ago',
-                  badge: 'Price Drop',
-                  cls: 'bg-emerald-50 text-emerald-700',
-                  target: 'market-rates' as DashboardId,
-                },
-              ].map((n) => (
+              {liveIntel.alerts.map((al) => (
                 <button
-                  key={n.title}
+                  key={al.id}
                   type="button"
-                  onClick={() => handleNavigate(n.target)}
+                  onClick={() => handleNavigate('alerts')}
                   className="w-full p-3.5 text-left hover:bg-slate-50 transition flex items-start justify-between gap-2"
                 >
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5 mb-0.5">
-                      <span className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold ${n.cls}`}>
-                        {n.badge}
+                      <span className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold ${al.badgeClass}`}>
+                        {al.category}
                       </span>
                       <span className="text-[10px] text-slate-400 flex items-center gap-0.5">
-                        <Clock className="w-2.5 h-2.5" /> {n.time}
+                        <Clock className="w-2.5 h-2.5" /> {al.timeAgo}
                       </span>
                     </div>
-                    <p className="text-xs font-bold text-slate-900">{n.title}</p>
-                    <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">{n.sub}</p>
+                    <p className="text-xs font-bold text-slate-900">{al.title}</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">{al.description}</p>
                   </div>
                   <ChevronRight className="w-4 h-4 text-slate-400 shrink-0 mt-1" />
                 </button>

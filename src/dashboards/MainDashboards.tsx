@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { DashboardId, ActionModalData, SavedEntry } from '../types';
 import { HeroBanner } from '../components/HeroBanner';
 import { InteractiveMap } from '../components/InteractiveMap';
+import { LiveAreaIntelligence } from '../services/liveIntelligence';
+import { UserLocation } from '../components/LocationPickerModal';
 import {
   MapPin,
   Sun,
@@ -53,6 +55,8 @@ export interface DashboardCommonProps {
   onToggleSave: (entry: SavedEntry) => void;
   searchQuery: string;
   selectedArea: string;
+  currentLocation: UserLocation;
+  liveIntel: LiveAreaIntelligence;
   onAddToCart?: (item: { name: string; price: number }) => void;
   onOpenLocationPicker?: () => void;
 }
@@ -67,8 +71,18 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
   savedIds,
   onToggleSave,
   selectedArea,
+  liveIntel,
   onOpenLocationPicker,
 }) => {
+  const { weather, airQuality, traffic } = liveIntel;
+  const nowDateLabel = new Date().toLocaleDateString('en-IN', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  });
+  const topRoute = traffic.popularRoutes[0];
+  const topCorridor = traffic.corridors[0];
+
   const exploreCategories = [
     { label: 'Restaurants', icon: Utensils, bg: 'bg-orange-50 text-orange-500', target: 'businesses' as DashboardId },
     { label: 'Cafes', icon: Coffee, bg: 'bg-amber-50 text-amber-600', target: 'businesses' as DashboardId },
@@ -154,7 +168,7 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
       {/* HERO BANNER */}
       <HeroBanner
         dashboardId="home"
-        tag={<span className="text-sm font-medium text-blue-100">Good Evening, Divyansh 👋</span>}
+        tag={<span className="text-sm font-medium text-blue-100">Good Day, Divyansh 👋</span>}
         title={
           <>
             Your neighbourhood,
@@ -185,14 +199,14 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
                   <Sun className="w-6 h-6 text-amber-400 fill-amber-400" />
                 </div>
                 <div>
-                  <p className="text-2xl font-extrabold text-white leading-none">28°C</p>
-                  <p className="text-xs text-blue-100 mt-0.5">Clear Sky</p>
+                  <p className="text-2xl font-extrabold text-white leading-none">{weather.temperatureC}°C</p>
+                  <p className="text-xs text-blue-100 mt-0.5">{weather.conditionText}</p>
                 </div>
               </div>
               <div className="h-8 w-px bg-white/15" />
               <div className="text-right">
-                <p className="text-xs text-blue-100">Tue, 20 Aug</p>
-                <p className="text-sm font-bold text-white mt-0.5">6:24 PM</p>
+                <p className="text-xs text-blue-100">{nowDateLabel}</p>
+                <p className="text-sm font-bold text-white mt-0.5">{liveIntel.lastUpdated}</p>
               </div>
             </div>
           </div>
@@ -201,12 +215,12 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
           {
             icon: <span className="text-amber-500">💬</span>,
             label: "What's the traffic like?",
-            onClick: () => onAskAi("What's the traffic like in Rohini right now?"),
+            onClick: () => onAskAi(`What's the traffic like in ${selectedArea} right now?`),
           },
           {
             icon: <span className="text-blue-500">🌧️</span>,
             label: 'Will it rain today?',
-            onClick: () => onAskAi('Will it rain today in Outer North Delhi?'),
+            onClick: () => onAskAi(`Will it rain today in ${selectedArea}?`),
           },
           {
             icon: <span className="text-purple-500">📅</span>,
@@ -225,43 +239,50 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
         }}
       />
 
-      {/* ROW 2: 4 SIGNAL CARDS */}
+      {/* ROW 2: 4 LIVE SIGNAL CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-3.5">
         {/* 1. Weather Card (3 cols) */}
         <div className="xl:col-span-3 bg-gradient-to-br from-white via-white to-sky-50/70 rounded-2xl p-4 shadow-card border border-slate-200/70 flex flex-col justify-between">
           <div>
-            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 mb-2">
-              <Sun className="w-4 h-4 text-amber-500" />
-              <span>Weather</span>
+            <div className="flex items-center justify-between text-xs font-bold text-slate-800 mb-2">
+              <div className="flex items-center gap-1.5">
+                <Sun className="w-4 h-4 text-amber-500" />
+                <span>Weather</span>
+              </div>
+              <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[9px] font-bold">● Live</span>
             </div>
             <div className="flex items-center gap-3 my-1">
               <div className="w-11 h-11 rounded-2xl bg-amber-50 flex items-center justify-center">
                 <Sun className="w-7 h-7 text-amber-400 fill-amber-400" />
               </div>
               <div>
-                <p className="text-2xl font-extrabold text-slate-900 leading-none">28°C</p>
-                <p className="text-[11px] text-slate-500 mt-1">H: 32° &nbsp; L: 24°</p>
+                <p className="text-2xl font-extrabold text-slate-900 leading-none">{weather.temperatureC}°C</p>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  H: {weather.maxTempC}° &nbsp; L: {weather.minTempC}°
+                </p>
               </div>
             </div>
-            <p className="text-xs font-medium text-slate-700 mt-1.5">Clear sky, pleasant evening</p>
+            <p className="text-xs font-medium text-slate-700 mt-1.5">
+              {weather.conditionText} • Feels like {weather.feelsLikeC}°C
+            </p>
             <div className="grid grid-cols-3 gap-1.5 pt-3 mt-3 border-t border-slate-100 text-[11px]">
               <div>
                 <p className="font-bold text-slate-800 flex items-center gap-1">
-                  <Droplets className="w-3 h-3 text-blue-500" /> 72%
+                  <Droplets className="w-3 h-3 text-blue-500" /> {weather.humidity}%
                 </p>
                 <p className="text-[10px] text-slate-400">Humidity</p>
               </div>
               <div>
                 <p className="font-bold text-slate-800 flex items-center gap-1">
-                  <Wind className="w-3 h-3 text-blue-500" /> 18 km/h
+                  <Wind className="w-3 h-3 text-blue-500" /> {weather.windKph} km/h
                 </p>
-                <p className="text-[10px] text-slate-400">Wind</p>
+                <p className="text-[10px] text-slate-400">Wind ({weather.windDir})</p>
               </div>
               <div>
                 <p className="font-bold text-slate-800 flex items-center gap-1">
-                  <CloudRain className="w-3 h-3 text-blue-500" /> 0 mm
+                  <CloudRain className="w-3 h-3 text-blue-500" /> {weather.precipitationMm} mm
                 </p>
-                <p className="text-[10px] text-slate-400">Rain</p>
+                <p className="text-[10px] text-slate-400">Rain ({weather.chanceOfRain}%)</p>
               </div>
             </div>
           </div>
@@ -284,19 +305,21 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
             </div>
             <div className="mt-1">
               <p className="text-2xl font-extrabold text-slate-900">
-                142 <span className="text-sm font-bold text-slate-700">AQI</span>
+                {airQuality.aqiValue} <span className="text-sm font-bold text-slate-700">AQI</span>
               </p>
-              <span className="inline-block mt-1.5 px-2.5 py-0.5 rounded-md bg-amber-100 text-amber-800 text-[11px] font-bold">
-                Moderate
+              <span
+                className={`inline-block mt-1.5 px-2.5 py-0.5 rounded-md ${airQuality.colorBg} ${airQuality.colorText} text-[11px] font-bold`}
+              >
+                {airQuality.aqiCategory}
               </span>
             </div>
-            <p className="text-xs text-slate-600 mt-2.5">Air quality is acceptable.</p>
+            <p className="text-xs text-slate-600 mt-2.5 line-clamp-2">{airQuality.healthAdvice}</p>
             <div className="mt-3 flex items-center gap-1">
-              <span className="h-1.5 flex-1 rounded-l-full bg-emerald-400" />
-              <span className="h-2 flex-1 bg-amber-400 ring-2 ring-amber-200 rounded-sm" />
-              <span className="h-1.5 flex-1 bg-orange-400" />
-              <span className="h-1.5 flex-1 bg-rose-400" />
-              <span className="h-1.5 flex-1 rounded-r-full bg-purple-400" />
+              <span className={`h-1.5 flex-1 rounded-l-full bg-emerald-400 ${airQuality.aqiValue <= 100 ? 'h-2 ring-2 ring-emerald-200' : ''}`} />
+              <span className={`h-1.5 flex-1 bg-amber-400 ${airQuality.aqiValue > 100 && airQuality.aqiValue <= 200 ? 'h-2 ring-2 ring-amber-200' : ''}`} />
+              <span className={`h-1.5 flex-1 bg-orange-400 ${airQuality.aqiValue > 200 && airQuality.aqiValue <= 300 ? 'h-2 ring-2 ring-orange-200' : ''}`} />
+              <span className={`h-1.5 flex-1 bg-rose-400 ${airQuality.aqiValue > 300 && airQuality.aqiValue <= 400 ? 'h-2 ring-2 ring-rose-200' : ''}`} />
+              <span className={`h-1.5 flex-1 rounded-r-full bg-purple-400 ${airQuality.aqiValue > 400 ? 'h-2 ring-2 ring-purple-200' : ''}`} />
             </div>
           </div>
           <button
@@ -318,15 +341,25 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
                 <span>Traffic</span>
               </div>
               <div className="flex items-center gap-1.5 mt-1">
-                <span className="w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[10px]">
+                <span
+                  className={`w-4 h-4 rounded-full ${
+                    traffic.congestionLevel === 'Smooth'
+                      ? 'bg-emerald-500'
+                      : traffic.congestionLevel === 'Moderate'
+                      ? 'bg-amber-500'
+                      : 'bg-rose-500'
+                  } text-white flex items-center justify-center text-[10px]`}
+                >
                   ✓
                 </span>
-                <span className="text-sm font-extrabold text-slate-900">Smooth Traffic</span>
+                <span className="text-sm font-extrabold text-slate-900">{traffic.congestionLevel} Traffic</span>
               </div>
-              <p className="text-[11px] text-slate-500 mt-1">No major incidents nearby</p>
+              <p className="text-[11px] text-slate-500 mt-1 truncate max-w-[150px]">
+                {topCorridor ? `${topCorridor.roadName} (${topCorridor.speedKmh} km/h)` : 'Live corridor monitoring'}
+              </p>
             </div>
             <img
-              src="/assets/crops/traffic-highway-thumb.webp"
+              src="./assets/crops/traffic-highway-thumb.webp"
               alt="Traffic preview"
               className="w-28 h-20 object-cover rounded-xl border border-slate-100 shrink-0"
             />
@@ -334,16 +367,18 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
 
           <div className="grid grid-cols-3 gap-1.5 pt-2.5 mt-2 border-t border-slate-100 text-[11px]">
             <div>
-              <p className="font-bold text-slate-800">⚠️ 0</p>
+              <p className="font-bold text-slate-800">⚠️ {traffic.totalIncidents}</p>
               <p className="text-[10px] text-slate-400">Incidents</p>
             </div>
             <div>
-              <p className="font-bold text-slate-800">🛣️ Normal</p>
-              <p className="text-[10px] text-slate-400">Road conditions</p>
+              <p className="font-bold text-slate-800">🛣️ {traffic.averageSpeedKmh} km/h</p>
+              <p className="text-[10px] text-slate-400">Avg speed</p>
             </div>
             <div>
-              <p className="font-bold text-slate-800">🚗 28 min</p>
-              <p className="text-[10px] text-slate-400 truncate">To Connaught Place</p>
+              <p className="font-bold text-slate-800">🚗 {topRoute ? topRoute.durationText : '25 min'}</p>
+              <p className="text-[10px] text-slate-400 truncate">
+                {topRoute ? topRoute.route.split('→')[1]?.trim() || 'City Center' : 'City Center'}
+              </p>
             </div>
           </div>
 
@@ -365,18 +400,18 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
                 <Sparkles className="w-4 h-4 text-indigo-600" />
                 <span className="text-xs font-extrabold text-indigo-950">AI Insight for You</span>
                 <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[9px] font-bold uppercase tracking-wider">
-                  BETA
+                  LIVE
                 </span>
               </div>
               <h3 className="text-sm font-extrabold text-slate-900 leading-snug">
-                Pleasant evening, but some impact later tonight.
+                {weather.temperatureC}°C ({weather.conditionText}) • AQI {airQuality.aqiValue} ({airQuality.aqiCategory})
               </h3>
-              <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
-                Rain is expected after 10 PM in Rohini which may slow down traffic near Sector 10 and increase travel time by 15–20 mins.
+              <p className="text-[11px] text-slate-600 mt-1 leading-relaxed line-clamp-3">
+                {weather.outdoorActivityAdvice} {topCorridor ? `Traffic on ${topCorridor.roadName} is ${topCorridor.status.toLowerCase()} at ${topCorridor.speedKmh} km/h.` : ''}
               </p>
             </div>
             <img
-              src="/assets/crops/ai-robot-umbrella.webp"
+              src="./assets/crops/ai-robot-umbrella.webp"
               alt="AI Assistant Robot"
               className="w-20 h-24 object-contain absolute right-2 top-3 pointer-events-none rounded-xl"
             />
@@ -384,10 +419,10 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
 
           <div className="grid grid-cols-2 gap-1.5 mt-3 z-10">
             {[
-              { label: 'Leave a bit earlier', prompt: 'When should I leave to avoid Sector 10 traffic tonight?' },
-              { label: 'Check alternate routes', prompt: 'Suggest alternate routes avoiding Rohini Sector 10 after 9 PM' },
-              { label: 'Carry an umbrella', prompt: 'What is the rain probability after 10 PM in Rohini?' },
-              { label: 'Check parking availability', prompt: 'How is parking availability near Rohini Sector 10 event venue?' },
+              { label: 'Best time to commute', prompt: `When is the best time to commute in ${selectedArea} today?` },
+              { label: 'Check alternate routes', prompt: `Suggest best traffic routes around ${selectedArea} right now` },
+              { label: 'Rain & weather check', prompt: `What is the rain probability and forecast in ${selectedArea}?` },
+              { label: 'Air quality & health tip', prompt: `Is AQI ${airQuality.aqiValue} safe for outdoor exercise in ${selectedArea}?` },
             ].map((chip) => (
               <button
                 key={chip.label}

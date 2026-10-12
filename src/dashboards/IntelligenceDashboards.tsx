@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { DashboardCommonProps } from './MainDashboards';
 import { HeroBanner } from '../components/HeroBanner';
 import { InteractiveMap } from '../components/InteractiveMap';
-import { AI_KNOWLEDGE_BASE } from '../data/mockData';
+import { askLiveAiAssistant } from '../services/liveIntelligence';
 import {
   MapPin,
   Sun,
@@ -13,36 +13,50 @@ import {
   AlertTriangle,
   Sparkles,
   ChevronRight,
-  Phone,
   Send,
   Paperclip,
   Mic,
   CheckCircle2,
   Eye,
   Gauge,
-  Compass,
-  Video,
-  Navigation,
+  RefreshCw,
+  Radio,
+  ShieldCheck,
 } from 'lucide-react';
 
 /* ============================================================================
-   7. INTELLIGENCE DASHBOARD (Page 14 Desktop)
+   7. INTELLIGENCE DASHBOARD (Page 14 Desktop) — 100% LIVE LOCATION TELEMETRY
    ============================================================================ */
 export const IntelligenceDashboard: React.FC<DashboardCommonProps> = ({
   onNavigate,
   onAskAi,
+  selectedArea,
+  liveIntel,
 }) => {
   const [forecastTab, setForecastTab] = useState<'Today' | 'Tomorrow' | '7 Days'>('Today');
+  const { weather, airQuality, traffic, alerts, mandiRates, fuelRates, demandTrends, location } = liveIntel;
+
+  const shortArea = selectedArea.split(',')[0]?.trim() || selectedArea;
+  const pm25Obj = airQuality.pollutants.find((p) => p.name === 'PM2.5');
+  const criticalCount = alerts.filter((a) => a.severity === 'Critical' || a.severity === 'Important').length;
 
   return (
     <div className="space-y-4">
       <HeroBanner
         dashboardId="intelligence"
         tag={
-          <>
-            <MapPin className="w-3.5 h-3.5 text-blue-300" />
-            <span>Outer North Delhi, Delhi</span>
-          </>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="inline-flex items-center gap-1">
+              <MapPin className="w-3.5 h-3.5 text-blue-300" />
+              <span>{selectedArea}</span>
+            </span>
+            <span className="px-2 py-0.5 rounded-full bg-emerald-500/25 border border-emerald-300/40 text-emerald-200 text-[10px] font-bold flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              {liveIntel.loading
+                ? 'Syncing Live Telemetry...'
+                : `Live Telemetry • ${location.lat.toFixed(3)}°N, ${location.lng.toFixed(3)}°E`}
+            </span>
+          </div>
         }
         title={
           <>
@@ -51,43 +65,58 @@ export const IntelligenceDashboard: React.FC<DashboardCommonProps> = ({
             <span className="text-[#93C5FD]">For a Better You</span>
           </>
         }
-        description="Real-time insights on weather, air quality, traffic, safety, market rates and local trends — all in one place."
+        description="Real-time insights on weather, air quality, traffic, safety, market rates and local trends — dynamically grounded to your exact location."
         askAiWidget={{
-          placeholder: 'Ask about weather, traffic, safety...',
-          chips: ["Today's summary", 'Is it safe to go out?', 'Will it rain today?', 'Traffic to Connaught Place'],
+          placeholder: `Ask about weather, traffic, safety in ${shortArea}...`,
+          chips: [
+            "Today's summary",
+            'Is it safe to go out?',
+            'Will it rain today?',
+            `Traffic around ${shortArea}`,
+          ],
           onAsk: onAskAi,
         }}
       />
 
-      {/* Sub-navigation Pills */}
-      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-        {[
-          { label: 'Overview', icon: '✨', active: true, target: 'intelligence' as const },
-          { label: 'Weather', icon: '☀️', active: false, target: 'weather' as const },
-          { label: 'Air Quality', icon: '🍃', active: false, target: 'air-quality' as const },
-          { label: 'Traffic', icon: '🚗', active: false, target: 'traffic' as const },
-          { label: 'Safety & Alerts', icon: '🔺', active: false, target: 'alerts' as const },
-          { label: 'Market Rates', icon: '📈', active: false, target: 'market-rates' as const },
-          { label: 'Fuel Rates', icon: '⛽', active: false, target: 'fuel-rates' as const },
-          { label: 'Local Trends', icon: '📊', active: false, target: 'intelligence' as const },
-        ].map((p) => (
-          <button
-            key={p.label}
-            type="button"
-            onClick={() => onNavigate(p.target)}
-            className={`px-3.5 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 border whitespace-nowrap transition ${
-              p.active
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-white text-slate-700 border-slate-200/80 hover:bg-slate-50'
-            }`}
-          >
-            <span>{p.icon}</span>
-            <span>{p.label}</span>
-          </button>
-        ))}
+      {/* Sub-navigation Pills + Live Refresh Status */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+          {[
+            { label: 'Overview', icon: '✨', active: true, target: 'intelligence' as const },
+            { label: 'Weather', icon: '☀️', active: false, target: 'weather' as const },
+            { label: 'Air Quality', icon: '🍃', active: false, target: 'air-quality' as const },
+            { label: 'Traffic', icon: '🚗', active: false, target: 'traffic' as const },
+            { label: 'Safety & Alerts', icon: '🔺', active: false, target: 'alerts' as const },
+            { label: 'Market Rates', icon: '📈', active: false, target: 'market-rates' as const },
+            { label: 'Fuel Rates', icon: '⛽', active: false, target: 'fuel-rates' as const },
+          ].map((p) => (
+            <button
+              key={p.label}
+              type="button"
+              onClick={() => onNavigate(p.target)}
+              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 border whitespace-nowrap transition ${
+                p.active
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-white text-slate-700 border-slate-200/80 hover:bg-slate-50'
+              }`}
+            >
+              <span>{p.icon}</span>
+              <span>{p.label}</span>
+            </button>
+          ))}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => liveIntel.refresh()}
+          className="px-3 py-1.5 rounded-full bg-white border border-slate-200/80 hover:border-blue-300 text-[11px] font-bold text-slate-600 flex items-center gap-1.5 shadow-2xs transition cursor-pointer"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 text-blue-600 ${liveIntel.loading ? 'animate-spin' : ''}`} />
+          <span>Updated {liveIntel.lastUpdated}</span>
+        </button>
       </div>
 
-      {/* Top 4 KPI Summary Cards */}
+      {/* Top 4 KPI Summary Cards (100% Live) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
         <div
           onClick={() => onNavigate('weather')}
@@ -98,13 +127,15 @@ export const IntelligenceDashboard: React.FC<DashboardCommonProps> = ({
               <Sun className="w-6 h-6 text-amber-400 fill-amber-400" />
             </div>
             <div>
-              <p className="text-xl font-extrabold text-slate-900">28°C</p>
-              <p className="text-xs font-bold text-slate-700">Clear Sky</p>
-              <p className="text-[10px] text-slate-400">Feels like 30°C</p>
+              <p className="text-xl font-extrabold text-slate-900">{weather.temperatureC}°C</p>
+              <p className="text-xs font-bold text-slate-700 truncate max-w-[130px]">{weather.conditionText}</p>
+              <p className="text-[10px] text-slate-400">Feels like {weather.feelsLikeC}°C</p>
             </div>
           </div>
           <div className="text-right">
-            <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold">• Good</span>
+            <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold">
+              • Live
+            </span>
             <p className="text-[10px] text-slate-400 mt-2">Weather</p>
           </div>
         </div>
@@ -114,15 +145,21 @@ export const IntelligenceDashboard: React.FC<DashboardCommonProps> = ({
           className="cursor-pointer bg-white rounded-2xl p-4 shadow-card border border-slate-200/70 flex items-center justify-between hover:border-blue-300 transition"
         >
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-emerald-50 flex items-center justify-center text-xl">🍃</div>
+            <div className={`w-11 h-11 rounded-2xl ${airQuality.colorBg} flex items-center justify-center text-xl`}>
+              🍃
+            </div>
             <div>
-              <p className="text-xl font-extrabold text-slate-900">AQI 82</p>
-              <p className="text-xs font-bold text-slate-700">Good Air Quality</p>
-              <p className="text-[10px] text-slate-400">PM2.5: 32 µg/m³</p>
+              <p className="text-xl font-extrabold text-slate-900">AQI {airQuality.aqiValue}</p>
+              <p className="text-xs font-bold text-slate-700">{airQuality.aqiCategory}</p>
+              <p className="text-[10px] text-slate-400">
+                PM2.5: {pm25Obj ? `${pm25Obj.value} µg/m³` : 'Live'}
+              </p>
             </div>
           </div>
           <div className="text-right">
-            <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold">Good</span>
+            <span className={`px-2 py-0.5 rounded-full ${airQuality.colorBg} ${airQuality.colorText} text-[10px] font-bold`}>
+              {airQuality.aqiCategory}
+            </span>
             <p className="text-[10px] text-slate-400 mt-2">Air Quality</p>
           </div>
         </div>
@@ -136,13 +173,23 @@ export const IntelligenceDashboard: React.FC<DashboardCommonProps> = ({
               <Car className="w-6 h-6 text-blue-600" />
             </div>
             <div>
-              <p className="text-xl font-extrabold text-slate-900">Moderate</p>
+              <p className="text-xl font-extrabold text-slate-900">{traffic.congestionLevel}</p>
               <p className="text-xs font-bold text-slate-700">Traffic Flow</p>
-              <p className="text-[10px] text-slate-400">Avg. Speed 32 km/h</p>
+              <p className="text-[10px] text-slate-400">Avg. Speed {traffic.averageSpeedKmh} km/h</p>
             </div>
           </div>
           <div className="text-right">
-            <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold">Normal</span>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                traffic.congestionLevel === 'Smooth'
+                  ? 'bg-emerald-50 text-emerald-700'
+                  : traffic.congestionLevel === 'Moderate'
+                  ? 'bg-amber-50 text-amber-700'
+                  : 'bg-rose-50 text-rose-700'
+              }`}
+            >
+              {traffic.congestionLevel}
+            </span>
             <p className="text-[10px] text-slate-400 mt-2">Traffic</p>
           </div>
         </div>
@@ -154,13 +201,23 @@ export const IntelligenceDashboard: React.FC<DashboardCommonProps> = ({
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-2xl bg-emerald-50 flex items-center justify-center text-xl">🛡️</div>
             <div>
-              <p className="text-xl font-extrabold text-slate-900">Low Risk</p>
-              <p className="text-xs font-bold text-slate-700">Safety Index</p>
-              <p className="text-[10px] text-slate-400">No major alerts</p>
+              <p className="text-xl font-extrabold text-slate-900">
+                {criticalCount > 0 ? `${criticalCount} Active` : 'Low Risk'}
+              </p>
+              <p className="text-xs font-bold text-slate-700">Safety & Alerts</p>
+              <p className="text-[10px] text-slate-400">
+                {alerts.length} live notice{alerts.length === 1 ? '' : 's'}
+              </p>
             </div>
           </div>
           <div className="text-right">
-            <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold">• Safe</span>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                criticalCount > 0 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
+              }`}
+            >
+              {criticalCount > 0 ? '• Advisory' : '• Safe'}
+            </span>
             <p className="text-[10px] text-slate-400 mt-2">Safety</p>
           </div>
         </div>
@@ -184,7 +241,7 @@ export const IntelligenceDashboard: React.FC<DashboardCommonProps> = ({
                 key={t}
                 type="button"
                 onClick={() => setForecastTab(t)}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold ${
+                className={`px-3 py-1 rounded-lg text-xs font-semibold cursor-pointer ${
                   forecastTab === t ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'
                 }`}
               >
@@ -192,57 +249,69 @@ export const IntelligenceDashboard: React.FC<DashboardCommonProps> = ({
               </button>
             ))}
           </div>
-          <div className="grid grid-cols-5 gap-2 text-center pt-2">
-            {[
-              { time: 'Now', temp: '28°', rain: '0%', sun: true },
-              { time: '7 PM', temp: '27°', rain: '0%', sun: false },
-              { time: '10 PM', temp: '25°', rain: '0%', sun: false },
-              { time: '1 AM', temp: '24°', rain: '0%', sun: false },
-              { time: '4 AM', temp: '23°', rain: '10%', sun: false },
-            ].map((h) => (
-              <div key={h.time} className="p-2 rounded-xl bg-slate-50/80 flex flex-col items-center gap-1.5">
-                <span className="text-[10px] font-semibold text-slate-500">{h.time}</span>
-                {h.sun ? (
-                  <Sun className="w-5 h-5 text-amber-400 fill-amber-400" />
-                ) : (
-                  <Moon className="w-5 h-5 text-indigo-400 fill-indigo-400" />
-                )}
-                <span className="text-xs font-extrabold text-slate-900">{h.temp}</span>
-                <span className="text-[10px] text-blue-500 font-semibold">💧 {h.rain}</span>
-              </div>
-            ))}
-          </div>
+
+          {forecastTab === '7 Days' ? (
+            <div className="grid grid-cols-5 gap-2 text-center pt-2">
+              {weather.daily.slice(0, 5).map((d) => (
+                <div key={d.dayLabel} className="p-2 rounded-xl bg-slate-50/80 flex flex-col items-center gap-1">
+                  <span className="text-[10px] font-bold text-slate-700">{d.dayLabel}</span>
+                  <span className="text-base">{d.emoji}</span>
+                  <span className="text-[11px] font-extrabold text-slate-900">
+                    {d.maxTempC}°/{d.minTempC}°
+                  </span>
+                  <span className="text-[10px] text-blue-500 font-semibold">💧 {d.rainChance}%</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-5 gap-2 text-center pt-2">
+              {(forecastTab === 'Today' ? weather.hourly.slice(0, 5) : weather.tomorrowHourly.slice(0, 5)).map(
+                (h, idx) => (
+                  <div key={`${h.timeLabel}-${idx}`} className="p-2 rounded-xl bg-slate-50/80 flex flex-col items-center gap-1.5">
+                    <span className="text-[10px] font-semibold text-slate-500">{h.timeLabel}</span>
+                    {h.isDay ? (
+                      <Sun className="w-5 h-5 text-amber-400 fill-amber-400" />
+                    ) : (
+                      <Moon className="w-5 h-5 text-indigo-400 fill-indigo-400" />
+                    )}
+                    <span className="text-xs font-extrabold text-slate-900">{h.tempC}°</span>
+                    <span className="text-[10px] text-blue-500 font-semibold">💧 {h.rainChance}%</span>
+                  </div>
+                )
+              )}
+            </div>
+          )}
         </div>
 
         {/* Air Quality (4 cols) */}
         <div className="xl:col-span-4 bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
-              <span>🍃</span> Air Quality
+              <span>🍃</span> Air Quality (CPCB)
             </h3>
             <button onClick={() => onNavigate('air-quality')} className="text-xs font-semibold text-blue-600">
               View Details ›
             </button>
           </div>
           <div className="flex items-center gap-4">
-            <div className="w-28 h-28 rounded-full border-[8px] border-emerald-500 flex flex-col items-center justify-center shrink-0">
-              <span className="text-2xl font-extrabold text-slate-900 leading-none">82</span>
-              <span className="text-xs font-bold text-emerald-600 mt-0.5">Good</span>
-              <span className="text-[9px] text-slate-400">Air Quality Index</span>
+            <div
+              style={{ borderColor: airQuality.ringHex }}
+              className="w-28 h-28 rounded-full border-[8px] flex flex-col items-center justify-center shrink-0"
+            >
+              <span className="text-2xl font-extrabold text-slate-900 leading-none">{airQuality.aqiValue}</span>
+              <span className={`text-xs font-bold ${airQuality.colorText} mt-0.5`}>{airQuality.aqiCategory}</span>
+              <span className="text-[9px] text-slate-400">CPCB NAQI</span>
             </div>
             <div className="flex-1 space-y-1.5 text-[11px]">
-              {[
-                { k: 'PM2.5', v: '32 µg/m³', st: 'Good', cls: 'bg-emerald-50 text-emerald-700' },
-                { k: 'PM10', v: '54 µg/m³', st: 'Good', cls: 'bg-emerald-50 text-emerald-700' },
-                { k: 'NO₂', v: '21 µg/m³', st: 'Good', cls: 'bg-emerald-50 text-emerald-700' },
-                { k: 'SO₂', v: '8 µg/m³', st: 'Good', cls: 'bg-emerald-50 text-emerald-700' },
-                { k: 'O₃', v: '67 µg/m³', st: 'Moderate', cls: 'bg-amber-50 text-amber-700' },
-                { k: 'CO', v: '0.6 mg/m³', st: 'Good', cls: 'bg-emerald-50 text-emerald-700' },
-              ].map((p) => (
-                <div key={p.k} className="flex items-center justify-between">
-                  <span className="font-semibold text-slate-500 w-12">{p.k}</span>
-                  <span className="font-bold text-slate-800">{p.v}</span>
-                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${p.cls}`}>{p.st}</span>
+              {airQuality.pollutants.slice(0, 6).map((p) => (
+                <div key={p.name} className="flex items-center justify-between">
+                  <span className="font-semibold text-slate-500 w-12">{p.name}</span>
+                  <span className="font-bold text-slate-800">
+                    {p.value} {p.unit}
+                  </span>
+                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${p.colorBg} ${p.colorText}`}>
+                    {p.status}
+                  </span>
                 </div>
               ))}
             </div>
@@ -254,28 +323,29 @@ export const IntelligenceDashboard: React.FC<DashboardCommonProps> = ({
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-extrabold text-slate-900">Traffic Overview</h3>
-              <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold">• Live</span>
+              <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold">
+                • Live
+              </span>
             </div>
             <button onClick={() => onNavigate('traffic')} className="text-xs font-semibold text-blue-600">
               View on Map ›
             </button>
           </div>
           <div className="space-y-2.5">
-            {[
-              { rd: 'Outer Ring Road', st: 'Moderate traffic', spd: '32 km/h', dot: 'bg-amber-500', badge: 'bg-amber-50 text-amber-700' },
-              { rd: 'GT Karnal Road', st: 'Heavy traffic', spd: '18 km/h', dot: 'bg-rose-500', badge: 'bg-rose-50 text-rose-700' },
-              { rd: 'Rohini Sector 10', st: 'Smooth traffic', spd: '42 km/h', dot: 'bg-emerald-500', badge: 'bg-emerald-50 text-emerald-700' },
-              { rd: 'Mukarba Chowk', st: 'Moderate traffic', spd: '28 km/h', dot: 'bg-amber-500', badge: 'bg-amber-50 text-amber-700' },
-            ].map((t) => (
-              <div key={t.rd} className="flex items-center justify-between p-2 rounded-xl bg-slate-50/70">
-                <div className="flex items-center gap-2.5">
-                  <span className={`w-2.5 h-2.5 rounded-full ${t.dot}`} />
-                  <div>
-                    <p className="text-xs font-bold text-slate-900">{t.rd}</p>
-                    <p className="text-[10px] text-slate-500">{t.st}</p>
+            {traffic.corridors.slice(0, 4).map((t) => (
+              <div key={t.id} className="flex items-center justify-between p-2 rounded-xl bg-slate-50/70">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${t.dotColor}`} />
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-900 truncate">{t.roadName}</p>
+                    <p className="text-[10px] text-slate-500 truncate">
+                      {t.status} • {t.distanceKm} km away
+                    </p>
                   </div>
                 </div>
-                <span className={`px-2 py-1 rounded-lg text-xs font-extrabold ${t.badge}`}>{t.spd}</span>
+                <span className={`px-2 py-1 rounded-lg text-xs font-extrabold shrink-0 ${t.badgeClass}`}>
+                  {t.speedKmh} km/h
+                </span>
               </div>
             ))}
           </div>
@@ -294,21 +364,20 @@ export const IntelligenceDashboard: React.FC<DashboardCommonProps> = ({
             </button>
           </div>
           <div className="space-y-2.5">
-            {[
-              { title: 'Road construction on Rohini Sec 14', time: 'Today, 4:30 PM', tag: 'Traffic', cls: 'bg-rose-50 text-rose-600', icon: '🔺' },
-              { title: 'Water supply maintenance', time: 'Today, 6:00 PM – 10:00 PM', tag: 'Utility', cls: 'bg-amber-50 text-amber-700', icon: '⚠️' },
-              { title: 'Minor power fluctuation in some areas', time: 'Today, 2:15 PM', tag: 'Electricity', cls: 'bg-blue-50 text-blue-600', icon: 'ℹ️' },
-              { title: 'No security alerts at the moment', time: 'Your area is safe', tag: 'Safety', cls: 'bg-emerald-50 text-emerald-700', icon: '✅' },
-            ].map((a) => (
-              <div key={a.title} className="flex items-center justify-between gap-2 p-2 rounded-xl hover:bg-slate-50">
+            {alerts.slice(0, 4).map((a) => (
+              <div key={a.id} className="flex items-center justify-between gap-2 p-2 rounded-xl hover:bg-slate-50">
                 <div className="flex items-center gap-2.5 min-w-0">
                   <span>{a.icon}</span>
                   <div className="min-w-0">
                     <p className="text-xs font-bold text-slate-900 truncate">{a.title}</p>
-                    <p className="text-[10px] text-slate-400">{a.time}</p>
+                    <p className="text-[10px] text-slate-400 truncate">
+                      {a.sender} • {a.timeAgo}
+                    </p>
                   </div>
                 </div>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${a.cls}`}>{a.tag}</span>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${a.badgeClass}`}>
+                  {a.category}
+                </span>
               </div>
             ))}
           </div>
@@ -316,26 +385,27 @@ export const IntelligenceDashboard: React.FC<DashboardCommonProps> = ({
 
         <div className="xl:col-span-4 bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-extrabold text-slate-900">📈 Market Rates (Today)</h3>
+            <h3 className="text-sm font-extrabold text-slate-900">📈 Market Rates ({fuelRates.city})</h3>
             <button onClick={() => onNavigate('market-rates')} className="text-xs font-semibold text-blue-600">
               See All ›
             </button>
           </div>
           <div className="space-y-2">
-            {[
-              { item: 'Tomato', icon: '🍅', p: '₹22 / kg', ch: '↓ 12%', cls: 'text-emerald-600 bg-emerald-50' },
-              { item: 'Onion', icon: '🧅', p: '₹28 / kg', ch: '↑ 8%', cls: 'text-rose-600 bg-rose-50' },
-              { item: 'Potato', icon: '🥔', p: '₹20 / kg', ch: '↓ 5%', cls: 'text-emerald-600 bg-emerald-50' },
-              { item: 'Milk (1L)', icon: '🥛', p: '₹56 / L', ch: '0.0%', cls: 'text-slate-500 bg-slate-100' },
-              { item: 'Cooking Oil (1L)', icon: '🌻', p: '₹142 / L', ch: '↑ 4%', cls: 'text-rose-600 bg-rose-50' },
-            ].map((m) => (
-              <div key={m.item} className="flex items-center justify-between py-1.5 border-b border-slate-100 last:border-none text-xs">
+            {mandiRates.map((m) => (
+              <div
+                key={m.commodity}
+                className="flex items-center justify-between py-1.5 border-b border-slate-100 last:border-none text-xs"
+              >
                 <span className="font-bold text-slate-800 flex items-center gap-2">
-                  <span>{m.icon}</span> {m.item}
+                  <span>{m.icon}</span> {m.commodity}
                 </span>
                 <div className="flex items-center gap-3">
-                  <span className="font-extrabold text-slate-900">{m.p}</span>
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold w-14 text-center ${m.cls}`}>{m.ch}</span>
+                  <span className="font-extrabold text-slate-900">
+                    ₹{m.pricePerKg} / {m.unit}
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold text-emerald-700 bg-emerald-50">
+                    {m.trend}
+                  </span>
                 </div>
               </div>
             ))}
@@ -344,17 +414,17 @@ export const IntelligenceDashboard: React.FC<DashboardCommonProps> = ({
 
         <div className="xl:col-span-4 bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-extrabold text-slate-900">⛽ Fuel Prices</h3>
+            <h3 className="text-sm font-extrabold text-slate-900">⛽ Fuel Prices ({fuelRates.city})</h3>
             <button onClick={() => onNavigate('fuel-rates')} className="text-xs font-semibold text-blue-600">
               View Trends
             </button>
           </div>
           <div className="space-y-2.5">
             {[
-              { f: 'Petrol', icon: '⛽', p: '₹96.72 / L', ch: '↓ 0.5%', cls: 'text-emerald-600 bg-emerald-50' },
-              { f: 'Diesel', icon: '🛢️', p: '₹89.62 / L', ch: '↓ 0.4%', cls: 'text-emerald-600 bg-emerald-50' },
-              { f: 'CNG', icon: '🟢', p: '₹74.50 / kg', ch: '0%', cls: 'text-slate-500 bg-slate-100' },
-              { f: 'LPG (14.2 kg)', icon: '🔴', p: '₹803.00', ch: '↑ 1.2%', cls: 'text-rose-600 bg-rose-50' },
+              { f: 'Petrol', icon: '⛽', p: `₹${fuelRates.petrol.toFixed(2)} / L`, ch: 'Live OMC', cls: 'text-emerald-600 bg-emerald-50' },
+              { f: 'Diesel', icon: '🛢️', p: `₹${fuelRates.diesel.toFixed(2)} / L`, ch: 'Live OMC', cls: 'text-emerald-600 bg-emerald-50' },
+              { f: 'CNG', icon: '🟢', p: `₹${fuelRates.cng.toFixed(2)} / kg`, ch: 'Live IGL/MGL', cls: 'text-blue-600 bg-blue-50' },
+              { f: 'LPG (14.2 kg)', icon: '🔴', p: `₹${fuelRates.lpg.toFixed(2)}`, ch: 'Domestic', cls: 'text-slate-600 bg-slate-100' },
             ].map((fl) => (
               <div key={fl.f} className="flex items-center justify-between p-2 rounded-xl bg-slate-50/70 text-xs">
                 <span className="font-bold text-slate-800 flex items-center gap-2">
@@ -376,26 +446,33 @@ export const IntelligenceDashboard: React.FC<DashboardCommonProps> = ({
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-indigo-600" />
-              <h3 className="text-sm font-extrabold text-slate-900">Local Trends & Insights</h3>
-              <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[9px] font-bold">BETA</span>
+              <h3 className="text-sm font-extrabold text-slate-900">
+                Live Hyperlocal Demand & Behavioral Signals
+              </h3>
+              <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[9px] font-bold">
+                LIVE SIGNAL CORRELATION
+              </span>
             </div>
-            <span className="text-xs font-semibold text-blue-600 cursor-pointer">See All ›</span>
+            <span className="text-[11px] font-semibold text-slate-400">{shortArea}</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {[
-              { icon: '📈', title: 'Increased demand for AC services', sub: '30% higher searches this week' },
-              { icon: '🏠', title: 'Real estate interest rising in Rohini', sub: 'Searches up by 18% this month' },
-              { icon: '☕', title: 'More footfall at local cafes', sub: '25% higher than last week' },
-              { icon: '🏋️', title: 'Fitness & gym memberships trending', sub: '40% higher signups this week' },
-            ].map((tr) => (
-              <div key={tr.title} className="p-3 rounded-xl border border-slate-200/70 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center text-base shrink-0">
-                  {tr.icon}
+            {demandTrends.map((tr) => (
+              <div
+                key={tr.title}
+                className="p-3 rounded-xl border border-slate-200/70 flex items-center justify-between gap-3"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center text-base shrink-0">
+                    {tr.icon}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-extrabold text-slate-900 truncate">{tr.title}</p>
+                    <p className="text-[11px] text-slate-500 truncate">{tr.subtitle}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xs font-extrabold text-slate-900">{tr.title}</p>
-                  <p className="text-[11px] text-slate-500">{tr.sub}</p>
-                </div>
+                <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-extrabold shrink-0">
+                  {tr.multiplier}
+                </span>
               </div>
             ))}
           </div>
@@ -403,12 +480,17 @@ export const IntelligenceDashboard: React.FC<DashboardCommonProps> = ({
 
         <div className="xl:col-span-4 bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
           <div className="flex items-center justify-between mb-2.5">
-            <h3 className="text-sm font-extrabold text-slate-900">Area Map Insights</h3>
+            <h3 className="text-sm font-extrabold text-slate-900">Area Map ({shortArea})</h3>
             <button onClick={() => onNavigate('map')} className="text-xs font-semibold text-blue-600">
               View Full Map
             </button>
           </div>
-          <InteractiveMap heightClass="h-40" showSearchBottomButton={false} />
+          <InteractiveMap
+            heightClass="h-40"
+            showSearchBottomButton={false}
+            coords={{ lat: location.lat, lng: location.lng }}
+            centerLabel={`${shortArea}\n${weather.temperatureC}°C • AQI ${airQuality.aqiValue}`}
+          />
         </div>
       </div>
     </div>
@@ -416,12 +498,65 @@ export const IntelligenceDashboard: React.FC<DashboardCommonProps> = ({
 };
 
 /* ============================================================================
-   8. WEATHER DASHBOARD (Page 16 Desktop)
+   8. WEATHER DASHBOARD (Page 16 Desktop) — 100% LIVE METEOROLOGICAL TELEMETRY
    ============================================================================ */
 export const WeatherDashboard: React.FC<DashboardCommonProps> = ({
   onNavigate,
   onAskAi,
+  selectedArea,
+  liveIntel,
 }) => {
+  const { weather, airQuality, location } = liveIntel;
+  const shortArea = selectedArea.split(',')[0]?.trim() || selectedArea;
+
+  // Dynamic Weather Alerts derived from live telemetry
+  const dynamicWeatherNotices = [
+    {
+      title:
+        weather.temperatureC >= 36
+          ? `High Heat Advisory (${weather.temperatureC}°C)`
+          : weather.temperatureC <= 14
+          ? `Cool Weather Notice (${weather.temperatureC}°C)`
+          : `Current Conditions: ${weather.conditionText} (${weather.temperatureC}°C)`,
+      sub: weather.outdoorActivityAdvice,
+      ago: 'Live now',
+      tag: weather.temperatureC >= 36 ? 'High' : 'Live',
+      cls: weather.temperatureC >= 36 ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-700',
+    },
+    {
+      title:
+        weather.precipitationMm > 0
+          ? `Active Precipitation (${weather.precipitationMm} mm)`
+          : `Rain Probability: ${weather.chanceOfRain}% Today`,
+      sub:
+        weather.waterloggingRiskIndex > 30
+          ? `Waterlogging Risk Index ${weather.waterloggingRiskIndex}/100 — watch low-lying underpasses`
+          : `No waterlogging risk in ${shortArea} (Risk Index: ${weather.waterloggingRiskIndex}/100)`,
+      ago: 'Live now',
+      tag: weather.chanceOfRain >= 50 ? 'Moderate' : 'Info',
+      cls: weather.chanceOfRain >= 50 ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-600',
+    },
+    {
+      title: `UV Index ${weather.uvIndex} (${
+        weather.uvIndex >= 8 ? 'Very High' : weather.uvIndex >= 6 ? 'High' : weather.uvIndex >= 3 ? 'Moderate' : 'Low'
+      })`,
+      sub:
+        weather.uvIndex >= 6
+          ? 'Apply SPF 30+ sunscreen and limit direct midday sun exposure'
+          : 'Safe UV levels for outdoor walks and errands',
+      ago: 'Live now',
+      tag: weather.uvIndex >= 6 ? 'Advisory' : 'Safe',
+      cls: weather.uvIndex >= 6 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700',
+    },
+    {
+      title: `Surface Wind ${weather.windKph} km/h (${weather.windDir})`,
+      sub: `Atmospheric Pressure ${weather.pressureHpa} hPa • Visibility ${weather.visibilityKm} km`,
+      ago: 'Live now',
+      tag: weather.windKph >= 28 ? 'Windy' : 'Normal',
+      cls: weather.windKph >= 28 ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-700',
+    },
+  ];
+
   return (
     <div className="space-y-4">
       <HeroBanner
@@ -429,11 +564,13 @@ export const WeatherDashboard: React.FC<DashboardCommonProps> = ({
         tag={
           <>
             <MapPin className="w-3.5 h-3.5 text-blue-300" />
-            <span>Outer North Delhi, Delhi</span>
+            <span>{selectedArea}</span>
           </>
         }
         title="Today's Weather"
-        description="Stay prepared with real-time weather updates, forecasts and local alerts."
+        description={`Live meteorological telemetry from ${weather.source} for ${shortArea} (${location.lat.toFixed(
+          3
+        )}°N, ${location.lng.toFixed(3)}°E).`}
         bottomPills={[
           { icon: <span>☀️</span>, label: 'Current Weather', active: true },
           { icon: <span>🕒</span>, label: 'Hourly Forecast' },
@@ -442,7 +579,7 @@ export const WeatherDashboard: React.FC<DashboardCommonProps> = ({
           { icon: <span>🔺</span>, label: 'Alerts', onClick: () => onNavigate('alerts') },
         ]}
         askAiWidget={{
-          placeholder: "Ask about today's weather, rain chances...",
+          placeholder: `Ask about ${shortArea}'s weather, rain chances...`,
           chips: ['Will it rain today?', 'Best time to travel?', "How's the air quality?"],
           onAsk: onAskAi,
         }}
@@ -456,7 +593,9 @@ export const WeatherDashboard: React.FC<DashboardCommonProps> = ({
             <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
               <Sun className="w-4 h-4 text-amber-500" /> Current Weather
             </h3>
-            <span className="text-[11px] text-slate-400">Updated 10:30 AM</span>
+            <span className="text-[11px] text-emerald-600 font-semibold">
+              ● Live ({weather.observedAt})
+            </span>
           </div>
 
           <div className="flex items-center justify-between gap-4 my-2">
@@ -465,20 +604,20 @@ export const WeatherDashboard: React.FC<DashboardCommonProps> = ({
                 <Sun className="w-11 h-11 text-amber-400 fill-amber-400" />
               </div>
               <div>
-                <p className="text-4xl font-extrabold text-slate-900">28°C</p>
-                <p className="text-sm font-bold text-slate-800 mt-0.5">Clear Sky</p>
-                <p className="text-xs text-slate-500">Feels like 30°C</p>
+                <p className="text-4xl font-extrabold text-slate-900">{weather.temperatureC}°C</p>
+                <p className="text-sm font-bold text-slate-800 mt-0.5">{weather.conditionText}</p>
+                <p className="text-xs text-slate-500">Feels like {weather.feelsLikeC}°C</p>
               </div>
             </div>
             <div className="space-y-1.5">
               <div className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-bold">
-                ✨ Good Weather
+                ✨ {weather.temperatureC >= 36 ? 'Warm Day' : 'Pleasant'}
               </div>
               <div className="px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-[11px] font-bold">
-                💧 No Rain
+                💧 {weather.precipitationMm > 0 ? `${weather.precipitationMm} mm Rain` : `${weather.chanceOfRain}% Rain Chance`}
               </div>
               <div className="px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 text-[11px] font-bold">
-                ☀️ UV Index 6 (High)
+                ☀️ UV Index {weather.uvIndex} ({weather.uvIndex >= 6 ? 'High' : weather.uvIndex >= 3 ? 'Mod' : 'Low'})
               </div>
             </div>
           </div>
@@ -486,25 +625,25 @@ export const WeatherDashboard: React.FC<DashboardCommonProps> = ({
           <div className="grid grid-cols-4 gap-2 pt-3 mt-3 border-t border-slate-100 text-xs">
             <div>
               <p className="font-extrabold text-slate-900 flex items-center gap-1">
-                <Droplets className="w-3.5 h-3.5 text-blue-500" /> 46%
+                <Droplets className="w-3.5 h-3.5 text-blue-500" /> {weather.humidity}%
               </p>
               <p className="text-[10px] text-slate-400">Humidity</p>
             </div>
             <div>
               <p className="font-extrabold text-slate-900 flex items-center gap-1">
-                <Wind className="w-3.5 h-3.5 text-blue-500" /> 12 km/h
+                <Wind className="w-3.5 h-3.5 text-blue-500" /> {weather.windKph} km/h
               </p>
-              <p className="text-[10px] text-slate-400">Wind (NW)</p>
+              <p className="text-[10px] text-slate-400">Wind ({weather.windDir})</p>
             </div>
             <div>
               <p className="font-extrabold text-slate-900 flex items-center gap-1">
-                <Gauge className="w-3.5 h-3.5 text-blue-500" /> 1012 hPa
+                <Gauge className="w-3.5 h-3.5 text-blue-500" /> {weather.pressureHpa} hPa
               </p>
               <p className="text-[10px] text-slate-400">Pressure</p>
             </div>
             <div>
               <p className="font-extrabold text-slate-900 flex items-center gap-1">
-                <Eye className="w-3.5 h-3.5 text-blue-500" /> 10 km
+                <Eye className="w-3.5 h-3.5 text-blue-500" /> {weather.visibilityKm} km
               </p>
               <p className="text-[10px] text-slate-400">Visibility</p>
             </div>
@@ -515,14 +654,14 @@ export const WeatherDashboard: React.FC<DashboardCommonProps> = ({
         <div className="xl:col-span-4 bg-white rounded-2xl p-4 shadow-card border border-slate-200/70 flex flex-col justify-between">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-extrabold text-slate-900">Today's Highlights</h3>
-            <span className="text-xs font-semibold text-blue-600">See Details ›</span>
+            <span className="text-[10px] font-semibold text-slate-400">{shortArea}</span>
           </div>
           <div className="grid grid-cols-4 gap-2 text-center">
             {[
-              { icon: '🌡️', v: '32°C', l: 'Max Temp' },
-              { icon: '🌡️', v: '20°C', l: 'Min Temp' },
-              { icon: '💧', v: '0%', l: 'Chance of Rain' },
-              { icon: '☀️', v: '11 hrs', l: 'Sunlight Hours' },
+              { icon: '🌡️', v: `${weather.maxTempC}°C`, l: 'Max Temp' },
+              { icon: '🌡️', v: `${weather.minTempC}°C`, l: 'Min Temp' },
+              { icon: '💧', v: `${weather.chanceOfRain}%`, l: 'Chance of Rain' },
+              { icon: '☀️', v: weather.sunlightHours, l: 'Sunlight Hours' },
             ].map((h) => (
               <div key={h.l} className="p-2.5 rounded-xl bg-slate-50">
                 <span className="text-lg">{h.icon}</span>
@@ -535,14 +674,14 @@ export const WeatherDashboard: React.FC<DashboardCommonProps> = ({
             <div className="flex items-center gap-2.5 bg-amber-50/60 p-2 rounded-xl">
               <span className="text-xl">🌅</span>
               <div>
-                <p className="text-xs font-extrabold text-slate-900">5:46 AM</p>
+                <p className="text-xs font-extrabold text-slate-900">{weather.sunrise}</p>
                 <p className="text-[10px] text-slate-500">Sunrise</p>
               </div>
             </div>
             <div className="flex items-center gap-2.5 bg-orange-50/60 p-2 rounded-xl">
               <span className="text-xl">🌇</span>
               <div>
-                <p className="text-xs font-extrabold text-slate-900">6:52 PM</p>
+                <p className="text-xs font-extrabold text-slate-900">{weather.sunset}</p>
                 <p className="text-[10px] text-slate-500">Sunset</p>
               </div>
             </div>
@@ -558,23 +697,21 @@ export const WeatherDashboard: React.FC<DashboardCommonProps> = ({
             </button>
           </div>
           <div className="flex items-center gap-3">
-            <div className="w-24 h-24 rounded-full border-[7px] border-emerald-500 flex flex-col items-center justify-center shrink-0">
-              <span className="text-2xl font-extrabold text-slate-900 leading-none">82</span>
-              <span className="text-[11px] font-bold text-emerald-600">Good</span>
+            <div
+              style={{ borderColor: airQuality.ringHex }}
+              className="w-24 h-24 rounded-full border-[7px] flex flex-col items-center justify-center shrink-0"
+            >
+              <span className="text-2xl font-extrabold text-slate-900 leading-none">{airQuality.aqiValue}</span>
+              <span className={`text-[11px] font-bold ${airQuality.colorText}`}>{airQuality.aqiCategory}</span>
             </div>
             <div className="flex-1 space-y-1 text-[10px]">
-              {[
-                ['PM2.5', '32 µg/m³', 'Good'],
-                ['PM10', '54 µg/m³', 'Good'],
-                ['NO₂', '21 µg/m³', 'Good'],
-                ['SO₂', '8 µg/m³', 'Good'],
-                ['O₃', '67 µg/m³', 'Moderate'],
-                ['CO', '0.6 mg/m³', 'Good'],
-              ].map(([k, v, st]) => (
-                <div key={k} className="flex justify-between">
-                  <span className="text-slate-500">{k}</span>
-                  <span className="font-bold text-slate-800">{v}</span>
-                  <span className={st === 'Good' ? 'text-emerald-600 font-bold' : 'text-amber-600 font-bold'}>{st}</span>
+              {airQuality.pollutants.slice(0, 6).map((p) => (
+                <div key={p.name} className="flex justify-between">
+                  <span className="text-slate-500">{p.name}</span>
+                  <span className="font-bold text-slate-800">
+                    {p.value} {p.unit}
+                  </span>
+                  <span className={`${p.colorText} font-bold`}>{p.status}</span>
                 </div>
               ))}
             </div>
@@ -586,29 +723,20 @@ export const WeatherDashboard: React.FC<DashboardCommonProps> = ({
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
         <div className="xl:col-span-6 bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-extrabold text-slate-900">🕒 Hourly Forecast</h3>
-            <span className="text-xs font-semibold text-blue-600">See Full Forecast ›</span>
+            <h3 className="text-sm font-extrabold text-slate-900">🕒 Live Hourly Forecast (Next 24h)</h3>
+            <span className="text-[11px] font-semibold text-slate-400">Open-Meteo Grid</span>
           </div>
-          <div className="grid grid-cols-8 gap-2 text-center">
-            {[
-              { t: 'Now', d: '28°', r: '0%', day: true },
-              { t: '12 PM', d: '30°', r: '0%', day: true },
-              { t: '2 PM', d: '31°', r: '0%', day: true },
-              { t: '4 PM', d: '30°', r: '10%', day: true },
-              { t: '6 PM', d: '28°', r: '10%', day: true },
-              { t: '8 PM', d: '26°', r: '0%', day: false },
-              { t: '10 PM', d: '24°', r: '0%', day: false },
-              { t: '12 AM', d: '23°', r: '0%', day: false },
-            ].map((h) => (
-              <div key={h.t} className="p-2 rounded-xl bg-slate-50 flex flex-col items-center gap-1.5">
-                <span className="text-[10px] text-slate-500 font-medium">{h.t}</span>
-                {h.day ? (
+          <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 text-center">
+            {weather.hourly.slice(0, 8).map((h, i) => (
+              <div key={`${h.timeLabel}-${i}`} className="p-2 rounded-xl bg-slate-50 flex flex-col items-center gap-1.5">
+                <span className="text-[10px] text-slate-500 font-medium">{h.timeLabel}</span>
+                {h.isDay ? (
                   <Sun className="w-5 h-5 text-amber-400 fill-amber-400" />
                 ) : (
                   <Moon className="w-5 h-5 text-indigo-500 fill-indigo-500" />
                 )}
-                <span className="text-xs font-extrabold text-slate-900">{h.d}</span>
-                <span className="text-[9px] text-blue-500 font-semibold">💧{h.r}</span>
+                <span className="text-xs font-extrabold text-slate-900">{h.tempC}°</span>
+                <span className="text-[9px] text-blue-500 font-semibold">💧{h.rainChance}%</span>
               </div>
             ))}
           </div>
@@ -617,29 +745,23 @@ export const WeatherDashboard: React.FC<DashboardCommonProps> = ({
         <div className="xl:col-span-6 bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-extrabold text-slate-900">📅 7 Day Forecast</h3>
-            <span className="text-xs font-semibold text-blue-600">See Full Forecast ›</span>
+            <span className="text-[11px] font-semibold text-slate-400">{shortArea}</span>
           </div>
           <div className="grid grid-cols-7 gap-2 text-center">
-            {[
-              { d: 'Today', dt: '15 Mar', t: '20° / 32°', r: '0%' },
-              { d: 'Sun', dt: '16 Mar', t: '21° / 33°', r: '0%' },
-              { d: 'Mon', dt: '17 Mar', t: '22° / 34°', r: '10%' },
-              { d: 'Tue', dt: '18 Mar', t: '21° / 31°', r: '40%' },
-              { d: 'Wed', dt: '19 Mar', t: '20° / 29°', r: '60%' },
-              { d: 'Thu', dt: '20 Mar', t: '19° / 28°', r: '20%' },
-              { d: 'Fri', dt: '21 Mar', t: '20° / 30°', r: '0%' },
-            ].map((day, idx) => (
+            {weather.daily.slice(0, 7).map((day, idx) => (
               <div
-                key={day.d}
+                key={`${day.dayLabel}-${idx}`}
                 className={`p-2 rounded-xl flex flex-col items-center gap-1 ${
                   idx === 0 ? 'bg-blue-50/80 border border-blue-200' : 'bg-slate-50'
                 }`}
               >
-                <span className="text-[11px] font-bold text-slate-800">{day.d}</span>
-                <span className="text-[9px] text-slate-400">{day.dt}</span>
-                <Sun className="w-5 h-5 text-amber-400 fill-amber-400 my-0.5" />
-                <span className="text-[10px] font-extrabold text-slate-900">{day.t}</span>
-                <span className="text-[9px] text-blue-500 font-semibold">💧 {day.r}</span>
+                <span className="text-[11px] font-bold text-slate-800">{day.dayLabel}</span>
+                <span className="text-[9px] text-slate-400">{day.dateLabel}</span>
+                <span className="text-base my-0.5">{day.emoji}</span>
+                <span className="text-[10px] font-extrabold text-slate-900">
+                  {day.minTempC}° / {day.maxTempC}°
+                </span>
+                <span className="text-[9px] text-blue-500 font-semibold">💧 {day.rainChance}%</span>
               </div>
             ))}
           </div>
@@ -650,25 +772,32 @@ export const WeatherDashboard: React.FC<DashboardCommonProps> = ({
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
         <div className="xl:col-span-4 bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
           <div className="flex items-center justify-between mb-2.5">
-            <h3 className="text-sm font-extrabold text-slate-900">Weather Map</h3>
-            <span className="text-xs font-semibold text-blue-600">View Full Map ›</span>
+            <h3 className="text-sm font-extrabold text-slate-900">Weather Map ({shortArea})</h3>
+            <button onClick={() => onNavigate('map')} className="text-xs font-semibold text-blue-600">
+              View Full Map ›
+            </button>
           </div>
-          <InteractiveMap heightClass="h-48" showSearchBottomButton={false} />
+          <InteractiveMap
+            heightClass="h-48"
+            showSearchBottomButton={false}
+            coords={{ lat: location.lat, lng: location.lng }}
+            centerLabel={`${shortArea}\n${weather.temperatureC}°C ${weather.conditionText}`}
+          />
         </div>
 
         <div className="xl:col-span-4 bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-extrabold text-slate-900">Weather Alerts & Updates</h3>
-            <span className="text-xs font-semibold text-blue-600">See All ›</span>
+            <h3 className="text-sm font-extrabold text-slate-900">Weather Alerts & Telemetry</h3>
+            <button onClick={() => onNavigate('alerts')} className="text-xs font-semibold text-blue-600">
+              See All ›
+            </button>
           </div>
           <div className="space-y-2.5">
-            {[
-              { title: 'Heat Wave Advisory', sub: 'High temperatures expected in the next 3 days', ago: '2 hours ago', tag: 'High', cls: 'bg-rose-50 text-rose-600' },
-              { title: 'Dust Activity Likely', sub: 'Increased dust levels due to strong winds', ago: '5 hours ago', tag: 'Moderate', cls: 'bg-amber-50 text-amber-700' },
-              { title: 'No Rain Expected', sub: 'Clear skies expected for the next 48 hours', ago: '6 hours ago', tag: 'Info', cls: 'bg-emerald-50 text-emerald-700' },
-              { title: 'UV Index High', sub: 'Use sunscreen and limit sun exposure', ago: '6 hours ago', tag: 'Moderate', cls: 'bg-amber-50 text-amber-700' },
-            ].map((al) => (
-              <div key={al.title} className="flex items-center justify-between gap-2 text-xs p-1.5 rounded-lg hover:bg-slate-50">
+            {dynamicWeatherNotices.map((al) => (
+              <div
+                key={al.title}
+                className="flex items-center justify-between gap-2 text-xs p-1.5 rounded-lg hover:bg-slate-50"
+              >
                 <div className="min-w-0">
                   <p className="font-bold text-slate-900 truncate">{al.title}</p>
                   <p className="text-[10px] text-slate-500 truncate">{al.sub}</p>
@@ -684,21 +813,41 @@ export const WeatherDashboard: React.FC<DashboardCommonProps> = ({
 
         <div className="xl:col-span-4 bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-extrabold text-slate-900">Local Insights</h3>
-            <span className="text-xs font-semibold text-blue-600">See More ›</span>
+            <h3 className="text-sm font-extrabold text-slate-900">Local Weather Insights</h3>
+            <span className="text-[10px] font-semibold text-emerald-600">● Live Computed</span>
           </div>
           <div className="grid grid-cols-2 gap-2.5">
             {[
-              { icon: '🚶', label: 'Best Time to Go Out', val: '6 AM – 10 AM', sub: 'Pleasant weather' },
-              { icon: '🚗', label: 'Travel Conditions', val: 'Good', sub: 'Smooth for commuting' },
-              { icon: '🚲', label: 'Outdoor Activities', val: 'Great Conditions', sub: 'Ideal for parks & sports' },
-              { icon: '🧴', label: 'Health Advisory', val: 'Moderate UV', sub: 'Use sunscreen' },
+              {
+                icon: '🚶',
+                label: 'Best Time to Go Out',
+                val: weather.temperatureC >= 33 ? '6 AM – 9 AM' : 'Now / Evening',
+                sub: weather.temperatureC >= 33 ? 'Avoid peak afternoon sun' : `${weather.temperatureC}°C pleasant air`,
+              },
+              {
+                icon: '🚗',
+                label: 'Travel Conditions',
+                val: weather.precipitationMm > 0 ? 'Wet Roads' : 'Dry & Clear',
+                sub: `Visibility ${weather.visibilityKm} km`,
+              },
+              {
+                icon: '🚲',
+                label: 'Outdoor Activities',
+                val: airQuality.aqiValue <= 150 && weather.precipitationMm === 0 ? 'Favorable' : 'Take Caution',
+                sub: `AQI ${airQuality.aqiValue} (${airQuality.aqiCategory})`,
+              },
+              {
+                icon: '🧴',
+                label: 'UV & Heat Advisory',
+                val: `UV Index ${weather.uvIndex}`,
+                sub: weather.uvIndex >= 6 ? 'Use SPF 30+ protection' : 'Low UV exposure risk',
+              },
             ].map((ins) => (
               <div key={ins.label} className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
                 <span className="text-lg">{ins.icon}</span>
                 <p className="text-[10px] text-slate-500 mt-1">{ins.label}</p>
                 <p className="text-xs font-extrabold text-emerald-700">{ins.val}</p>
-                <p className="text-[9px] text-slate-400">{ins.sub}</p>
+                <p className="text-[9px] text-slate-400 truncate">{ins.sub}</p>
               </div>
             ))}
           </div>
@@ -709,14 +858,44 @@ export const WeatherDashboard: React.FC<DashboardCommonProps> = ({
 };
 
 /* ============================================================================
-   9. AIR QUALITY DASHBOARD (Page 18 Desktop)
+   9. AIR QUALITY DASHBOARD (Page 18 Desktop) — 100% LIVE CPCB NAQI TELEMETRY
    ============================================================================ */
 export const AirQualityDashboard: React.FC<DashboardCommonProps> = ({
   onAskAi,
   selectedArea,
+  liveIntel,
   onOpenLocationPicker,
 }) => {
-  const [trendRange, setTrendRange] = useState<'24h' | '7d' | '30d'>('24h');
+  const [trendRange, setTrendRange] = useState<'24h' | '5d'>('24h');
+  const { airQuality, location } = liveIntel;
+  const shortArea = selectedArea.split(',')[0]?.trim() || selectedArea;
+
+  // Build real SVG path from live 24h or 5-day AQI points
+  const chartPoints =
+    trendRange === '24h' && airQuality.hourlyTrend24h.length > 1
+      ? airQuality.hourlyTrend24h.map((p) => ({ label: p.timeLabel, val: p.aqi }))
+      : airQuality.dailyForecast.map((d) => ({ label: d.dayLabel, val: d.aqi }));
+
+  const maxChartAqi = Math.max(150, ...chartPoints.map((p) => p.val));
+  const minChartAqi = Math.max(0, Math.min(...chartPoints.map((p) => p.val)) - 15);
+  const svgCoords = chartPoints.map((pt, i) => {
+    const x = chartPoints.length > 1 ? Math.round((i / (chartPoints.length - 1)) * 500) : 250;
+    const norm = (pt.val - minChartAqi) / Math.max(1, maxChartAqi - minChartAqi);
+    const y = Math.round(90 - norm * 70);
+    return { x, y, ...pt };
+  });
+
+  const linePath =
+    svgCoords.length > 1
+      ? svgCoords.map((c, idx) => `${idx === 0 ? 'M' : 'L'}${c.x},${c.y}`).join(' ')
+      : 'M0,55 L500,55';
+  const areaPath = `${linePath} L500,100 L0,100 Z`;
+  const midPoint = svgCoords[Math.floor(svgCoords.length / 2)] || {
+    x: 250,
+    y: 45,
+    val: airQuality.aqiValue,
+    label: 'Now',
+  };
 
   return (
     <div className="space-y-4">
@@ -730,9 +909,9 @@ export const AirQualityDashboard: React.FC<DashboardCommonProps> = ({
         }
         title="Air Quality"
         subtitle="Breathe Better, Live Healthier"
-        description="Real-time air quality data, forecasts and personalised insights for a healthier, cleaner tomorrow."
+        description={`Official CPCB 2014 NAQI computed from live atmospheric sensors (${airQuality.source}) around ${shortArea}.`}
         askAiWidget={{
-          placeholder: 'Ask about air quality, health risks...',
+          placeholder: `Ask about air quality & health risks in ${shortArea}...`,
           chips: ["Is today's air quality good?", 'How to stay safe?', 'Air quality forecast'],
           onAsk: onAskAi,
         }}
@@ -742,39 +921,46 @@ export const AirQualityDashboard: React.FC<DashboardCommonProps> = ({
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
         <div className="xl:col-span-6 bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-extrabold text-slate-900">✅ Current Air Quality</h3>
-            <span className="text-[11px] text-slate-400">Updated: 10:30 AM ●</span>
+            <h3 className="text-sm font-extrabold text-slate-900">✅ Current Air Quality (CPCB Standard)</h3>
+            <span className="text-[11px] text-emerald-600 font-semibold">
+              Updated: {airQuality.observedAt} ●
+            </span>
           </div>
           <div className="flex flex-col sm:flex-row items-center gap-5">
-            <div className="w-32 h-32 rounded-full border-[10px] border-emerald-500 flex flex-col items-center justify-center shrink-0">
-              <span className="text-3xl font-extrabold text-slate-900 leading-none">82</span>
-              <span className="text-sm font-bold text-emerald-600 mt-1">Good</span>
-              <span className="text-[10px] text-slate-400">Air Quality Index</span>
+            <div
+              style={{ borderColor: airQuality.ringHex }}
+              className="w-32 h-32 rounded-full border-[10px] flex flex-col items-center justify-center shrink-0"
+            >
+              <span className="text-3xl font-extrabold text-slate-900 leading-none">{airQuality.aqiValue}</span>
+              <span className={`text-sm font-bold ${airQuality.colorText} mt-1`}>{airQuality.aqiCategory}</span>
+              <span className="text-[10px] text-slate-400">Prominent: {airQuality.prominentPollutant}</span>
             </div>
             <div className="flex-1 space-y-2.5 w-full">
-              <div className="p-3 rounded-xl bg-emerald-50/80 border border-emerald-200/70 flex items-center gap-2.5">
-                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-                <p className="text-xs font-bold text-slate-800">
-                  Air quality is satisfactory and poses little to no risk.
-                </p>
+              <div
+                className={`p-3 rounded-xl ${airQuality.colorBg} border border-slate-200/70 flex items-center gap-2.5`}
+              >
+                <CheckCircle2 className={`w-5 h-5 ${airQuality.colorText} shrink-0`} />
+                <p className="text-xs font-bold text-slate-800">{airQuality.healthAdvice}</p>
               </div>
               <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-slate-50 text-xs">
-                <span className="font-semibold text-slate-700">📍 {selectedArea}</span>
+                <span className="font-semibold text-slate-700 truncate">
+                  📍 {airQuality.stationName} ({selectedArea})
+                </span>
                 <button
                   type="button"
                   onClick={() => onOpenLocationPicker?.()}
-                  className="text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
+                  className="text-blue-600 hover:text-blue-700 font-semibold cursor-pointer shrink-0 ml-2"
                 >
                   Change Location ›
                 </button>
               </div>
               <div className="grid grid-cols-5 gap-1 text-center text-[9px] pt-1">
                 {[
-                  { l: 'Good', r: '(0–50)', c: 'bg-emerald-500' },
-                  { l: 'Moderate', r: '(51–100)', c: 'bg-amber-400' },
-                  { l: 'Poor', r: '(101–200)', c: 'bg-orange-500' },
-                  { l: 'Very Poor', r: '(201–300)', c: 'bg-rose-500' },
-                  { l: 'Severe', r: '(301+)', c: 'bg-purple-600' },
+                  { l: 'Good/Sat', r: '(0–100)', c: 'bg-emerald-500' },
+                  { l: 'Moderate', r: '(101–200)', c: 'bg-amber-400' },
+                  { l: 'Poor', r: '(201–300)', c: 'bg-orange-500' },
+                  { l: 'Very Poor', r: '(301–400)', c: 'bg-rose-500' },
+                  { l: 'Severe', r: '(401+)', c: 'bg-purple-600' },
                 ].map((s) => (
                   <div key={s.l}>
                     <div className={`h-1.5 rounded-full ${s.c} mb-1`} />
@@ -789,23 +975,23 @@ export const AirQualityDashboard: React.FC<DashboardCommonProps> = ({
 
         <div className="xl:col-span-6 bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-extrabold text-slate-900">🧪 Pollutant Levels</h3>
-            <span className="text-xs font-semibold text-blue-600">View Details ›</span>
+            <h3 className="text-sm font-extrabold text-slate-900">🧪 Live Pollutant Concentrations</h3>
+            <span className="text-[11px] font-semibold text-slate-400">{airQuality.source}</span>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[
-              { name: 'PM2.5', val: '32', unit: 'µg/m³', status: 'Good' },
-              { name: 'PM10', val: '54', unit: 'µg/m³', status: 'Good' },
-              { name: 'NO₂', val: '21', unit: 'µg/m³', status: 'Good' },
-              { name: 'SO₂', val: '8', unit: 'µg/m³', status: 'Good' },
-            ].map((pol) => (
-              <div key={pol.name} className="p-3 rounded-xl bg-slate-50/80 border border-slate-100 flex flex-col items-center">
-                <span className="text-xs font-bold text-slate-600 mb-2">{pol.name}</span>
-                <div className="w-20 h-20 rounded-full border-[6px] border-emerald-500 flex flex-col items-center justify-center bg-white">
-                  <span className="text-xl font-extrabold text-slate-900 leading-none">{pol.val}</span>
-                  <span className="text-[9px] text-slate-400 mt-0.5">{pol.unit}</span>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+            {airQuality.pollutants.map((pol) => (
+              <div
+                key={pol.name}
+                className="p-2.5 rounded-xl bg-slate-50/80 border border-slate-100 flex items-center justify-between gap-2"
+              >
+                <div>
+                  <span className="text-xs font-extrabold text-slate-800">{pol.name}</span>
+                  <p className="text-lg font-extrabold text-slate-900 leading-tight mt-0.5">
+                    {pol.value} <span className="text-[10px] font-medium text-slate-400">{pol.unit}</span>
+                  </p>
+                  <p className="text-[9px] text-slate-400">Sub-Index: {pol.subIndex}</p>
                 </div>
-                <span className="mt-2 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold">
+                <span className={`px-2 py-0.5 rounded-full ${pol.colorBg} ${pol.colorText} text-[10px] font-bold`}>
                   {pol.status}
                 </span>
               </div>
@@ -818,31 +1004,30 @@ export const AirQualityDashboard: React.FC<DashboardCommonProps> = ({
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
         <div className="xl:col-span-4 bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
           <div className="flex items-center justify-between mb-2.5">
-            <h3 className="text-sm font-extrabold text-slate-900">Air Quality Map</h3>
-            <span className="text-xs font-semibold text-blue-600">View Full Map ›</span>
+            <h3 className="text-sm font-extrabold text-slate-900">Air Quality Map ({shortArea})</h3>
+            <span className="text-[10px] font-semibold text-emerald-600">● Live Grid</span>
           </div>
-          <InteractiveMap heightClass="h-44" centerLabel={'Rohini\nAQI: 82 Good'} showSearchBottomButton={false} />
+          <InteractiveMap
+            heightClass="h-44"
+            coords={{ lat: location.lat, lng: location.lng }}
+            centerLabel={`${shortArea}\nAQI: ${airQuality.aqiValue} ${airQuality.aqiCategory}`}
+            showSearchBottomButton={false}
+          />
         </div>
 
         <div className="xl:col-span-4 bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-extrabold text-slate-900">Air Quality Forecast</h3>
-            <span className="text-xs font-semibold text-blue-600">See 7 Day Forecast ›</span>
+            <h3 className="text-sm font-extrabold text-slate-900">Air Quality Forecast (5-Day)</h3>
+            <span className="text-[10px] font-semibold text-slate-400">CAMS Atmospheric Model</span>
           </div>
           <div className="grid grid-cols-5 gap-2 text-center">
-            {[
-              { d: 'Today', dt: '15 Mar', aqi: '82', st: 'Good', cls: 'text-emerald-600 bg-emerald-50' },
-              { d: 'Sun', dt: '16 Mar', aqi: '86', st: 'Good', cls: 'text-emerald-600 bg-emerald-50' },
-              { d: 'Mon', dt: '17 Mar', aqi: '88', st: 'Moderate', cls: 'text-amber-700 bg-amber-50' },
-              { d: 'Tue', dt: '18 Mar', aqi: '85', st: 'Good', cls: 'text-emerald-600 bg-emerald-50' },
-              { d: 'Wed', dt: '19 Mar', aqi: '80', st: 'Good', cls: 'text-emerald-600 bg-emerald-50' },
-            ].map((f) => (
-              <div key={f.d} className="p-2.5 rounded-xl bg-slate-50 flex flex-col items-center gap-1.5">
-                <span className="text-xs font-bold text-slate-800">{f.d}</span>
-                <span className="text-[9px] text-slate-400">{f.dt}</span>
+            {airQuality.dailyForecast.slice(0, 5).map((f, idx) => (
+              <div key={`${f.dayLabel}-${idx}`} className="p-2.5 rounded-xl bg-slate-50 flex flex-col items-center gap-1.5">
+                <span className="text-xs font-bold text-slate-800">{f.dayLabel}</span>
+                <span className="text-[9px] text-slate-400">{f.dateLabel}</span>
                 <Sun className="w-5 h-5 text-amber-400 fill-amber-400 my-1" />
                 <span className="text-base font-extrabold text-slate-900">{f.aqi}</span>
-                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${f.cls}`}>{f.st}</span>
+                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${f.colorClass}`}>{f.status}</span>
               </div>
             ))}
           </div>
@@ -851,33 +1036,41 @@ export const AirQualityDashboard: React.FC<DashboardCommonProps> = ({
         <div className="xl:col-span-4 bg-white rounded-2xl p-4 shadow-card border border-slate-200/70 flex flex-col justify-between">
           <div>
             <h3 className="text-sm font-extrabold text-slate-900 mb-2">❤️ Health Insights</h3>
-            <p className="text-base font-extrabold text-emerald-700">Low Risk Today</p>
-            <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-              Air quality is good. Enjoy outdoor activities, but consider masks if you are sensitive to pollution.
+            <p className={`text-base font-extrabold ${airQuality.colorText}`}>
+              {airQuality.aqiValue <= 100
+                ? 'Low Health Risk Today'
+                : airQuality.aqiValue <= 200
+                ? 'Moderate Risk for Sensitive Groups'
+                : 'Elevated Respiratory Risk'}
             </p>
+            <p className="text-xs text-slate-600 mt-1 leading-relaxed">{airQuality.healthAdvice}</p>
           </div>
           <button
             type="button"
-            onClick={() => onAskAi('What health precautions should sensitive groups take at AQI 82?')}
-            className="mt-3 self-start px-3.5 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-bold hover:bg-indigo-600 hover:text-white transition"
+            onClick={() =>
+              onAskAi(
+                `What health precautions should sensitive groups take at AQI ${airQuality.aqiValue} (${airQuality.aqiCategory}) in ${selectedArea}?`
+              )
+            }
+            className="mt-3 self-start px-3.5 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-bold hover:bg-indigo-600 hover:text-white transition cursor-pointer"
           >
-            View Health Tips ›
+            Ask AI Health Advisor ›
           </button>
         </div>
       </div>
 
-      {/* Bottom Row: AQI Trend + Smart Tips */}
+      {/* Bottom Row: Live AQI Trend SVG + Smart Tips */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
         <div className="xl:col-span-6 bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-extrabold text-slate-900">📈 AQI Trend</h3>
+            <h3 className="text-sm font-extrabold text-slate-900">📈 Live AQI Trend ({shortArea})</h3>
             <div className="flex gap-1">
-              {(['24h', '7d', '30d'] as const).map((r) => (
+              {(['24h', '5d'] as const).map((r) => (
                 <button
                   key={r}
                   type="button"
                   onClick={() => setTrendRange(r)}
-                  className={`px-2.5 py-0.5 rounded text-xs font-bold ${
+                  className={`px-2.5 py-0.5 rounded text-xs font-bold cursor-pointer ${
                     trendRange === r ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'
                   }`}
                 >
@@ -890,35 +1083,30 @@ export const AirQualityDashboard: React.FC<DashboardCommonProps> = ({
             <svg viewBox="0 0 500 100" className="w-full h-full overflow-visible">
               <defs>
                 <linearGradient id="aqiGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.35" />
-                  <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
+                  <stop offset="0%" stopColor={airQuality.ringHex} stopOpacity="0.35" />
+                  <stop offset="100%" stopColor={airQuality.ringHex} stopOpacity="0.0" />
                 </linearGradient>
               </defs>
-              <path
-                d="M0,55 Q80,52 160,40 T320,48 T500,52 L500,100 L0,100 Z"
-                fill="url(#aqiGrad)"
+              <path d={areaPath} fill="url(#aqiGrad)" />
+              <path d={linePath} fill="none" stroke={airQuality.ringHex} strokeWidth="3" />
+              <circle
+                cx={midPoint.x}
+                cy={midPoint.y}
+                r="5"
+                fill={airQuality.ringHex}
+                stroke="#fff"
+                strokeWidth="2"
               />
-              <path
-                d="M0,55 Q80,52 160,40 T320,48 T500,52"
-                fill="none"
-                stroke="#10b981"
-                strokeWidth="3"
-              />
-              <circle cx="210" cy="41" r="5" fill="#10b981" stroke="#fff" strokeWidth="2" />
             </svg>
-            <div className="absolute top-1 left-[36%] bg-white shadow border border-slate-200 rounded-lg px-2 py-1 text-center">
-              <p className="text-[10px] font-extrabold text-slate-900">82 AQI</p>
-              <p className="text-[9px] text-slate-400">10:30 AM</p>
+            <div className="absolute top-1 left-[42%] bg-white shadow border border-slate-200 rounded-lg px-2 py-1 text-center">
+              <p className="text-[10px] font-extrabold text-slate-900">Now: {airQuality.aqiValue} AQI</p>
+              <p className="text-[9px] text-slate-400">{airQuality.aqiCategory}</p>
             </div>
           </div>
           <div className="flex justify-between text-[10px] text-slate-400 mt-1">
-            <span>12 AM</span>
-            <span>4 AM</span>
-            <span>8 AM</span>
-            <span>12 PM</span>
-            <span>4 PM</span>
-            <span>8 PM</span>
-            <span>12 AM</span>
+            {svgCoords.map((c, i) => (
+              <span key={`${c.label}-${i}`}>{c.label}</span>
+            ))}
           </div>
         </div>
 
@@ -926,12 +1114,27 @@ export const AirQualityDashboard: React.FC<DashboardCommonProps> = ({
           <h3 className="text-sm font-extrabold text-slate-900 mb-3">💡 Smart Tips for Cleaner Air</h3>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
             {[
-              { icon: '🪴', text: 'Keep indoor plants for cleaner air' },
-              { icon: '🪟', text: 'Keep windows closed during high pollution' },
-              { icon: '🚌', text: 'Use public transport or carpool' },
-              { icon: '😷', text: 'Wear a mask if AQI is above 200' },
+              { icon: '🪴', text: 'Keep indoor air-purifying plants like Areca Palm & Snake Plant' },
+              {
+                icon: '🪟',
+                text:
+                  airQuality.aqiValue > 150
+                    ? 'Keep windows closed during morning smog hours'
+                    : 'Ventilate rooms between 12 PM and 4 PM',
+              },
+              { icon: '🚌', text: 'Use Metro or carpool on high-congestion corridors' },
+              {
+                icon: '😷',
+                text:
+                  airQuality.aqiValue > 200
+                    ? 'Wear an N95 mask when stepping outdoors today'
+                    : 'Carry a mask if commuting along busy highways',
+              },
             ].map((tip) => (
-              <div key={tip.text} className="p-3 rounded-xl bg-slate-50 text-center flex flex-col items-center justify-center gap-2">
+              <div
+                key={tip.text}
+                className="p-3 rounded-xl bg-slate-50 text-center flex flex-col items-center justify-center gap-2"
+              >
                 <span className="text-2xl">{tip.icon}</span>
                 <p className="text-[11px] font-semibold text-slate-700 leading-snug">{tip.text}</p>
               </div>
@@ -944,13 +1147,22 @@ export const AirQualityDashboard: React.FC<DashboardCommonProps> = ({
 };
 
 /* ============================================================================
-   10. TRAFFIC DASHBOARD (Page 20 Desktop)
+   10. TRAFFIC DASHBOARD (Page 20 Desktop) — 100% LIVE CORRIDOR & TOMTOM TELEMETRY
    ============================================================================ */
 export const TrafficDashboard: React.FC<DashboardCommonProps> = ({
   onOpenModal,
   onAskAi,
+  selectedArea,
+  liveIntel,
 }) => {
   const [forecastTab, setForecastTab] = useState('Next 1 Hour');
+  const { traffic, location } = liveIntel;
+  const shortArea = selectedArea.split(',')[0]?.trim() || selectedArea;
+  const cctvImages = [
+    './assets/crops/cctv-rohini.webp',
+    './assets/crops/cctv-pitampura.webp',
+    './assets/crops/cctv-mukarba.webp',
+  ];
 
   return (
     <div className="space-y-4">
@@ -959,25 +1171,29 @@ export const TrafficDashboard: React.FC<DashboardCommonProps> = ({
         tag={
           <>
             <MapPin className="w-3.5 h-3.5 text-blue-300" />
-            <span>Outer North Delhi, Delhi</span>
+            <span>{selectedArea}</span>
           </>
         }
         title={
           <>
-            Traffic in <span className="text-[#93C5FD]">Your Area</span>
+            Traffic in <span className="text-[#93C5FD]">{shortArea}</span>
           </>
         }
-        description="Real-time traffic updates, route suggestions and live alerts to help you reach faster and safer."
+        description={`Real-time road corridor speeds, incident alerts and route times powered by ${traffic.source}.`}
         bottomPills={[
           { icon: <span>🚗</span>, label: 'Live Traffic', active: true },
           { icon: <span>🔀</span>, label: 'Best Routes' },
           { icon: <span>🔺</span>, label: 'Traffic Alerts' },
-          { icon: <span>📹</span>, label: 'CCTV Feeds' },
+          { icon: <span>📹</span>, label: 'Corridor Feeds' },
           { icon: <span>🚧</span>, label: 'Road Work' },
         ]}
         askAiWidget={{
-          placeholder: 'Is there traffic on Ring Road?',
-          chips: ['Best route to Connaught Place?', 'Live traffic near me', 'Road closures today?'],
+          placeholder: `Ask about live traffic in ${shortArea}...`,
+          chips: [
+            `Best route from ${shortArea}?`,
+            'Live traffic near me',
+            'Road closures today?',
+          ],
           onAsk: onAskAi,
         }}
       />
@@ -989,14 +1205,40 @@ export const TrafficDashboard: React.FC<DashboardCommonProps> = ({
           <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-extrabold text-slate-900">🚗 Live Traffic Overview</h3>
-              <span className="text-[11px] text-slate-400">Updated 10:30 AM</span>
+              <span className="text-[11px] text-emerald-600 font-semibold">
+                ● Updated {traffic.observedAt}
+              </span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
-                { val: '18 km/h', label: 'Avg. Speed', sub: '↓ 12%', subCls: 'text-rose-600', icon: '🚗' },
-                { val: 'Moderate', label: 'Traffic Condition', sub: '↔ No change', subCls: 'text-slate-500', icon: '📉' },
-                { val: '6', label: 'Major Jams', sub: '↑ 2', subCls: 'text-rose-600', icon: '🔺' },
-                { val: '3', label: 'Road Closures', sub: '↑ 1', subCls: 'text-amber-600', icon: '🚧' },
+                {
+                  val: `${traffic.averageSpeedKmh} km/h`,
+                  label: 'Avg. Speed',
+                  sub: traffic.averageSpeedKmh < 25 ? 'Slow flow' : 'Normal flow',
+                  subCls: traffic.averageSpeedKmh < 25 ? 'text-rose-600' : 'text-emerald-600',
+                  icon: '🚗',
+                },
+                {
+                  val: traffic.congestionLevel,
+                  label: 'Traffic Condition',
+                  sub: `${traffic.corridors.length} corridors live`,
+                  subCls: 'text-slate-500',
+                  icon: '📉',
+                },
+                {
+                  val: String(traffic.majorJamsCount),
+                  label: 'Major Jams',
+                  sub: traffic.majorJamsCount > 0 ? `+${traffic.cumulativeDelayMinutes}m total delay` : 'Clear corridors',
+                  subCls: traffic.majorJamsCount > 0 ? 'text-rose-600' : 'text-emerald-600',
+                  icon: '🔺',
+                },
+                {
+                  val: String(traffic.roadWorkCount),
+                  label: 'Road Works / Alerts',
+                  sub: `${traffic.totalIncidents} total incidents`,
+                  subCls: 'text-amber-600',
+                  icon: '🚧',
+                },
               ].map((s) => (
                 <div key={s.label} className="p-3 rounded-xl bg-slate-50 border border-slate-100">
                   <div className="flex items-center gap-2">
@@ -1015,9 +1257,9 @@ export const TrafficDashboard: React.FC<DashboardCommonProps> = ({
           {/* Live Traffic Map */}
           <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-extrabold text-slate-900">Live Traffic Map</h3>
+              <h3 className="text-sm font-extrabold text-slate-900">Live Traffic Map ({shortArea})</h3>
               <div className="flex gap-1.5">
-                {['Live Traffic', 'Incidents', 'CCTV'].map((b, i) => (
+                {['Live Traffic', 'Incidents', 'Corridors'].map((b, i) => (
                   <button
                     key={b}
                     type="button"
@@ -1032,6 +1274,9 @@ export const TrafficDashboard: React.FC<DashboardCommonProps> = ({
             </div>
             <InteractiveMap
               heightClass="h-64"
+              coords={{ lat: location.lat, lng: location.lng }}
+              centerLabel={`${shortArea}\nAvg ${traffic.averageSpeedKmh} km/h`}
+              trafficStatusLabel={`${traffic.congestionLevel} Traffic (${traffic.averageSpeedKmh} km/h)`}
               showSearchOverlay
               showSearchBottomButton={false}
               showTrafficRoutes
@@ -1044,26 +1289,23 @@ export const TrafficDashboard: React.FC<DashboardCommonProps> = ({
             />
           </div>
 
-          {/* Bottom Split: Recent Traffic Alerts + CCTV Live Feeds */}
+          {/* Bottom Split: Recent Traffic Alerts + Live Corridor Cameras */}
           <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
             <div className="md:col-span-6 bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
               <div className="flex items-center justify-between mb-2.5">
-                <h3 className="text-sm font-extrabold text-slate-900">Recent Traffic Alerts</h3>
-                <span className="text-xs font-semibold text-blue-600">See All ›</span>
+                <h3 className="text-sm font-extrabold text-slate-900">Live Traffic Alerts</h3>
+                <span className="text-[10px] font-semibold text-emerald-600">● {traffic.source}</span>
               </div>
               <div className="space-y-2.5">
-                {[
-                  { t: 'Accident on Outer Ring Road', s: 'Right lane blocked near Pitampura', ago: '15 min ago', tag: 'High', cls: 'bg-rose-50 text-rose-600' },
-                  { t: 'Road Work on NH 44', s: 'Expect delays of 15-20 minutes', ago: '1 hour ago', tag: 'Moderate', cls: 'bg-amber-50 text-amber-700' },
-                  { t: 'Lane Closure at Mukarba Chowk', s: 'Left lane closed for maintenance', ago: '2 hours ago', tag: 'High', cls: 'bg-rose-50 text-rose-600' },
-                  { t: 'Heavy Traffic on Ring Road', s: 'Slow moving traffic towards Azadpur', ago: '2 hours ago', tag: 'Moderate', cls: 'bg-amber-50 text-amber-700' },
-                ].map((al) => (
-                  <div key={al.t} className="flex items-center justify-between gap-2 text-xs">
+                {traffic.incidents.slice(0, 4).map((al) => (
+                  <div key={al.id} className="flex items-center justify-between gap-2 text-xs">
                     <div className="min-w-0">
-                      <p className="font-bold text-slate-900 truncate">{al.t}</p>
-                      <p className="text-[10px] text-slate-500 truncate">{al.s}</p>
+                      <p className="font-bold text-slate-900 truncate">{al.title}</p>
+                      <p className="text-[10px] text-slate-500 truncate">{al.subtitle}</p>
                     </div>
-                    <span className={`px-2 py-0.5 rounded text-[9px] font-bold shrink-0 ${al.cls}`}>{al.tag}</span>
+                    <span className={`px-2 py-0.5 rounded text-[9px] font-bold shrink-0 ${al.badgeClass}`}>
+                      {al.severity}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -1071,36 +1313,40 @@ export const TrafficDashboard: React.FC<DashboardCommonProps> = ({
 
             <div className="md:col-span-6 bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
               <div className="flex items-center justify-between mb-2.5">
-                <h3 className="text-sm font-extrabold text-slate-900">📹 CCTV Live Feeds</h3>
-                <span className="text-xs font-semibold text-blue-600">View All Cameras ›</span>
+                <h3 className="text-sm font-extrabold text-slate-900">📹 Corridor Telemetry</h3>
+                <span className="text-[10px] font-semibold text-blue-600">Inspect ›</span>
               </div>
               <div className="grid grid-cols-3 gap-2">
-                {[
-                  { loc: 'Rohini', st: 'Live', img: './assets/crops/cctv-rohini.webp' },
-                  { loc: 'Pitampura', st: 'Live', img: './assets/crops/cctv-pitampura.webp' },
-                  { loc: 'Mukarba Chowk', st: 'Moderate', img: './assets/crops/cctv-mukarba.webp' },
-                ].map((cam) => (
-                  <div
-                    key={cam.loc}
-                    onClick={() =>
-                      onOpenModal({
-                        title: `Live Traffic Camera — ${cam.loc}`,
-                        category: 'Municipal Traffic Feed',
-                        badge: cam.st,
-                        description: `Real-time arterial corridor feed from ${cam.loc}. AI vehicle density analysis updated every 30 seconds.`,
-                        primaryActionLabel: 'Check Alternate Route',
-                        image: cam.img,
-                      })
-                    }
-                    className="cursor-pointer rounded-xl border border-slate-200/80 overflow-hidden bg-slate-50"
-                  >
-                    <img src={cam.img} alt={cam.loc} className="w-full h-20 object-cover" />
-                    <div className="p-1.5">
-                      <p className="text-[11px] font-bold text-slate-900 truncate">{cam.loc}</p>
-                      <p className="text-[9px] font-bold text-emerald-600">● {cam.st}</p>
+                {traffic.corridors.slice(0, 3).map((cor, idx) => {
+                  const img = cctvImages[idx % cctvImages.length];
+                  return (
+                    <div
+                      key={cor.id}
+                      onClick={() =>
+                        onOpenModal({
+                          title: `Corridor Telemetry — ${cor.roadName}`,
+                          category: 'Live Arterial Sensor',
+                          badge: `${cor.speedKmh} km/h (${cor.status})`,
+                          location: `${cor.roadName}, ${selectedArea}`,
+                          description: `${cor.description}. Distance from your pin: ${cor.distanceKm} km. Estimated delay: ${
+                            cor.delayMinutes > 0 ? `+${cor.delayMinutes} mins` : 'On time'
+                          }.`,
+                          primaryActionLabel: 'Ask AI for Alternate Route',
+                          image: img,
+                        })
+                      }
+                      className="cursor-pointer rounded-xl border border-slate-200/80 overflow-hidden bg-slate-50 hover:border-blue-400 transition"
+                    >
+                      <img src={img} alt={cor.roadName} className="w-full h-20 object-cover" />
+                      <div className="p-1.5">
+                        <p className="text-[11px] font-bold text-slate-900 truncate">{cor.roadName}</p>
+                        <p className="text-[9px] font-bold text-emerald-600">
+                          ● {cor.speedKmh} km/h ({cor.status})
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -1110,23 +1356,28 @@ export const TrafficDashboard: React.FC<DashboardCommonProps> = ({
         <div className="xl:col-span-5 space-y-4">
           <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-extrabold text-slate-900">Traffic at Key Locations</h3>
-              <span className="text-xs font-semibold text-blue-600">View All Locations ›</span>
+              <h3 className="text-sm font-extrabold text-slate-900">
+                Traffic at Key Roads Near {shortArea}
+              </h3>
+              <span className="text-[10px] font-semibold text-emerald-600">● OSM + TomTom</span>
             </div>
             <div className="space-y-2.5">
-              {[
-                { loc: 'Ring Road (Rohini)', st: 'Heavy Traffic', stCls: 'bg-rose-50 text-rose-600', spd: '18 km/h', dly: '↑ 15 min', dlyCls: 'text-rose-600' },
-                { loc: 'Outer Ring Road (Pitampura)', st: 'Moderate', stCls: 'bg-amber-50 text-amber-700', spd: '32 km/h', dly: '↑ 8 min', dlyCls: 'text-rose-600' },
-                { loc: 'NH 44 (Azadpur)', st: 'Smooth', stCls: 'bg-emerald-50 text-emerald-700', spd: '56 km/h', dly: 'On time', dlyCls: 'text-emerald-600' },
-                { loc: 'Rohini Sector 10', st: 'Moderate', stCls: 'bg-amber-50 text-amber-700', spd: '28 km/h', dly: '↑ 7 min', dlyCls: 'text-rose-600' },
-                { loc: 'Mukarba Chowk', st: 'Heavy Traffic', stCls: 'bg-rose-50 text-rose-600', spd: '16 km/h', dly: '↑ 18 min', dlyCls: 'text-rose-600' },
-              ].map((k) => (
-                <div key={k.loc} className="flex items-center justify-between gap-2 py-1.5 border-b border-slate-100 last:border-none text-xs">
-                  <span className="font-bold text-slate-800 truncate">📍 {k.loc}</span>
+              {traffic.corridors.map((k) => (
+                <div
+                  key={k.id}
+                  className="flex items-center justify-between gap-2 py-1.5 border-b border-slate-100 last:border-none text-xs"
+                >
+                  <span className="font-bold text-slate-800 truncate">📍 {k.roadName}</span>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${k.stCls}`}>{k.st}</span>
-                    <span className="font-bold text-slate-700 w-14 text-right">{k.spd}</span>
-                    <span className={`font-bold w-14 text-right ${k.dlyCls}`}>{k.dly}</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${k.badgeClass}`}>{k.status}</span>
+                    <span className="font-bold text-slate-700 w-14 text-right">{k.speedKmh} km/h</span>
+                    <span
+                      className={`font-bold w-14 text-right ${
+                        k.delayMinutes > 0 ? 'text-rose-600' : 'text-emerald-600'
+                      }`}
+                    >
+                      {k.delayMinutes > 0 ? `↑ ${k.delayMinutes} min` : 'On time'}
+                    </span>
                   </div>
                 </div>
               ))}
@@ -1135,16 +1386,16 @@ export const TrafficDashboard: React.FC<DashboardCommonProps> = ({
 
           <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-extrabold text-slate-900">🕒 Traffic Forecast</h3>
-              <span className="text-xs font-semibold text-blue-600">See Full Forecast ›</span>
+              <h3 className="text-sm font-extrabold text-slate-900">🕒 Hourly Congestion Profile</h3>
+              <span className="text-[10px] font-semibold text-slate-400">{shortArea}</span>
             </div>
             <div className="flex gap-1.5 mb-3">
-              {['Next 1 Hour', 'Next 6 Hours', 'Next 24 Hours'].map((t) => (
+              {['Next 1 Hour', 'Next 6 Hours', 'Next 12 Hours'].map((t) => (
                 <button
                   key={t}
                   type="button"
                   onClick={() => setForecastTab(t)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer ${
                     forecastTab === t ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'
                   }`}
                 >
@@ -1153,45 +1404,42 @@ export const TrafficDashboard: React.FC<DashboardCommonProps> = ({
               ))}
             </div>
             <div className="flex items-end justify-between gap-1.5 h-24 pt-4 px-2">
-              {[25, 30, 38, 45, 58, 75, 92, 95, 82, 65, 48, 35].map((h, i) => (
+              {traffic.hourlyCongestion.map((h, i) => (
                 <div
-                  key={i}
-                  style={{ height: `${h}%` }}
-                  className={`flex-1 rounded-t ${
-                    h > 80 ? 'bg-rose-500' : h > 50 ? 'bg-amber-400' : 'bg-emerald-400'
+                  key={`${h.hourLabel}-${i}`}
+                  title={`${h.hourLabel}: ${h.loadPct}% congestion load`}
+                  style={{ height: `${h.loadPct}%` }}
+                  className={`flex-1 rounded-t transition-all ${
+                    h.loadPct > 80 ? 'bg-rose-500' : h.loadPct > 55 ? 'bg-amber-400' : 'bg-emerald-400'
                   }`}
                 />
               ))}
             </div>
             <div className="flex justify-between text-[10px] text-slate-400 mt-1.5">
-              <span>12 PM</span>
-              <span>2 PM</span>
-              <span>4 PM</span>
-              <span className="text-rose-600 font-bold">6 PM (Peak)</span>
-              <span>8 PM</span>
-              <span>10 PM</span>
-              <span>12 AM</span>
+              {traffic.hourlyCongestion
+                .filter((_, idx) => idx % 2 === 0)
+                .map((h, i) => (
+                  <span key={`${h.hourLabel}-${i}`} className={h.loadPct > 80 ? 'text-rose-600 font-bold' : ''}>
+                    {h.hourLabel}
+                  </span>
+                ))}
             </div>
           </div>
 
           <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-extrabold text-slate-900">Popular Routes</h3>
-              <span className="text-xs font-semibold text-blue-600">View All Routes ›</span>
+              <h3 className="text-sm font-extrabold text-slate-900">Live Corridor Routes</h3>
+              <span className="text-[10px] font-semibold text-slate-400">From {shortArea}</span>
             </div>
             <div className="space-y-2">
-              {[
-                { r: 'Rohini → Connaught Place', t: '42 min', d: '↑ 15 min', cls: 'text-rose-600 bg-rose-50' },
-                { r: 'Pitampura → IGI Airport', t: '38 min', d: '↓ 5 min', cls: 'text-emerald-600 bg-emerald-50' },
-                { r: 'Rohini → Noida Sector 62', t: '1 hr 12 min', d: '↑ 18 min', cls: 'text-rose-600 bg-rose-50' },
-                { r: 'Keshav Puram → Gurgaon', t: '1 hr 5 min', d: '↑ 12 min', cls: 'text-rose-600 bg-rose-50' },
-                { r: 'Azadpur → Delhi University', t: '28 min', d: '↓ 8 min', cls: 'text-emerald-600 bg-emerald-50' },
-              ].map((rt) => (
-                <div key={rt.r} className="flex items-center justify-between text-xs py-1">
-                  <span className="font-bold text-slate-800">🔀 {rt.r}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-extrabold text-slate-900">{rt.t}</span>
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${rt.cls}`}>{rt.d}</span>
+              {traffic.popularRoutes.map((rt) => (
+                <div key={rt.route} className="flex items-center justify-between text-xs py-1">
+                  <span className="font-bold text-slate-800 truncate max-w-[210px]">🔀 {rt.route}</span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="font-extrabold text-slate-900">{rt.durationText}</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${rt.badgeClass}`}>
+                      {rt.delayText}
+                    </span>
                   </div>
                 </div>
               ))}
@@ -1204,13 +1452,43 @@ export const TrafficDashboard: React.FC<DashboardCommonProps> = ({
 };
 
 /* ============================================================================
-   11. ALERTS DASHBOARD (Page 22 Desktop)
+   11. ALERTS DASHBOARD (Page 22 Desktop) — 100% LIVE CAP & TELEMETRY ALERTS
    ============================================================================ */
 export const AlertsDashboard: React.FC<DashboardCommonProps> = ({
   onOpenModal,
   onAskAi,
+  selectedArea,
+  liveIntel,
 }) => {
   const [selectedCat, setSelectedCat] = useState('All Alerts');
+  const { alerts, communitySignals, weather, airQuality, location, nearbyPois } = liveIntel;
+  const shortArea = selectedArea.split(',')[0]?.trim() || selectedArea;
+
+  const criticalCount = alerts.filter((a) => a.severity === 'Critical').length;
+  const importantCount = alerts.filter((a) => a.severity === 'Important').length;
+  const advisoryCount = alerts.filter((a) => a.severity === 'Advisory').length;
+  const resolvedCount = alerts.filter((a) => a.severity === 'Resolved').length;
+
+  const filteredAlerts =
+    selectedCat === 'All Alerts'
+      ? alerts
+      : alerts.filter((a) => a.category.toLowerCase() === selectedCat.toLowerCase());
+
+  const categoryCounts = (['Weather', 'Traffic', 'Air Quality', 'Safety', 'Health', 'Civic'] as const).map((cat) => {
+    const count = alerts.filter((a) => a.category === cat).length;
+    const pct = alerts.length > 0 ? Math.round((count / alerts.length) * 100) : 0;
+    const colorMap: Record<string, string> = {
+      Weather: 'bg-blue-500',
+      Traffic: 'bg-rose-500',
+      'Air Quality': 'bg-emerald-500',
+      Safety: 'bg-amber-500',
+      Health: 'bg-purple-500',
+      Civic: 'bg-sky-500',
+    };
+    return { l: cat, v: `${count} (${pct}%)`, c: colorMap[cat] };
+  });
+
+  const nearestHospital = nearbyPois.find((p) => p.category === 'hospital');
 
   return (
     <div className="space-y-4">
@@ -1219,7 +1497,7 @@ export const AlertsDashboard: React.FC<DashboardCommonProps> = ({
         tag={
           <>
             <MapPin className="w-3.5 h-3.5 text-blue-300" />
-            <span>Outer North Delhi, Delhi</span>
+            <span>{selectedArea}</span>
           </>
         }
         title={
@@ -1227,7 +1505,7 @@ export const AlertsDashboard: React.FC<DashboardCommonProps> = ({
             Stay Alert, <span className="text-[#93C5FD]">Stay Safe</span>
           </>
         }
-        description="Real-time alerts, emergency updates and safety notifications to keep you informed and prepared."
+        description="Real-time NDMA SACHET CAP disaster alerts, traffic incidents, and environmental advisories for your location."
         bottomPills={[
           'All Alerts',
           'Weather',
@@ -1242,7 +1520,7 @@ export const AlertsDashboard: React.FC<DashboardCommonProps> = ({
           onClick: () => setSelectedCat(l),
         }))}
         askAiWidget={{
-          placeholder: 'Is there any alert in Rohini right now?',
+          placeholder: `Is there any alert in ${shortArea} right now?`,
           chips: ['Any weather alerts?', 'Road closures today?', 'Air quality risk?'],
           onAsk: onAskAi,
         }}
@@ -1252,15 +1530,15 @@ export const AlertsDashboard: React.FC<DashboardCommonProps> = ({
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
         <div className="xl:col-span-5 bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-extrabold text-slate-900">🔔 Active Alerts</h3>
-            <span className="text-xs font-semibold text-blue-600">View All ›</span>
+            <h3 className="text-sm font-extrabold text-slate-900">🔔 Active Alerts ({shortArea})</h3>
+            <span className="text-[11px] font-semibold text-emerald-600">● Live Feed</span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
             {[
-              { n: '8', l: 'Critical', ch: '↑ 2', bg: 'bg-rose-50/70 border-rose-100', c: 'text-rose-600' },
-              { n: '14', l: 'Important', ch: '↑ 4', bg: 'bg-orange-50/70 border-orange-100', c: 'text-orange-600' },
-              { n: '12', l: 'Advisories', ch: '↑ 3', bg: 'bg-amber-50/70 border-amber-100', c: 'text-amber-600' },
-              { n: '5', l: 'Resolved', ch: 'Today', bg: 'bg-emerald-50/70 border-emerald-100', c: 'text-emerald-600' },
+              { n: String(criticalCount), l: 'Critical', ch: 'Immediate', bg: 'bg-rose-50/70 border-rose-100', c: 'text-rose-600' },
+              { n: String(importantCount), l: 'Important', ch: 'Active', bg: 'bg-orange-50/70 border-orange-100', c: 'text-orange-600' },
+              { n: String(advisoryCount), l: 'Advisories', ch: 'Monitor', bg: 'bg-amber-50/70 border-amber-100', c: 'text-amber-600' },
+              { n: String(resolvedCount), l: 'Normal / Clear', ch: 'Verified', bg: 'bg-emerald-50/70 border-emerald-100', c: 'text-emerald-600' },
             ].map((a) => (
               <div key={a.l} className={`p-3 rounded-xl border ${a.bg}`}>
                 <p className="text-2xl font-extrabold text-slate-900">{a.n}</p>
@@ -1275,18 +1553,11 @@ export const AlertsDashboard: React.FC<DashboardCommonProps> = ({
           <h3 className="text-sm font-extrabold text-slate-900 mb-3">Alerts by Category</h3>
           <div className="flex items-center gap-4">
             <div className="w-28 h-28 rounded-full border-[10px] border-blue-600 border-r-emerald-500 border-b-amber-400 border-l-rose-500 flex flex-col items-center justify-center shrink-0">
-              <span className="text-2xl font-extrabold text-slate-900 leading-none">39</span>
-              <span className="text-[10px] text-slate-500">Active Alerts</span>
+              <span className="text-2xl font-extrabold text-slate-900 leading-none">{alerts.length}</span>
+              <span className="text-[10px] text-slate-500">Live Notices</span>
             </div>
             <div className="flex-1 space-y-1 text-[11px]">
-              {[
-                { l: 'Weather', v: '12 (31%)', c: 'bg-blue-500' },
-                { l: 'Traffic', v: '8 (21%)', c: 'bg-rose-500' },
-                { l: 'Air Quality', v: '6 (15%)', c: 'bg-emerald-500' },
-                { l: 'Safety', v: '7 (18%)', c: 'bg-amber-500' },
-                { l: 'Health', v: '4 (10%)', c: 'bg-purple-500' },
-                { l: 'Civic', v: '2 (5%)', c: 'bg-sky-500' },
-              ].map((cat) => (
+              {categoryCounts.map((cat) => (
                 <div key={cat.l} className="flex items-center justify-between">
                   <span className="flex items-center gap-1.5 text-slate-600">
                     <span className={`w-2 h-2 rounded-full ${cat.c}`} /> {cat.l}
@@ -1301,19 +1572,22 @@ export const AlertsDashboard: React.FC<DashboardCommonProps> = ({
         <div className="xl:col-span-3 bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
           <div className="flex items-center justify-between mb-2.5">
             <h3 className="text-sm font-extrabold text-slate-900">📞 Emergency Contacts</h3>
-            <span className="text-xs font-semibold text-blue-600">View All ›</span>
+            <span className="text-[10px] font-semibold text-rose-600">24x7 SOS</span>
           </div>
           <div className="space-y-1.5 text-xs">
             {[
-              { name: 'Police', num: '112' },
-              { name: 'Ambulance', num: '108' },
-              { name: 'Fire Department', num: '101' },
-              { name: 'Disaster Helpline', num: '1078' },
-              { name: 'Women Helpline', num: '1091' },
+              { name: 'National Emergency / Police', num: '112' },
+              { name: 'Medical / Ambulance', num: '108' },
+              { name: 'Fire & Rescue', num: '101' },
+              { name: 'NDMA Disaster Helpline', num: '1078' },
+              { name: 'Women Safety Helpline', num: '1091' },
             ].map((ec) => (
-              <div key={ec.name} className="flex items-center justify-between py-1 border-b border-slate-100 last:border-none">
-                <span className="font-bold text-slate-700">{ec.name}</span>
-                <div className="flex items-center gap-2">
+              <div
+                key={ec.name}
+                className="flex items-center justify-between py-1 border-b border-slate-100 last:border-none"
+              >
+                <span className="font-bold text-slate-700 truncate">{ec.name}</span>
+                <div className="flex items-center gap-2 shrink-0">
                   <span className="font-extrabold text-slate-900">{ec.num}</span>
                   <button
                     type="button"
@@ -1321,11 +1595,14 @@ export const AlertsDashboard: React.FC<DashboardCommonProps> = ({
                       onOpenModal({
                         title: `Dial ${ec.name} (${ec.num})`,
                         category: 'Emergency Dispatch',
-                        description: `Initiating priority emergency call to ${ec.name} (${ec.num}) with live location coordinates for Outer North Delhi.`,
+                        location: `${selectedArea} (${location.lat.toFixed(4)}°N, ${location.lng.toFixed(4)}°E)`,
+                        description: `Initiating priority emergency call to ${ec.name} (${ec.num}) with live GPS coordinates for ${selectedArea}.${
+                          nearestHospital ? ` Nearest verified hospital: ${nearestHospital.name} (${nearestHospital.distanceKm} km).` : ''
+                        }`,
                         primaryActionLabel: `Call ${ec.num} Now`,
                       })
                     }
-                    className="px-2 py-0.5 rounded bg-blue-50 text-blue-600 text-[10px] font-bold"
+                    className="px-2 py-0.5 rounded bg-blue-50 text-blue-600 text-[10px] font-bold cursor-pointer"
                   >
                     📞 Call
                   </button>
@@ -1341,34 +1618,52 @@ export const AlertsDashboard: React.FC<DashboardCommonProps> = ({
         <div className="xl:col-span-5 space-y-4">
           <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
             <div className="flex items-center justify-between mb-2.5">
-              <h3 className="text-sm font-extrabold text-slate-900">Alert Map</h3>
-              <span className="px-2.5 py-1 rounded-lg bg-blue-600 text-white text-[10px] font-bold">Live Alerts</span>
+              <h3 className="text-sm font-extrabold text-slate-900">Live Alert Map ({shortArea})</h3>
+              <span className="px-2.5 py-1 rounded-lg bg-blue-600 text-white text-[10px] font-bold">
+                {alerts.length} Active
+              </span>
             </div>
             <InteractiveMap
               heightClass="h-56"
+              coords={{ lat: location.lat, lng: location.lng }}
+              centerLabel={`${shortArea}\n${alerts.length} Active Notice(s)`}
               showSearchOverlay
               showSearchBottomButton={false}
               showLegendBar={[
                 { label: 'Critical', color: 'bg-rose-500' },
                 { label: 'Important', color: 'bg-orange-500' },
                 { label: 'Advisory', color: 'bg-amber-400' },
-                { label: 'Resolved', color: 'bg-emerald-500' },
+                { label: 'Clear', color: 'bg-emerald-500' },
               ]}
             />
           </div>
 
           <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
-            <h3 className="text-sm font-extrabold text-slate-900 mb-2.5">🛡️ Safety Tips</h3>
+            <h3 className="text-sm font-extrabold text-slate-900 mb-2.5">🛡️ Live Safety Guidance</h3>
             <div className="grid grid-cols-2 gap-2.5">
               {[
-                { t: 'Stay Indoors', s: 'During heavy rain or thunderstorms' },
-                { t: 'Avoid Flooded Areas', s: 'Do not drive through waterlogged roads' },
-                { t: 'Wear a Mask', s: 'If air quality is poor' },
-                { t: 'Stay Hydrated', s: 'During heatwave conditions' },
+                {
+                  t: 'Weather Precaution',
+                  s: weather.outdoorActivityAdvice,
+                },
+                {
+                  t: 'Respiratory Protection',
+                  s: airQuality.healthAdvice,
+                },
+                {
+                  t: 'Waterlogging Check',
+                  s: `Current Risk Index: ${weather.waterloggingRiskIndex}/100 in ${shortArea}`,
+                },
+                {
+                  t: 'Emergency Medical',
+                  s: nearestHospital
+                    ? `Nearest: ${nearestHospital.name} (${nearestHospital.distanceKm} km)`
+                    : 'Dial 108 or 112 for 24x7 emergency response',
+                },
               ].map((tip) => (
                 <div key={tip.t} className="p-2.5 rounded-xl bg-slate-50">
                   <p className="text-xs font-extrabold text-slate-900">{tip.t}</p>
-                  <p className="text-[10px] text-slate-500 mt-0.5">{tip.s}</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5 line-clamp-2">{tip.s}</p>
                 </div>
               ))}
             </div>
@@ -1377,27 +1672,38 @@ export const AlertsDashboard: React.FC<DashboardCommonProps> = ({
 
         <div className="xl:col-span-4 bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-extrabold text-slate-900">Recent Alerts</h3>
-            <span className="text-xs font-semibold text-blue-600">View All ›</span>
+            <h3 className="text-sm font-extrabold text-slate-900">
+              Live Alerts ({selectedCat})
+            </h3>
+            <span className="text-[10px] font-semibold text-slate-400">Click for details</span>
           </div>
           <div className="space-y-2.5">
-            {[
-              { t: 'Heavy Rainfall Expected', loc: 'Rohini, Pitampura, Keshav Puram', ago: '15 min ago', tag: 'Critical', cls: 'bg-rose-50 text-rose-600' },
-              { t: 'Waterlogging Reported', loc: 'Outer Ring Road (Rohini)', ago: '1 hour ago', tag: 'Important', cls: 'bg-orange-50 text-orange-600' },
-              { t: 'Road Closure', loc: 'NH 44 (Azadpur)', ago: '2 hours ago', tag: 'Critical', cls: 'bg-rose-50 text-rose-600' },
-              { t: 'Poor Air Quality Advisory', loc: 'Outer North Delhi', ago: '3 hours ago', tag: 'Advisory', cls: 'bg-amber-50 text-amber-700' },
-              { t: 'Heatwave Alert', loc: 'Delhi NCR Region', ago: '5 hours ago', tag: 'Advisory', cls: 'bg-amber-50 text-amber-700' },
-              { t: 'Accident on Ring Road', loc: 'Near Pitampura Flyover', ago: '6 hours ago', tag: 'Important', cls: 'bg-orange-50 text-orange-600' },
-              { t: 'Maintenance Work', loc: 'Mukarba Chowk', ago: '8 hours ago', tag: 'Info', cls: 'bg-blue-50 text-blue-600' },
-            ].map((ra) => (
-              <div key={ra.t} className="flex items-center justify-between gap-2 py-1.5 border-b border-slate-100 last:border-none text-xs">
+            {filteredAlerts.map((ra) => (
+              <div
+                key={ra.id}
+                onClick={() =>
+                  onOpenModal({
+                    title: ra.title,
+                    category: `${ra.category} • ${ra.sender}`,
+                    badge: ra.severity,
+                    location: ra.areaDescription,
+                    description: `${ra.description}${ra.instruction ? `\n\nRecommended Action: ${ra.instruction}` : ''}`,
+                    primaryActionLabel: 'Ask AI About This Alert',
+                  })
+                }
+                className="cursor-pointer flex items-center justify-between gap-2 py-2 px-2 rounded-xl hover:bg-slate-50 border-b border-slate-100 last:border-none text-xs transition"
+              >
                 <div className="min-w-0">
-                  <p className="font-bold text-slate-900 truncate">{ra.t}</p>
-                  <p className="text-[10px] text-slate-500 truncate">{ra.loc}</p>
+                  <p className="font-bold text-slate-900 truncate">
+                    {ra.icon} {ra.title}
+                  </p>
+                  <p className="text-[10px] text-slate-500 truncate">{ra.description}</p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-[9px] text-slate-400">{ra.ago}</span>
-                  <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${ra.cls}`}>{ra.tag}</span>
+                  <span className="text-[9px] text-slate-400">{ra.timeAgo}</span>
+                  <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${ra.badgeClass}`}>
+                    {ra.severity}
+                  </span>
                 </div>
               </div>
             ))}
@@ -1406,38 +1712,62 @@ export const AlertsDashboard: React.FC<DashboardCommonProps> = ({
 
         <div className="xl:col-span-3 space-y-4">
           <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
-            <h3 className="text-sm font-extrabold text-slate-900 mb-2.5">Upcoming Alerts</h3>
+            <h3 className="text-sm font-extrabold text-slate-900 mb-2.5">Forecasted Conditions</h3>
             <div className="space-y-2 text-xs">
               {[
-                { t: 'Heavy Rainfall (Possible)', w: 'Tomorrow, 6:00 AM', tag: 'Advisory' },
-                { t: 'Air Quality Deterioration', w: 'Tomorrow, 6:00 PM', tag: 'Advisory' },
-                { t: 'Heatwave Conditions', w: 'In 2 days', tag: 'Important' },
-                { t: 'Road Maintenance', w: 'In 2 days', tag: 'Info' },
+                {
+                  t: weather.daily[1]
+                    ? `Tomorrow: ${weather.daily[1].condition} (${weather.daily[1].maxTempC}°C)`
+                    : 'Tomorrow Weather Outlook',
+                  w: weather.daily[1] ? `Rain Probability: ${weather.daily[1].rainChance}%` : 'Forecast',
+                  tag: (weather.daily[1]?.rainChance ?? 0) >= 40 ? 'Rain Watch' : 'Normal',
+                },
+                {
+                  t: airQuality.dailyForecast[1]
+                    ? `Tomorrow AQI: ~${airQuality.dailyForecast[1].aqi} (${airQuality.dailyForecast[1].status})`
+                    : 'Tomorrow Air Quality Outlook',
+                  w: 'CAMS 24h Projection',
+                  tag: airQuality.dailyForecast[1]?.status || 'Projected',
+                },
+                {
+                  t: 'Evening Peak Traffic Window',
+                  w: 'Today, 5:30 PM – 8:30 PM',
+                  tag: 'Commute',
+                },
               ].map((u) => (
                 <div key={u.t} className="flex items-center justify-between py-1">
-                  <div>
-                    <p className="font-bold text-slate-800">{u.t}</p>
+                  <div className="min-w-0 pr-2">
+                    <p className="font-bold text-slate-800 truncate">{u.t}</p>
                     <p className="text-[10px] text-slate-400">{u.w}</p>
                   </div>
-                  <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-700 text-[9px] font-bold">{u.tag}</span>
+                  <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-700 text-[9px] font-bold shrink-0">
+                    {u.tag}
+                  </span>
                 </div>
               ))}
             </div>
           </div>
 
           <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
-            <h3 className="text-sm font-extrabold text-slate-900 mb-2.5">👥 Community Reports</h3>
+            <h3 className="text-sm font-extrabold text-slate-900 mb-2.5">👥 Citizen Signals ({shortArea})</h3>
             <div className="space-y-2 text-xs">
-              {[
-                { t: 'Waterlogging near Rohini Sec 8', loc: 'Rohini • 20 min ago' },
-                { t: 'Fallen tree on side road', loc: 'Model Town • 1 hour ago' },
-                { t: 'Power cut in Shalimar Bagh', loc: 'Shalimar Bagh • 2 hours ago' },
-              ].map((cr) => (
-                <div key={cr.t} className="p-2 rounded-xl bg-slate-50">
-                  <p className="font-bold text-slate-800">{cr.t}</p>
-                  <p className="text-[10px] text-slate-400">📍 {cr.loc}</p>
+              {communitySignals.length > 0 ? (
+                communitySignals.map((cr) => (
+                  <div key={cr.id} className="p-2 rounded-xl bg-slate-50">
+                    <p className="font-bold text-slate-800">{cr.title}</p>
+                    <p className="text-[10px] text-slate-400">
+                      📍 {cr.locality} • {cr.timeAgo} • 👍 {cr.upvotes}
+                    </p>
+                  </div>
+                ))
+              ) : (
+                <div className="p-2.5 rounded-xl bg-emerald-50/70 border border-emerald-100">
+                  <p className="font-bold text-emerald-800">✅ No civic disruptions reported</p>
+                  <p className="text-[10px] text-emerald-600 mt-0.5">
+                    No citizen-reported power cuts or waterlogging in {shortArea} right now.
+                  </p>
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </div>
@@ -1447,35 +1777,52 @@ export const AlertsDashboard: React.FC<DashboardCommonProps> = ({
 };
 
 /* ============================================================================
-   12. AI ASSISTANT DASHBOARD (Page 24 Desktop)
+   12. AI ASSISTANT DASHBOARD (Page 24 Desktop) — 100% LIVE GROUNDED RAG
    ============================================================================ */
+interface ChatMessage {
+  role: 'ai' | 'user';
+  text: string;
+  keyFindings?: string[];
+  recommendations?: string[];
+  sources?: string[];
+  confidence?: string;
+}
+
 export const AiAssistantDashboard: React.FC<DashboardCommonProps> = ({
   onNavigate,
+  selectedArea,
+  liveIntel,
 }) => {
-  const [messages, setMessages] = useState<{ role: 'ai' | 'user'; text: string }[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
+  const [thinking, setThinking] = useState(false);
 
-  const handleSend = (promptText?: string) => {
+  const { weather, airQuality, traffic, alerts } = liveIntel;
+  const shortArea = selectedArea.split(',')[0]?.trim() || selectedArea;
+
+  const handleSend = async (promptText?: string) => {
     const q = (promptText ?? input).trim();
-    if (!q) return;
-    const lower = q.toLowerCase();
-    let reply = AI_KNOWLEDGE_BASE.default;
-    if (lower.includes('weather') || lower.includes('rain') || lower.includes('heat')) {
-      reply = AI_KNOWLEDGE_BASE.weather;
-    } else if (lower.includes('traffic') || lower.includes('route') || lower.includes('airport') || lower.includes('road')) {
-      reply = AI_KNOWLEDGE_BASE.traffic;
-    } else if (lower.includes('air') || lower.includes('aqi') || lower.includes('pollution')) {
-      reply = AI_KNOWLEDGE_BASE.air;
-    } else if (lower.includes('event') || lower.includes('fest')) {
-      reply = AI_KNOWLEDGE_BASE.events;
-    } else if (lower.includes('alert') || lower.includes('safe') || lower.includes('hospital') || lower.includes('pharmac') || lower.includes('medical')) {
-      reply = AI_KNOWLEDGE_BASE.alerts;
-    } else if (lower.includes('restaurant') || lower.includes('cafe') || lower.includes('food')) {
-      reply = AI_KNOWLEDGE_BASE.restaurants;
-    }
-
-    setMessages((prev) => [...prev, { role: 'user', text: q }, { role: 'ai', text: reply }]);
+    if (!q || thinking) return;
     if (!promptText) setInput('');
+
+    setMessages((prev) => [...prev, { role: 'user', text: q }]);
+    setThinking(true);
+    try {
+      const res = await askLiveAiAssistant(q, liveIntel);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'ai',
+          text: res.responseText,
+          keyFindings: res.keyFindings,
+          recommendations: res.recommendations,
+          sources: res.sources,
+          confidence: res.confidence,
+        },
+      ]);
+    } finally {
+      setThinking(false);
+    }
   };
 
   return (
@@ -1483,24 +1830,26 @@ export const AiAssistantDashboard: React.FC<DashboardCommonProps> = ({
       <HeroBanner
         dashboardId="ai-assistant"
         title="AI Assistant"
-        subtitle="Your Smart Companion for a Safer, Smarter and More Connected Neighborhood"
+        subtitle="Your Smart Companion Grounded in Live Weather, CPCB AQI, Traffic & SACHET Alerts"
         bottomPills={[
-          { icon: <span>⚡</span>, label: 'Real-time information' },
-          { icon: <span>📍</span>, label: 'Hyperlocal insights' },
-          { icon: <span>⭐</span>, label: 'Personalized recommendations' },
-          { icon: <span>🕒</span>, label: 'Available 24/7' },
+          { icon: <span>⚡</span>, label: 'Live Sensor Grounded' },
+          { icon: <span>📍</span>, label: shortArea },
+          { icon: <span>⭐</span>, label: 'Multi-Signal Correlation' },
+          { icon: <span>🕒</span>, label: `Synced ${liveIntel.lastUpdated}` },
         ]}
         rightWidget={
           <div className="flex items-center gap-3 bg-white/15 backdrop-blur-md border border-white/25 rounded-2xl p-3 max-w-xs">
             <img
-              src="/assets/crops/ai-robot-umbrella.webp"
+              src="./assets/crops/ai-robot-umbrella.webp"
               alt="MyArea24 AI Robot"
               className="w-16 h-16 rounded-xl object-contain bg-white/90 p-1 shrink-0"
             />
             <div className="bg-white text-slate-900 rounded-xl p-2.5 text-xs shadow">
               <p className="font-medium">Hi! I'm your</p>
-              <p className="font-extrabold text-indigo-700">MyArea24 AI Assistant.</p>
-              <p className="text-[11px] text-slate-600">How can I help you today?</p>
+              <p className="font-extrabold text-indigo-700">MyArea24 Saathi AI.</p>
+              <p className="text-[11px] text-slate-600">
+                Monitoring {shortArea} ({weather.temperatureC}°C, AQI {airQuality.aqiValue})
+              </p>
             </div>
           </div>
         }
@@ -1515,72 +1864,143 @@ export const AiAssistantDashboard: React.FC<DashboardCommonProps> = ({
                 <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center text-sm">
                   🤖
                 </div>
-                <h3 className="text-sm font-extrabold text-slate-900">Chat with MyArea24 AI</h3>
+                <div>
+                  <h3 className="text-sm font-extrabold text-slate-900">
+                    Chat with MyArea24 AI ({shortArea})
+                  </h3>
+                  <p className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1">
+                    <Radio className="w-3 h-3" /> Grounded in live Open-Meteo, CPCB, TomTom & OSM telemetry
+                  </p>
+                </div>
               </div>
               {messages.length > 0 && (
                 <button
                   type="button"
                   onClick={() => setMessages([])}
-                  className="text-xs font-semibold text-slate-400 hover:text-slate-600"
+                  className="text-xs font-semibold text-slate-400 hover:text-slate-600 cursor-pointer"
                 >
                   Clear Chat
                 </button>
               )}
             </div>
 
-            {/* Greeting Box */}
+            {/* Greeting Box with Live Context */}
             <div className="bg-slate-50/90 rounded-2xl p-4 border border-slate-200/60 mb-4">
-              <p className="text-xs font-extrabold text-slate-900">Hello Divyansh! 👋</p>
-              <p className="text-xs text-slate-600 mt-1">
-                I'm your MyArea24 AI Assistant. I can help you with:
+              <p className="text-xs font-extrabold text-slate-900">
+                Hello Divyansh! 👋 Live Context for <span className="text-indigo-600">{selectedArea}</span>:
               </p>
-              <ul className="text-xs text-slate-600 space-y-1 mt-2 list-disc list-inside">
-                <li>Real-time updates (weather, traffic, air quality, alerts)</li>
-                <li>Local information (services, businesses, events)</li>
-                <li>Safety and emergency guidance</li>
-                <li>Personalized recommendations</li>
-                <li>Answers to anything about your area</li>
-              </ul>
-              <p className="text-xs font-bold text-slate-700 mt-2.5">What would you like to know?</p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 my-2.5">
+                <div className="bg-white p-2 rounded-xl border border-slate-200/60 text-[11px]">
+                  <span className="text-slate-400 block text-[9px]">LIVE WEATHER</span>
+                  <span className="font-extrabold text-slate-900">
+                    {weather.temperatureC}°C • {weather.conditionText}
+                  </span>
+                </div>
+                <div className="bg-white p-2 rounded-xl border border-slate-200/60 text-[11px]">
+                  <span className="text-slate-400 block text-[9px]">CPCB AIR QUALITY</span>
+                  <span className="font-extrabold text-slate-900">
+                    AQI {airQuality.aqiValue} ({airQuality.aqiCategory})
+                  </span>
+                </div>
+                <div className="bg-white p-2 rounded-xl border border-slate-200/60 text-[11px]">
+                  <span className="text-slate-400 block text-[9px]">TRAFFIC FLOW</span>
+                  <span className="font-extrabold text-slate-900">
+                    {traffic.congestionLevel} ({traffic.averageSpeedKmh} km/h)
+                  </span>
+                </div>
+                <div className="bg-white p-2 rounded-xl border border-slate-200/60 text-[11px]">
+                  <span className="text-slate-400 block text-[9px]">ACTIVE ALERTS</span>
+                  <span className="font-extrabold text-slate-900">{alerts.length} Active Notice(s)</span>
+                </div>
+              </div>
+              <p className="text-xs font-bold text-slate-700">Ask me anything about your area right now:</p>
             </div>
 
             {/* Conversation History */}
             {messages.length > 0 && (
-              <div className="space-y-3 mb-4 max-h-72 overflow-y-auto pr-1">
+              <div className="space-y-3 mb-4 max-h-96 overflow-y-auto pr-1">
                 {messages.map((m, idx) => (
                   <div
                     key={idx}
                     className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
                   >
                     <div
-                      className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-xs whitespace-pre-line leading-relaxed ${
+                      className={`max-w-[88%] rounded-2xl px-4 py-3 text-xs leading-relaxed ${
                         m.role === 'user'
                           ? 'bg-indigo-600 text-white font-semibold'
-                          : 'bg-indigo-50/80 text-slate-800 border border-indigo-100'
+                          : 'bg-indigo-50/80 text-slate-800 border border-indigo-100 space-y-2'
                       }`}
                     >
-                      {m.text}
+                      <p className="whitespace-pre-line">{m.text}</p>
+
+                      {m.keyFindings && m.keyFindings.length > 0 && (
+                        <div className="pt-2 border-t border-indigo-200/60">
+                          <p className="text-[10px] font-extrabold text-indigo-900 uppercase tracking-wider mb-1">
+                            Key Live Telemetry Findings
+                          </p>
+                          <ul className="list-disc list-inside space-y-0.5 text-[11px] text-slate-700">
+                            {m.keyFindings.map((kf, i) => (
+                              <li key={i}>{kf}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {m.recommendations && m.recommendations.length > 0 && (
+                        <div className="pt-1.5">
+                          <p className="text-[10px] font-extrabold text-emerald-800 uppercase tracking-wider mb-1">
+                            Actionable Recommendations
+                          </p>
+                          <div className="space-y-1">
+                            {m.recommendations.map((rec, i) => (
+                              <p
+                                key={i}
+                                className="text-[11px] bg-white/90 px-2.5 py-1 rounded-lg border border-indigo-100 text-slate-800 font-medium"
+                              >
+                                ✓ {rec}
+                              </p>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {m.sources && m.sources.length > 0 && (
+                        <div className="flex items-center justify-between flex-wrap gap-1 pt-1 text-[9px] text-slate-500">
+                          <span className="flex items-center gap-1 font-semibold text-indigo-700">
+                            <ShieldCheck className="w-3 h-3" /> {m.confidence}
+                          </span>
+                          <span>Sources: {m.sources.join(' • ')}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
+                {thinking && (
+                  <div className="flex justify-start">
+                    <div className="bg-indigo-50/80 text-indigo-700 border border-indigo-100 rounded-2xl px-4 py-2.5 text-xs font-semibold flex items-center gap-2">
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Synthesizing live telemetry for {shortArea}...</span>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
             {/* 6 Suggested Prompt Cards (2x3) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-4">
               {[
-                { icon: '🌤️', text: "What's the weather like today in Rohini?" },
-                { icon: '🔺', text: 'Any important alerts today?' },
-                { icon: '🍃', text: 'Show me the current air quality in my area' },
-                { icon: '🏥', text: 'Find nearby pharmacies open now' },
-                { icon: '🚗', text: 'Are there any traffic jams near me?' },
-                { icon: '🧭', text: 'Suggest safe routes to IGI Airport' },
+                { icon: '🌤️', text: `What's the weather like right now in ${shortArea}?` },
+                { icon: '🔺', text: `Any important alerts or safety risks in ${shortArea}?` },
+                { icon: '🍃', text: `Show me the current CPCB air quality in ${shortArea}` },
+                { icon: '🏥', text: `Find nearby hospitals and pharmacies open in ${shortArea}` },
+                { icon: '🚗', text: `Are there any traffic jams on roads near ${shortArea}?` },
+                { icon: '🧭', text: `Give me a complete hyperlocal summary for ${shortArea}` },
               ].map((p) => (
                 <button
                   key={p.text}
                   type="button"
                   onClick={() => handleSend(p.text)}
-                  className="p-3 rounded-xl border border-slate-200/80 hover:border-indigo-400 hover:bg-indigo-50/30 flex items-center gap-2.5 text-left text-xs font-semibold text-slate-700 transition"
+                  className="p-3 rounded-xl border border-slate-200/80 hover:border-indigo-400 hover:bg-indigo-50/30 flex items-center gap-2.5 text-left text-xs font-semibold text-slate-700 transition cursor-pointer"
                 >
                   <span className="text-base">{p.icon}</span>
                   <span>{p.text}</span>
@@ -1601,13 +2021,14 @@ export const AiAssistantDashboard: React.FC<DashboardCommonProps> = ({
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask anything about your area..."
+                placeholder={`Ask anything about ${shortArea}...`}
                 className="flex-1 bg-transparent text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none"
               />
               <Mic className="w-4 h-4 text-slate-400 cursor-pointer" />
               <button
                 type="submit"
-                className="w-8 h-8 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center transition"
+                disabled={thinking}
+                className="w-8 h-8 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white flex items-center justify-center transition cursor-pointer"
               >
                 <Send className="w-3.5 h-3.5" />
               </button>
@@ -1617,16 +2038,16 @@ export const AiAssistantDashboard: React.FC<DashboardCommonProps> = ({
               <span className="text-slate-400">Try asking:</span>
               {[
                 'Weather today',
-                'Traffic to Connaught Place',
-                'Air quality forecast',
+                `Traffic in ${shortArea}`,
+                'Air quality & PM2.5',
                 'Nearby hospitals',
-                'Safety tips',
+                "Today's summary",
               ].map((tag) => (
                 <button
                   key={tag}
                   type="button"
                   onClick={() => handleSend(tag)}
-                  className="px-2.5 py-0.5 rounded-full bg-slate-100 hover:bg-indigo-50 text-slate-600 hover:text-indigo-700 font-medium transition"
+                  className="px-2.5 py-0.5 rounded-full bg-slate-100 hover:bg-indigo-50 text-slate-600 hover:text-indigo-700 font-medium transition cursor-pointer"
                 >
                   {tag}
                 </button>
@@ -1634,26 +2055,48 @@ export const AiAssistantDashboard: React.FC<DashboardCommonProps> = ({
             </div>
           </div>
 
-          {/* Personalized Insights for You */}
+          {/* Personalized Insights for You (100% Live) */}
           <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-extrabold text-slate-900">✨ Personalized Insights for You</h3>
-              <span className="text-xs font-semibold text-blue-600">See More ›</span>
+              <h3 className="text-sm font-extrabold text-slate-900">
+                ✨ Live Personalized Insights for {shortArea}
+              </h3>
+              <span className="text-[11px] font-semibold text-emerald-600">● Real-Time</span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
-                { icon: '☀️', title: '28°C', sub: 'Sunny', desc: 'Weather in your area' },
-                { icon: '🍃', title: '82 (Good)', sub: 'Air Quality Index', desc: 'Better than yesterday' },
-                { icon: '🚗', title: 'Moderate', sub: 'Traffic Condition', desc: 'Outer Ring Road' },
-                { icon: '🔺', title: '2 Alerts', sub: 'In your area', desc: '1 Critical • 1 Important' },
+                {
+                  icon: '☀️',
+                  title: `${weather.temperatureC}°C`,
+                  sub: weather.conditionText,
+                  desc: `Feels like ${weather.feelsLikeC}°C`,
+                },
+                {
+                  icon: '🍃',
+                  title: `AQI ${airQuality.aqiValue}`,
+                  sub: airQuality.aqiCategory,
+                  desc: `Prominent: ${airQuality.prominentPollutant}`,
+                },
+                {
+                  icon: '🚗',
+                  title: traffic.congestionLevel,
+                  sub: `Avg ${traffic.averageSpeedKmh} km/h`,
+                  desc: traffic.corridors[0]?.roadName || shortArea,
+                },
+                {
+                  icon: '🔺',
+                  title: `${alerts.length} Notice${alerts.length === 1 ? '' : 's'}`,
+                  sub: alerts[0]?.severity || 'Safe',
+                  desc: alerts[0]?.category || 'All clear',
+                },
               ].map((ins) => (
                 <div key={ins.title} className="p-3 rounded-xl bg-slate-50 border border-slate-100">
                   <div className="flex items-center gap-2">
                     <span className="text-xl">{ins.icon}</span>
-                    <div>
-                      <p className="text-xs font-extrabold text-slate-900">{ins.title}</p>
-                      <p className="text-[10px] font-semibold text-slate-600">{ins.sub}</p>
-                      <p className="text-[9px] text-slate-400">{ins.desc}</p>
+                    <div className="min-w-0">
+                      <p className="text-xs font-extrabold text-slate-900 truncate">{ins.title}</p>
+                      <p className="text-[10px] font-semibold text-slate-600 truncate">{ins.sub}</p>
+                      <p className="text-[9px] text-slate-400 truncate">{ins.desc}</p>
                     </div>
                   </div>
                 </div>
@@ -1676,13 +2119,13 @@ export const AiAssistantDashboard: React.FC<DashboardCommonProps> = ({
                 { icon: '🚨', label: 'Emergency Help', nav: 'emergency' as const },
                 { icon: '🧭', label: 'Plan a Route', nav: 'map' as const },
                 { icon: '📅', label: 'Events Near Me', nav: 'events' as const },
-                { icon: '📍', label: 'Local Recommendations', nav: 'businesses' as const },
+                { icon: '📍', label: 'Local Businesses', nav: 'businesses' as const },
               ].map((qa) => (
                 <button
                   key={qa.label}
                   type="button"
                   onClick={() => onNavigate(qa.nav)}
-                  className="p-2.5 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-100 flex flex-col items-center text-center gap-1.5 transition"
+                  className="p-2.5 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-100 flex flex-col items-center text-center gap-1.5 transition cursor-pointer"
                 >
                   <span className="text-xl">{qa.icon}</span>
                   <span className="text-[10px] font-bold text-slate-700 leading-tight">{qa.label}</span>
@@ -1694,22 +2137,22 @@ export const AiAssistantDashboard: React.FC<DashboardCommonProps> = ({
           <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
             <div className="flex items-center justify-between mb-2.5">
               <h3 className="text-sm font-extrabold text-slate-900">💡 Popular Questions</h3>
-              <span className="text-xs font-semibold text-blue-600">View All ›</span>
+              <span className="text-[10px] font-semibold text-indigo-600">{shortArea}</span>
             </div>
             <div className="space-y-2">
               {[
-                'Will it rain today in Delhi?',
-                'What is the current air quality in Rohini?',
-                'Are there any road closures near me?',
-                'Find 24x7 medical stores nearby',
-                'What are the safety tips during heatwave?',
-                'How to reach IGI Airport from Rohini?',
+                `Will it rain today in ${shortArea}?`,
+                `What is the current CPCB air quality in ${shortArea}?`,
+                `Which roads have traffic jams near ${shortArea}?`,
+                `Find verified hospitals & pharmacies near ${shortArea}`,
+                `Is it safe to exercise outdoors right now?`,
+                `Give me a complete live briefing for ${shortArea}`,
               ].map((q) => (
                 <button
                   key={q}
                   type="button"
                   onClick={() => handleSend(q)}
-                  className="w-full py-1.5 px-2 rounded-lg hover:bg-slate-50 flex items-center justify-between text-xs text-slate-700 font-medium text-left"
+                  className="w-full py-1.5 px-2 rounded-lg hover:bg-slate-50 flex items-center justify-between text-xs text-slate-700 font-medium text-left cursor-pointer"
                 >
                   <span className="truncate">{q}</span>
                   <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
@@ -1719,13 +2162,13 @@ export const AiAssistantDashboard: React.FC<DashboardCommonProps> = ({
           </div>
 
           <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
-            <h3 className="text-sm font-extrabold text-slate-900 mb-2.5">✨ AI Usage Tips</h3>
+            <h3 className="text-sm font-extrabold text-slate-900 mb-2.5">✨ How Saathi AI Works</h3>
             <div className="grid grid-cols-2 gap-2.5 text-xs">
               {[
-                { t: 'Be specific', s: 'Mention your area or landmark' },
-                { t: 'Ask follow-up questions', s: 'Get more detailed insights' },
-                { t: 'Use natural language', s: 'Ask like you would to a friend' },
-                { t: 'Explore suggestions', s: 'Try the recommended prompts' },
+                { t: 'Zero Hallucination', s: 'Every metric is pulled from live sensors' },
+                { t: 'CPCB Standard', s: 'Official 2014 Indian NAQI sub-index math' },
+                { t: 'Real Road Names', s: 'Queries OpenStreetMap & TomTom corridors' },
+                { t: 'Change Location', s: 'Switch city or pin to test any area in India' },
               ].map((u) => (
                 <div key={u.t} className="p-2.5 rounded-xl bg-slate-50">
                   <p className="font-bold text-slate-800">{u.t}</p>
