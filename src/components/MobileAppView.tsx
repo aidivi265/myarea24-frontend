@@ -502,28 +502,127 @@ export const MobileAppView: React.FC<MobileAppViewProps> = ({
           </div>
         );
 
+      case 'intelligence':
+        return (
+          <div className="p-3 space-y-3">
+            {/* Live Neighborhood Livability Score Card */}
+            <div className="bg-gradient-to-br from-[#0F172A] to-[#1E1B4B] text-white rounded-2xl p-3.5 shadow-sm flex items-center gap-3.5">
+              <div className="w-16 h-16 rounded-full border-4 border-emerald-400 flex flex-col items-center justify-center shrink-0">
+                <span className="text-xl font-extrabold leading-none">{liveIntel.safetyScore}</span>
+                <span className="text-[8px] font-bold text-emerald-300 mt-0.5">/ 100</span>
+              </div>
+              <div className="min-w-0">
+                <span className="text-[9px] font-extrabold uppercase tracking-wider text-sky-300">
+                  Neighbourhood Livability Score
+                </span>
+                <h4 className="text-xs font-extrabold text-white mt-0.5">{liveIntel.safetyVerdict}</h4>
+                <p className="text-[10px] text-slate-300 mt-0.5">
+                  Synthesized from {weather.temperatureC}°C, AQI {airQuality.aqiValue} & {traffic.congestionLevel} traffic
+                </p>
+              </div>
+            </div>
+
+            {/* Citizen Activity Verdicts ("Should I Step Out?") */}
+            <div className="bg-white rounded-2xl p-3 shadow-xs border border-slate-200/70 space-y-2">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-extrabold text-slate-900">
+                  🧭 “Should I Step Out?” Verdicts
+                </h4>
+                <span className="text-[9px] font-bold text-emerald-600">● Cross-Signal</span>
+              </div>
+              {[
+                {
+                  icon: '🏃',
+                  act: 'Park Walk & Outdoor Jog',
+                  verdict: airQuality.aqiValue > 180 ? 'AVOID' : airQuality.aqiValue > 115 ? 'CAUTION' : 'GO',
+                  cls:
+                    airQuality.aqiValue > 180
+                      ? 'bg-rose-100 text-rose-700'
+                      : airQuality.aqiValue > 115
+                      ? 'bg-amber-100 text-amber-800'
+                      : 'bg-emerald-100 text-emerald-800',
+                  sub: `AQI ${airQuality.aqiValue} (${airQuality.aqiCategory}) • ${weather.temperatureC}°C`,
+                },
+                {
+                  icon: '🛵',
+                  act: 'Two-Wheeler Commute',
+                  verdict: weather.precipitationMm > 1 ? 'AVOID' : weather.chanceOfRain >= 45 ? 'CAUTION' : 'GO',
+                  cls:
+                    weather.precipitationMm > 1
+                      ? 'bg-rose-100 text-rose-700'
+                      : weather.chanceOfRain >= 45
+                      ? 'bg-amber-100 text-amber-800'
+                      : 'bg-emerald-100 text-emerald-800',
+                  sub: `Wind ${weather.windKph} km/h • Rain ${weather.chanceOfRain}%`,
+                },
+                {
+                  icon: '🚇',
+                  act: 'Office Commute (Road vs Metro)',
+                  verdict:
+                    traffic.congestionLevel === 'Heavy' || traffic.congestionLevel === 'Severe'
+                      ? 'TAKE METRO'
+                      : 'GO BY ROAD',
+                  cls:
+                    traffic.congestionLevel === 'Heavy' || traffic.congestionLevel === 'Severe'
+                      ? 'bg-indigo-100 text-indigo-800'
+                      : 'bg-emerald-100 text-emerald-800',
+                  sub: `Corridors at ${traffic.averageSpeedKmh} km/h (${traffic.congestionLevel})`,
+                },
+                {
+                  icon: '👶',
+                  act: 'Kids & Senior Citizen Outing',
+                  verdict: airQuality.aqiValue > 140 || weather.uvIndex >= 7 ? 'CAUTION' : 'GO',
+                  cls:
+                    airQuality.aqiValue > 140 || weather.uvIndex >= 7
+                      ? 'bg-amber-100 text-amber-800'
+                      : 'bg-emerald-100 text-emerald-800',
+                  sub: `UV Index ${weather.uvIndex} • Feels like ${weather.feelsLikeC}°C`,
+                },
+              ].map((v) => (
+                <div
+                  key={v.act}
+                  className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between gap-2"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-base">{v.icon}</span>
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-extrabold text-slate-900 truncate">{v.act}</p>
+                      <p className="text-[9px] text-slate-500 truncate">{v.sub}</p>
+                    </div>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold shrink-0 ${v.cls}`}>
+                    {v.verdict}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+
       case 'emergency':
         return (
           <div className="p-3 space-y-3">
             <div className="bg-white rounded-2xl p-3 shadow-xs border border-slate-200/70">
-              <h4 className="text-xs font-extrabold text-slate-900 mb-2">⚡ Quick Emergency Actions</h4>
+              <h4 className="text-xs font-extrabold text-slate-900 mb-2">⚡ 1-Tap SOS Dispatch ({shortArea})</h4>
               <div className="grid grid-cols-5 gap-1.5 text-center">
                 {[
-                  ['📞', 'Call 112', 'bg-rose-500 text-white'],
-                  ['🚑', 'Ambulance', 'bg-blue-500 text-white'],
-                  ['🛡️', 'Police', 'bg-indigo-600 text-white'],
-                  ['🚒', 'Fire', 'bg-orange-500 text-white'],
-                  ['📍', 'Share Loc', 'bg-emerald-500 text-white'],
+                  ['📞', 'Call 112', 'bg-rose-600 text-white'],
+                  ['🚑', '108 Med', 'bg-blue-600 text-white'],
+                  ['🛡️', '100 Police', 'bg-indigo-600 text-white'],
+                  ['🚒', '101 Fire', 'bg-orange-500 text-white'],
+                  ['🆘', '1091 Women', 'bg-purple-600 text-white'],
                 ].map(([ic, l, cls]) => (
                   <button
                     key={l}
                     type="button"
                     onClick={() =>
                       onOpenModal({
-                        title: `Emergency Action: ${l}`,
-                        category: 'SOS Dispatch',
-                        description: 'Connecting immediately with live GPS coordinates in Outer North Delhi.',
-                        primaryActionLabel: l,
+                        title: `Emergency Dispatch: ${l}`,
+                        category: '24x7 Priority SOS',
+                        description: `Connecting immediately with live GPS coordinates (${location.lat.toFixed(
+                          4
+                        )}°N, ${location.lng.toFixed(4)}°E) in ${currentLocation.areaName}.`,
+                        primaryActionLabel: `Dial ${l} Now`,
                       })
                     }
                     className={`${cls} p-2 rounded-xl flex flex-col items-center gap-1`}
@@ -534,24 +633,40 @@ export const MobileAppView: React.FC<MobileAppViewProps> = ({
                 ))}
               </div>
             </div>
+
             <div className="bg-white rounded-2xl p-3 shadow-xs border border-slate-200/70">
-              <h4 className="text-xs font-extrabold text-slate-900 mb-2">📍 Nearby Emergency Services</h4>
-              <InteractiveMap heightClass="h-36" showLiveViewBadge showSearchBottomButton={false} />
-            </div>
-            <div className="bg-white rounded-2xl p-3 shadow-xs border border-slate-200/70">
-              <h4 className="text-xs font-extrabold text-slate-900 mb-2">🔺 Live Emergency Alerts</h4>
-              <div className="space-y-1.5 text-xs">
-                {[
-                  ['Road Accident', 'Outer Ring Road (Rohini)', 'Critical', 'bg-rose-50 text-rose-600'],
-                  ['Waterlogging', 'Shalimar Bagh', 'Important', 'bg-orange-50 text-orange-600'],
-                  ['Fire Incident', 'Rohini Sector 16', 'Advisory', 'bg-amber-50 text-amber-700'],
-                ].map(([t, loc, b, cls]) => (
-                  <div key={t} className="flex items-center justify-between py-1 border-b border-slate-100 last:border-none">
-                    <div>
-                      <p className="text-[11px] font-bold text-slate-900">{t}</p>
-                      <p className="text-[9px] text-slate-500">{loc}</p>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-extrabold text-slate-900">
+                  🏥 Verified Hospitals & Police Near {shortArea}
+                </h4>
+                <span className="text-[9px] font-bold text-emerald-600">● Live OSM</span>
+              </div>
+              <div className="space-y-2 text-xs">
+                {liveIntel.nearbyPois.slice(0, 4).map((poi) => (
+                  <div
+                    key={poi.id}
+                    className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-100"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-extrabold text-slate-900 truncate">{poi.name}</p>
+                      <p className="text-[9px] text-slate-500 truncate">
+                        {poi.distanceKm} km away • {poi.category.toUpperCase()}
+                      </p>
                     </div>
-                    <span className={`px-2 py-0.5 rounded text-[8px] font-bold ${cls}`}>{b}</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onOpenModal({
+                          title: `${poi.name} (${poi.phone})`,
+                          category: 'Emergency Responder Dispatch',
+                          description: `${poi.distanceKm} km from ${currentLocation.areaName}. Tap below to call immediately.`,
+                          primaryActionLabel: `Call ${poi.phone}`,
+                        })
+                      }
+                      className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-600 text-[10px] font-extrabold shrink-0"
+                    >
+                      📞 {poi.phone}
+                    </button>
                   </div>
                 ))}
               </div>
@@ -623,7 +738,7 @@ export const MobileAppView: React.FC<MobileAppViewProps> = ({
             </div>
             <div className="bg-white rounded-2xl p-3 shadow-xs border border-slate-200/70">
               <div className="flex items-center justify-between mb-2">
-                <h4 className="text-xs font-extrabold text-slate-900">📍 Popular Places Around You</h4>
+                <h4 className="text-xs font-extrabold text-slate-900">📍 Verified Places Around {shortArea}</h4>
                 <button
                   type="button"
                   onClick={() => onNavigate('businesses')}
@@ -633,35 +748,29 @@ export const MobileAppView: React.FC<MobileAppViewProps> = ({
                 </button>
               </div>
               <div className="space-y-2">
-                {[
-                  { n: 'The Urban Chai Café', s: 'Café • Open Now', d: '800 m', img: './assets/crops/biz-card-chai.webp' },
-                  { n: 'Bikanervala', s: 'Restaurant • Open Now', d: '1.2 km', img: './assets/crops/biz-card-bikanervala.webp' },
-                  { n: 'Rohini Sports Complex', s: 'Sports & Park • Open', d: '1.5 km', img: './assets/crops/biz-sports-complex.webp' },
-                ].map((pl) => (
+                {liveIntel.nearbyPois.slice(0, 3).map((pl) => (
                   <div
-                    key={pl.n}
+                    key={pl.id}
                     onClick={() =>
                       onOpenModal({
-                        title: pl.n,
-                        subtitle: pl.s,
+                        title: pl.name,
+                        subtitle: `${pl.category.toUpperCase()} • ${pl.address}`,
                         category: 'Live Area Map Pin',
-                        location: `${pl.d} from ${currentLocation.areaName}`,
-                        description: 'Tap below to launch turn-by-turn navigation or view live crowd status.',
+                        location: `${pl.distanceKm} km from ${currentLocation.areaName}`,
+                        description: 'Tap below to launch turn-by-turn navigation.',
                         primaryActionLabel: 'Start Navigation',
-                        image: pl.img,
                       })
                     }
                     className="cursor-pointer flex items-center justify-between gap-2.5 p-2 rounded-xl bg-slate-50 hover:bg-indigo-50/40 transition"
                   >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <img src={pl.img} alt={pl.n} className="w-11 h-11 rounded-lg object-cover shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-xs font-extrabold text-slate-900 truncate">{pl.n}</p>
-                        <p className="text-[10px] text-slate-500 truncate">{pl.s}</p>
-                      </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-extrabold text-slate-900 truncate">{pl.name}</p>
+                      <p className="text-[10px] text-slate-500 truncate">
+                        {pl.category.toUpperCase()} • {pl.address}
+                      </p>
                     </div>
                     <span className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 text-[10px] font-bold shrink-0">
-                      {pl.d} ›
+                      {pl.distanceKm} km ›
                     </span>
                   </div>
                 ))}
@@ -671,6 +780,7 @@ export const MobileAppView: React.FC<MobileAppViewProps> = ({
         );
 
       case 'alerts':
+      case 'bulletins':
         return (
           <div className="p-3 space-y-3">
             {alerts[0] && (
@@ -689,10 +799,10 @@ export const MobileAppView: React.FC<MobileAppViewProps> = ({
             <div className="bg-white rounded-2xl p-3 shadow-xs border border-slate-200/70">
               <div className="flex items-center justify-between mb-2.5">
                 <h4 className="text-xs font-extrabold text-slate-900">
-                  🔔 Active Alerts in {shortArea}
+                  🔔 Official Alerts & Civic Notices ({shortArea})
                 </h4>
                 <span className="px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 text-[9px] font-extrabold">
-                  {alerts.length} Live
+                  Live Feed
                 </span>
               </div>
               <div className="space-y-2">
@@ -712,19 +822,34 @@ export const MobileAppView: React.FC<MobileAppViewProps> = ({
                     </span>
                   </div>
                 ))}
+                <div className="p-2.5 rounded-xl border border-slate-200/70 flex items-start justify-between gap-2 bg-blue-50/40">
+                  <div className="min-w-0">
+                    <p className="text-xs font-extrabold text-slate-900">
+                      🚰 Municipal Water & Power Schedule ({shortArea})
+                    </p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">
+                      Normal pressure in morning slot; routine feeder inspection scheduled by local utility.
+                    </p>
+                  </div>
+                  <span className="px-2 py-0.5 rounded text-[9px] font-extrabold shrink-0 bg-blue-100 text-blue-700">
+                    Civic
+                  </span>
+                </div>
               </div>
             </div>
           </div>
         );
 
       case 'weather':
+      case 'air-quality':
         return (
           <div className="p-3 space-y-3">
+            {/* Unified Weather + CPCB Air Quality Card */}
             <div className="bg-white rounded-2xl p-3.5 shadow-xs border border-slate-200/70">
               <div className="flex items-center justify-between">
                 <div>
                   <span className="text-[10px] font-bold text-blue-600 uppercase">
-                    Live Conditions • {shortArea}
+                    Live Weather & Air • {shortArea}
                   </span>
                   <h3 className="text-2xl font-extrabold text-slate-900 mt-0.5">
                     {weather.temperatureC}°C • {weather.conditionText}
@@ -750,24 +875,7 @@ export const MobileAppView: React.FC<MobileAppViewProps> = ({
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl p-3 shadow-xs border border-slate-200/70">
-              <h4 className="text-xs font-extrabold text-slate-900 mb-2">🕒 Live Hourly Forecast</h4>
-              <div className="grid grid-cols-5 gap-1.5 text-center">
-                {weather.hourly.slice(0, 5).map((h, i) => (
-                  <div key={`${h.timeLabel}-${i}`} className="p-2 rounded-xl bg-slate-50">
-                    <p className="text-[9px] text-slate-500 font-semibold">{h.timeLabel}</p>
-                    <p className="text-base my-0.5">{h.emoji}</p>
-                    <p className="text-xs font-extrabold text-slate-900">{h.tempC}°</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        );
-
-      case 'air-quality':
-        return (
-          <div className="p-3 space-y-3">
+            {/* Official CPCB 2014 NAQI Section */}
             <div className="bg-white rounded-2xl p-3.5 shadow-xs border border-slate-200/70 flex items-center gap-4">
               <div
                 style={{ borderColor: airQuality.ringHex }}
@@ -787,6 +895,19 @@ export const MobileAppView: React.FC<MobileAppViewProps> = ({
                     .map((p) => `${p.name}: ${p.value} ${p.unit}`)
                     .join(' • ')}
                 </p>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl p-3 shadow-xs border border-slate-200/70">
+              <h4 className="text-xs font-extrabold text-slate-900 mb-2">🕒 Live Hourly Forecast</h4>
+              <div className="grid grid-cols-5 gap-1.5 text-center">
+                {weather.hourly.slice(0, 5).map((h, i) => (
+                  <div key={`${h.timeLabel}-${i}`} className="p-2 rounded-xl bg-slate-50">
+                    <p className="text-[9px] text-slate-500 font-semibold">{h.timeLabel}</p>
+                    <p className="text-base my-0.5">{h.emoji}</p>
+                    <p className="text-xs font-extrabold text-slate-900">{h.tempC}°</p>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -826,67 +947,51 @@ export const MobileAppView: React.FC<MobileAppViewProps> = ({
 
       case 'market-rates':
       case 'fuel-rates':
-      case 'bulletins':
         return (
           <div className="p-3 space-y-3">
             <div className="bg-white rounded-2xl p-3 shadow-xs border border-slate-200/70 space-y-2">
               <h4 className="text-xs font-extrabold text-slate-900">
-                {activeDashboard === 'fuel-rates'
-                  ? `⛽ Today’s Fuel Rates in ${fuelRates.city}`
-                  : activeDashboard === 'market-rates'
-                  ? `📈 Daily Mandi & Commodity Rates (${fuelRates.city})`
-                  : '📢 Official Civic Bulletins'}
+                ⛽ Live Fuel & CNG Rates ({fuelRates.city})
               </h4>
-              {activeDashboard === 'fuel-rates'
-                ? [
-                    ['Petrol (1 L)', `₹${fuelRates.petrol.toFixed(2)}`, 'Live OMC'],
-                    ['Diesel (1 L)', `₹${fuelRates.diesel.toFixed(2)}`, 'Live OMC'],
-                    ['CNG (1 kg)', `₹${fuelRates.cng.toFixed(2)}`, 'Live City Gas'],
-                    ['Domestic LPG (14.2 kg)', `₹${fuelRates.lpg.toFixed(2)}`, 'Domestic'],
-                  ].map(([n, p, c]) => (
-                    <div key={n} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50">
-                      <span className="text-xs font-bold text-slate-800">{n}</span>
-                      <div className="text-right">
-                        <p className="text-xs font-extrabold text-slate-900">{p}</p>
-                        <p className="text-[9px] text-emerald-600 font-bold">{c}</p>
-                      </div>
-                    </div>
-                  ))
-                : activeDashboard === 'market-rates'
-                ? mandiRates.map((m) => (
-                    <div key={m.commodity} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50">
-                      <span className="text-xs font-bold text-slate-800">
-                        {m.icon} {m.commodity}
-                      </span>
-                      <div className="text-right">
-                        <p className="text-xs font-extrabold text-slate-900">
-                          ₹{m.pricePerKg} / {m.unit}
-                        </p>
-                        <p className="text-[9px] text-emerald-600 font-bold">{m.trend}</p>
-                      </div>
-                    </div>
-                  ))
-                : [
-                    ['Water Supply Maintenance', 'Tomorrow 10 AM – 2 PM in Sec 9 & 10', 'DJB Notice'],
-                    ['Free Dengue Checkup Camp', 'Sunday 9 AM at Sector 10 Dispensary', 'Health Dept'],
-                    ['Solar Rooftop Subsidy Registration', 'Apply before 30th of this month', 'Civic Portal'],
-                  ].map(([t, s, b]) => (
-                    <div key={t} className="p-2.5 rounded-xl bg-slate-50 flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-xs font-extrabold text-slate-900">{t}</p>
-                        <p className="text-[10px] text-slate-500 mt-0.5">{s}</p>
-                      </div>
-                      <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 text-[9px] font-bold shrink-0">
-                        {b}
-                      </span>
-                    </div>
-                  ))}
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  ['Petrol (1 L)', `₹${fuelRates.petrol.toFixed(2)}`, 'Live OMC'],
+                  ['Diesel (1 L)', `₹${fuelRates.diesel.toFixed(2)}`, 'Live OMC'],
+                  ['CNG (1 kg)', `₹${fuelRates.cng.toFixed(2)}`, 'City Gas'],
+                  ['LPG (14.2 kg)', `₹${fuelRates.lpg.toFixed(0)}`, 'Domestic'],
+                ].map(([n, p, c]) => (
+                  <div key={n} className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                    <p className="text-[10px] font-bold text-slate-500">{n}</p>
+                    <p className="text-sm font-extrabold text-slate-900 mt-0.5">{p}</p>
+                    <p className="text-[9px] text-emerald-600 font-bold">{c}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl p-3 shadow-xs border border-slate-200/70 space-y-2">
+              <h4 className="text-xs font-extrabold text-slate-900">
+                🥦 Daily APMC Mandi Vegetables ({fuelRates.city})
+              </h4>
+              {mandiRates.map((m) => (
+                <div key={m.commodity} className="flex items-center justify-between p-2 rounded-xl bg-slate-50">
+                  <span className="text-xs font-bold text-slate-800">
+                    {m.icon} {m.commodity}
+                  </span>
+                  <div className="text-right">
+                    <p className="text-xs font-extrabold text-slate-900">
+                      ₹{m.pricePerKg} / {m.unit}
+                    </p>
+                    <p className="text-[9px] text-emerald-600 font-bold">{m.trend}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         );
 
       default:
-        // Default rich mobile view (Home & Intelligence Overview — 100% Live)
+        // Default rich mobile view (Home Portal — 100% Live)
         return (
           <div className="p-3 space-y-3">
             <div className="grid grid-cols-3 gap-2">
@@ -895,29 +1000,14 @@ export const MobileAppView: React.FC<MobileAppViewProps> = ({
                 className="cursor-pointer bg-white rounded-xl p-2.5 shadow-xs border border-slate-200/70"
               >
                 <div className="flex items-center justify-between text-[10px] font-bold text-slate-600">
-                  <span>☀️ Weather</span>
+                  <span>🌤️ Weather/AQI</span>
                   <ChevronRight className="w-3 h-3" />
                 </div>
                 <p className="text-base font-extrabold text-slate-900 mt-1">{weather.temperatureC}°C</p>
-                <p className="text-[9px] text-slate-500 truncate">{weather.conditionText}</p>
-                <p className="text-[9px] text-slate-400">
-                  H: {weather.maxTempC}° L: {weather.minTempC}°
-                </p>
-              </div>
-
-              <div
-                onClick={() => onNavigate('air-quality')}
-                className="cursor-pointer bg-white rounded-xl p-2.5 shadow-xs border border-slate-200/70"
-              >
-                <div className="flex items-center justify-between text-[10px] font-bold text-slate-600">
-                  <span>🍃 Air Quality</span>
-                  <ChevronRight className="w-3 h-3" />
-                </div>
-                <p className="text-base font-extrabold text-slate-900 mt-1">{airQuality.aqiValue} AQI</p>
                 <span
                   className={`inline-block px-1.5 py-0.5 rounded ${airQuality.colorBg} ${airQuality.colorText} text-[9px] font-bold mt-1`}
                 >
-                  {airQuality.aqiCategory}
+                  AQI {airQuality.aqiValue} ({airQuality.aqiCategory})
                 </span>
               </div>
 
@@ -931,6 +1021,18 @@ export const MobileAppView: React.FC<MobileAppViewProps> = ({
                 </div>
                 <p className="text-sm font-extrabold text-emerald-600 mt-1">{traffic.congestionLevel}</p>
                 <p className="text-[9px] text-slate-500 mt-0.5">Avg {traffic.averageSpeedKmh} km/h</p>
+              </div>
+
+              <div
+                onClick={() => onNavigate('intelligence')}
+                className="cursor-pointer bg-gradient-to-br from-slate-900 to-indigo-950 text-white rounded-xl p-2.5 shadow-xs"
+              >
+                <div className="flex items-center justify-between text-[10px] font-bold text-sky-300">
+                  <span>🧭 Area Score</span>
+                  <ChevronRight className="w-3 h-3" />
+                </div>
+                <p className="text-base font-extrabold text-white mt-1">{liveIntel.safetyScore}/100</p>
+                <p className="text-[9px] text-emerald-300 font-bold mt-0.5">Step-Out Verdicts ›</p>
               </div>
             </div>
 

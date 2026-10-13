@@ -241,15 +241,17 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
 
       {/* ROW 2: 4 LIVE SIGNAL CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-3.5">
-        {/* 1. Weather Card (3 cols) */}
+        {/* 1. Unified Weather & Air Quality Card (3 cols) */}
         <div className="xl:col-span-3 bg-gradient-to-br from-white via-white to-sky-50/70 rounded-2xl p-4 shadow-card border border-slate-200/70 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between text-xs font-bold text-slate-800 mb-2">
               <div className="flex items-center gap-1.5">
                 <Sun className="w-4 h-4 text-amber-500" />
-                <span>Weather</span>
+                <span>Weather & Air Quality</span>
               </div>
-              <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[9px] font-bold">● Live</span>
+              <span className={`px-2 py-0.5 rounded-md ${airQuality.colorBg} ${airQuality.colorText} text-[10px] font-bold`}>
+                AQI {airQuality.aqiValue} • {airQuality.aqiCategory}
+              </span>
             </div>
             <div className="flex items-center gap-3 my-1">
               <div className="w-11 h-11 rounded-2xl bg-amber-50 flex items-center justify-center">
@@ -258,12 +260,12 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
               <div>
                 <p className="text-2xl font-extrabold text-slate-900 leading-none">{weather.temperatureC}°C</p>
                 <p className="text-[11px] text-slate-500 mt-1">
-                  H: {weather.maxTempC}° &nbsp; L: {weather.minTempC}°
+                  H: {weather.maxTempC}° &nbsp; L: {weather.minTempC}° • Feels {weather.feelsLikeC}°C
                 </p>
               </div>
             </div>
-            <p className="text-xs font-medium text-slate-700 mt-1.5">
-              {weather.conditionText} • Feels like {weather.feelsLikeC}°C
+            <p className="text-xs font-medium text-slate-700 mt-1.5 line-clamp-1">
+              {weather.conditionText} • PM2.5: {airQuality.pm25} µg/m³
             </p>
             <div className="grid grid-cols-3 gap-1.5 pt-3 mt-3 border-t border-slate-100 text-[11px]">
               <div>
@@ -280,9 +282,9 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
               </div>
               <div>
                 <p className="font-bold text-slate-800 flex items-center gap-1">
-                  <CloudRain className="w-3 h-3 text-blue-500" /> {weather.precipitationMm} mm
+                  <CloudRain className="w-3 h-3 text-blue-500" /> {weather.chanceOfRain}%
                 </p>
-                <p className="text-[10px] text-slate-400">Rain ({weather.chanceOfRain}%)</p>
+                <p className="text-[10px] text-slate-400">Rain Chance</p>
               </div>
             </div>
           </div>
@@ -291,43 +293,51 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
             onClick={() => onNavigate('weather')}
             className="mt-3 text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
           >
-            <span>See detailed forecast</span>
+            <span>Open Weather & AQI Hub</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
 
-        {/* 2. Air Quality Card (2 cols) */}
+        {/* 2. Area Readiness & Step-Out Verdicts Card (2 cols) */}
         <div className="xl:col-span-2 bg-white rounded-2xl p-4 shadow-card border border-slate-200/70 flex flex-col justify-between">
           <div>
-            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 mb-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-              <span>Air Quality</span>
+            <div className="flex items-center justify-between text-xs font-bold text-slate-800 mb-2">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-indigo-500" />
+                <span>Area Readiness</span>
+              </div>
+              <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">Score</span>
             </div>
-            <div className="mt-1">
+            <div className="mt-1 flex items-baseline gap-1.5">
               <p className="text-2xl font-extrabold text-slate-900">
-                {airQuality.aqiValue} <span className="text-sm font-bold text-slate-700">AQI</span>
+                {liveIntel.safetyScore}
+                <span className="text-xs font-bold text-slate-400">/100</span>
               </p>
-              <span
-                className={`inline-block mt-1.5 px-2.5 py-0.5 rounded-md ${airQuality.colorBg} ${airQuality.colorText} text-[11px] font-bold`}
-              >
-                {airQuality.aqiCategory}
+              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${liveIntel.safetyScore >= 75 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                {liveIntel.safetyStatus}
               </span>
             </div>
-            <p className="text-xs text-slate-600 mt-2.5 line-clamp-2">{airQuality.healthAdvice}</p>
-            <div className="mt-3 flex items-center gap-1">
-              <span className={`h-1.5 flex-1 rounded-l-full bg-emerald-400 ${airQuality.aqiValue <= 100 ? 'h-2 ring-2 ring-emerald-200' : ''}`} />
-              <span className={`h-1.5 flex-1 bg-amber-400 ${airQuality.aqiValue > 100 && airQuality.aqiValue <= 200 ? 'h-2 ring-2 ring-amber-200' : ''}`} />
-              <span className={`h-1.5 flex-1 bg-orange-400 ${airQuality.aqiValue > 200 && airQuality.aqiValue <= 300 ? 'h-2 ring-2 ring-orange-200' : ''}`} />
-              <span className={`h-1.5 flex-1 bg-rose-400 ${airQuality.aqiValue > 300 && airQuality.aqiValue <= 400 ? 'h-2 ring-2 ring-rose-200' : ''}`} />
-              <span className={`h-1.5 flex-1 rounded-r-full bg-purple-400 ${airQuality.aqiValue > 400 ? 'h-2 ring-2 ring-purple-200' : ''}`} />
+            <div className="mt-2.5 space-y-1.5 text-[11px]">
+              <div className="flex items-center justify-between bg-slate-50 px-2 py-1 rounded-lg">
+                <span className="text-slate-600 font-medium">🚶 Outdoor Walk</span>
+                <span className={`font-extrabold text-[10px] ${airQuality.aqiValue <= 120 && weather.chanceOfRain < 50 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                  {airQuality.aqiValue <= 120 && weather.chanceOfRain < 50 ? 'GO' : 'CAUTION'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between bg-slate-50 px-2 py-1 rounded-lg">
+                <span className="text-slate-600 font-medium">🛵 2-Wheeler</span>
+                <span className={`font-extrabold text-[10px] ${weather.chanceOfRain < 40 && airQuality.aqiValue <= 150 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                  {weather.chanceOfRain < 40 && airQuality.aqiValue <= 150 ? 'GO' : 'MASK UP'}
+                </span>
+              </div>
             </div>
           </div>
           <button
             type="button"
-            onClick={() => onNavigate('air-quality')}
+            onClick={() => onNavigate('intelligence')}
             className="mt-3 text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
           >
-            <span>Air quality details</span>
+            <span>All 6 step-out verdicts</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>

@@ -333,7 +333,10 @@ export function App() {
               <nav className="space-y-0.5">
                 {NAV_ITEMS.filter((i) => i.section === 'intelligence').map((item) => {
                   const Icon = ICON_MAP[item.id];
-                  const active = activeDashboard === item.id;
+                  const active =
+                    activeDashboard === item.id ||
+                    (item.id === 'weather' && activeDashboard === 'air-quality') ||
+                    (item.id === 'alerts' && activeDashboard === 'bulletins');
                   return (
                     <button
                       key={item.id}
@@ -368,7 +371,9 @@ export function App() {
               <nav className="space-y-0.5">
                 {NAV_ITEMS.filter((i) => i.section === 'community').map((item) => {
                   const Icon = ICON_MAP[item.id];
-                  const active = activeDashboard === item.id;
+                  const active =
+                    activeDashboard === item.id ||
+                    (item.id === 'market-rates' && activeDashboard === 'fuel-rates');
                   return (
                     <button
                       key={item.id}
