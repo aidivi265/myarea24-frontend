@@ -5,13 +5,16 @@ import { InteractiveMap } from '../components/InteractiveMap';
 import { LiveAreaIntelligence } from '../services/liveIntelligence';
 import { UserLocation } from '../components/LocationPickerModal';
 import {
+  LiveCommunityMarketplaceState,
+  useLiveCommunityMarketplace,
+} from '../services/communityMarketplaceService';
+import {
   MapPin,
   Sun,
   CloudRain,
   Wind,
   Droplets,
   Car,
-  AlertTriangle,
   Sparkles,
   ArrowRight,
   ChevronRight,
@@ -34,17 +37,17 @@ import {
   ShieldCheck,
   Radio,
   MessageSquare,
-  SlidersHorizontal,
   Plus,
   Check,
   Wrench,
-  Zap,
   Gift,
   Bell,
-  Tag,
-  Music,
-  Users,
   Search,
+  Fuel,
+  TrendingUp,
+  Phone,
+  Copy,
+  X,
 } from 'lucide-react';
 
 export interface DashboardCommonProps {
@@ -57,12 +60,13 @@ export interface DashboardCommonProps {
   selectedArea: string;
   currentLocation: UserLocation;
   liveIntel: LiveAreaIntelligence;
+  marketplace?: LiveCommunityMarketplaceState;
   onAddToCart?: (item: { name: string; price: number }) => void;
   onOpenLocationPicker?: () => void;
 }
 
 /* ============================================================================
-   1. HOME DASHBOARD (Page 2 Desktop)
+   1. HOME DASHBOARD (Page 2 Desktop) — 100% LIVE SIGNALS + MANDI & FUEL WIDGET
    ============================================================================ */
 export const HomeDashboard: React.FC<DashboardCommonProps> = ({
   onNavigate,
@@ -72,9 +76,14 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
   onToggleSave,
   selectedArea,
   liveIntel,
+  marketplace: propMarketplace,
   onOpenLocationPicker,
 }) => {
-  const { weather, airQuality, traffic } = liveIntel;
+  const fallbackMarketplace = useLiveCommunityMarketplace(liveIntel);
+  const marketplace = propMarketplace || fallbackMarketplace;
+
+  const { weather, airQuality, traffic, mandiRates, fuelRates, alerts } = liveIntel;
+  const shortArea = selectedArea.split(',')[0]?.trim() || selectedArea;
   const nowDateLabel = new Date().toLocaleDateString('en-IN', {
     weekday: 'short',
     day: 'numeric',
@@ -97,71 +106,10 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
     { label: 'More', icon: MoreHorizontal, bg: 'bg-slate-100 text-slate-600', target: 'businesses' as DashboardId },
   ];
 
-  const homeEvents = [
-    {
-      id: 'evt-summer-fest',
-      badge: 'TODAY',
-      title: 'Rohini Summer Fest 2024',
-      time: '6:00 PM – 10:00 PM',
-      loc: 'Sector 10, Rohini',
-      tags: [
-        { label: 'Live Music', cls: 'bg-rose-50 text-rose-600' },
-        { label: 'Family Friendly', cls: 'bg-emerald-50 text-emerald-600' },
-      ],
-      img: './assets/crops/event-summer-fest.webp',
-    },
-    {
-      id: 'evt-cleanup',
-      badge: 'TOMORROW',
-      title: 'Community Cleanup Drive',
-      time: '8:00 AM – 11:00 AM',
-      loc: 'Rithala, Rohini',
-      tags: [{ label: 'Community', cls: 'bg-blue-50 text-blue-600' }],
-      img: './assets/crops/event-cleanup.webp',
-    },
-    {
-      id: 'evt-comedy',
-      badge: 'SAT, 24 AUG',
-      title: 'Standup Comedy Night',
-      time: '7:00 PM – 9:00 PM',
-      loc: 'The Laugh Box, Rohini',
-      tags: [
-        { label: 'Comedy', cls: 'bg-pink-50 text-pink-600' },
-        { label: 'Indoor', cls: 'bg-indigo-50 text-indigo-600' },
-      ],
-      img: './assets/crops/event-comedy.webp',
-    },
-  ];
-
-  const popularPlaces = [
-    {
-      id: 'biz-chai',
-      name: 'The Urban Chai Café',
-      rating: '4.5',
-      reviews: '(1.2K)',
-      sub: 'Café • Sector 10',
-      dist: '800 m',
-      img: './assets/crops/biz-urban-chai.webp',
-    },
-    {
-      id: 'biz-bikanervala',
-      name: 'Bikanervala',
-      rating: '4.3',
-      reviews: '(2.4K)',
-      sub: 'Restaurant • Rohini',
-      dist: '1.2 km',
-      img: './assets/crops/biz-bikanervala.webp',
-    },
-    {
-      id: 'biz-sports',
-      name: 'Rohini Sports Complex',
-      rating: '4.6',
-      reviews: '(980)',
-      sub: 'Sports • Sector 11',
-      dist: '1.5 km',
-      img: './assets/crops/biz-sports-complex.webp',
-    },
-  ];
+  // Live Events from /api/v1/events via marketplace
+  const homeEvents = marketplace.events.slice(0, 3);
+  // Live Businesses from /api/v1/businesses + OpenStreetMap Overpass
+  const popularPlaces = marketplace.businesses.slice(0, 3);
 
   return (
     <div className="space-y-4">
@@ -417,7 +365,10 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
                 {weather.temperatureC}°C ({weather.conditionText}) • AQI {airQuality.aqiValue} ({airQuality.aqiCategory})
               </h3>
               <p className="text-[11px] text-slate-600 mt-1 leading-relaxed line-clamp-3">
-                {weather.outdoorActivityAdvice} {topCorridor ? `Traffic on ${topCorridor.roadName} is ${topCorridor.status.toLowerCase()} at ${topCorridor.speedKmh} km/h.` : ''}
+                {weather.outdoorActivityAdvice}{' '}
+                {topCorridor
+                  ? `Traffic on ${topCorridor.roadName} is ${topCorridor.status.toLowerCase()} at ${topCorridor.speedKmh} km/h.`
+                  : ''}
               </p>
             </div>
             <img
@@ -445,6 +396,102 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
               </button>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* LIVE LOCAL FUEL & VEGETABLE MANDI RATES WIDGET (Connected to /api/v1/market-rates & /api/v1/fuel-rates) */}
+      <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <TrendingUp className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                <span>Local Fuel & Vegetable Mandi Rates ({fuelRates.city})</span>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-extrabold">
+                  ● Live APMC & OMC Feed
+                </span>
+              </h3>
+              <p className="text-[11px] text-slate-500">
+                Daily retail commodity prices & fuel benchmarks for {shortArea}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onNavigate('fuel-rates')}
+              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+            >
+              <Fuel className="w-3.5 h-3.5 text-rose-500" />
+              <span>Fuel Stations</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigate('market-rates')}
+              className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center gap-1 transition cursor-pointer"
+            >
+              <span>Full Mandi & Fuel Hub</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
+          {/* 3 Fuel Pills */}
+          <div
+            onClick={() => onNavigate('fuel-rates')}
+            className="cursor-pointer p-2.5 rounded-xl bg-rose-50/60 border border-rose-100 hover:border-rose-300 transition"
+          >
+            <p className="text-[10px] font-bold text-rose-700 flex items-center gap-1">⛽ Petrol</p>
+            <p className="text-sm font-extrabold text-slate-900 mt-0.5">₹{fuelRates.petrol.toFixed(2)}/L</p>
+            <p className="text-[9px] text-slate-500 truncate">{fuelRates.city} OMC</p>
+          </div>
+          <div
+            onClick={() => onNavigate('fuel-rates')}
+            className="cursor-pointer p-2.5 rounded-xl bg-blue-50/60 border border-blue-100 hover:border-blue-300 transition"
+          >
+            <p className="text-[10px] font-bold text-blue-700 flex items-center gap-1">🛢️ Diesel</p>
+            <p className="text-sm font-extrabold text-slate-900 mt-0.5">₹{fuelRates.diesel.toFixed(2)}/L</p>
+            <p className="text-[9px] text-slate-500 truncate">{fuelRates.city} OMC</p>
+          </div>
+          <div
+            onClick={() => onNavigate('fuel-rates')}
+            className="cursor-pointer p-2.5 rounded-xl bg-emerald-50/60 border border-emerald-100 hover:border-emerald-300 transition"
+          >
+            <p className="text-[10px] font-bold text-emerald-700 flex items-center gap-1">🟢 CNG</p>
+            <p className="text-sm font-extrabold text-slate-900 mt-0.5">₹{fuelRates.cng.toFixed(2)}/kg</p>
+            <p className="text-[9px] text-slate-500 truncate">City Gas Retail</p>
+          </div>
+          <div
+            onClick={() => onNavigate('fuel-rates')}
+            className="cursor-pointer p-2.5 rounded-xl bg-orange-50/60 border border-orange-100 hover:border-orange-300 transition"
+          >
+            <p className="text-[10px] font-bold text-orange-700 flex items-center gap-1">🔥 LPG (14.2kg)</p>
+            <p className="text-sm font-extrabold text-slate-900 mt-0.5">₹{fuelRates.lpg.toFixed(0)}</p>
+            <p className="text-[9px] text-slate-500 truncate">Domestic Cylinder</p>
+          </div>
+
+          {/* 4 Live Mandi Vegetable Pills */}
+          {mandiRates.slice(0, 4).map((m) => (
+            <div
+              key={m.commodity}
+              onClick={() => onNavigate('market-rates')}
+              className="cursor-pointer p-2.5 rounded-xl bg-slate-50 border border-slate-200/70 hover:border-indigo-300 transition"
+            >
+              <p className="text-[10px] font-bold text-slate-700 truncate">
+                {m.icon} {m.commodity}
+              </p>
+              <div className="flex items-baseline justify-between mt-0.5">
+                <p className="text-sm font-extrabold text-slate-900">
+                  ₹{m.pricePerKg}/{m.unit}
+                </p>
+                <span className="text-[9px] font-bold text-emerald-600">{m.trend}</span>
+              </div>
+              <p className="text-[9px] text-slate-400 truncate">{m.mandiName}</p>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -479,7 +526,7 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <Calendar className="w-4 h-4 text-indigo-600" />
-              <h3 className="text-sm font-extrabold text-slate-900">Upcoming Events Near You</h3>
+              <h3 className="text-sm font-extrabold text-slate-900">Upcoming Events in {shortArea}</h3>
             </div>
             <button
               type="button"
@@ -500,11 +547,11 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
                   onClick={() =>
                     onOpenModal({
                       title: ev.title,
-                      category: 'Local Event',
-                      badge: ev.badge,
+                      category: `${ev.cat} • ${ev.organizer}`,
+                      badge: ev.date,
                       location: ev.loc,
-                      price: 'Free / Open Entry',
-                      description: `Happening ${ev.time} at ${ev.loc}. AI Signal Correlation: Expect moderate crowd surge and rain probability near exit window.`,
+                      price: ev.price,
+                      description: `Happening ${ev.time} at ${ev.loc}. Contextual Event Intelligence: ~${ev.expectedAttendance} attendees expected, Parking Pressure: ${ev.parkingPressure}. ${ev.exitWeatherAdvisory}`,
                       primaryActionLabel: 'Book / RSVP Now',
                       image: ev.img,
                     })
@@ -519,7 +566,7 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
                         className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
                       />
                       <span className="absolute top-2 left-2 px-2 py-0.5 rounded bg-white/95 text-[9px] font-extrabold text-slate-800 shadow-sm">
-                        {ev.badge}
+                        {ev.date}
                       </span>
                       <button
                         type="button"
@@ -553,11 +600,12 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
                     </div>
                   </div>
                   <div className="px-2.5 pb-2.5 flex flex-wrap gap-1">
-                    {ev.tags.map((t) => (
-                      <span key={t.label} className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${t.cls}`}>
-                        {t.label}
-                      </span>
-                    ))}
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-indigo-50 text-indigo-700">
+                      {ev.cat}
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-emerald-50 text-emerald-700">
+                      {ev.rsvp}
+                    </span>
                   </div>
                 </div>
               );
@@ -570,11 +618,11 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <span className="text-orange-500">📢</span>
-              <h3 className="text-sm font-extrabold text-slate-900">Civic Updates</h3>
+              <h3 className="text-sm font-extrabold text-slate-900">Live Alerts & Civic Updates</h3>
             </div>
             <button
               type="button"
-              onClick={() => onNavigate('bulletins')}
+              onClick={() => onNavigate('alerts')}
               className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
             >
               <span>View all</span>
@@ -583,54 +631,37 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
           </div>
 
           <div className="space-y-2.5">
-            {[
-              {
-                badge: 'WATER SUPPLY',
-                badgeCls: 'bg-sky-50 text-sky-700',
-                ago: '2 hrs ago',
-                title: 'Planned Water Supply Maintenance',
-                loc: 'Rohini Sector 8, 9, 10',
-                time: 'Tomorrow, 10:00 AM – 4:00 PM',
-                img: './assets/crops/civic-water.webp',
-              },
-              {
-                badge: 'ROAD WORK',
-                badgeCls: 'bg-amber-50 text-amber-700',
-                ago: '5 hrs ago',
-                title: 'Road Repair Work on Outer Ring Road',
-                loc: 'Near Rithala Metro Station',
-                time: 'Aug 24 – Aug 28',
-                img: './assets/crops/civic-road.webp',
-              },
-              {
-                badge: 'GOVERNMENT',
-                badgeCls: 'bg-emerald-50 text-emerald-700',
-                ago: '1 day ago',
-                title: 'Ward Office Special Camp',
-                loc: 'Rohini Ward Office',
-                time: 'Aug 25, 10:00 AM – 2:00 PM',
-                img: './assets/crops/civic-gov.webp',
-              },
-            ].map((c) => (
-              <div
-                key={c.title}
-                onClick={() => onNavigate('bulletins')}
-                className="cursor-pointer flex items-center gap-3 p-2 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-200/70 transition"
-              >
-                <img src={c.img} alt={c.badge} className="w-14 h-14 rounded-xl object-cover shrink-0 border border-slate-100" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold ${c.badgeCls}`}>
-                      {c.badge}
-                    </span>
-                    <span className="text-[10px] text-slate-400">{c.ago}</span>
+            {alerts.slice(0, 3).map((c, idx) => {
+              const thumbs = [
+                './assets/crops/civic-water.webp',
+                './assets/crops/civic-road.webp',
+                './assets/crops/civic-gov.webp',
+              ];
+              return (
+                <div
+                  key={c.id}
+                  onClick={() => onNavigate('alerts')}
+                  className="cursor-pointer flex items-center gap-3 p-2 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-200/70 transition"
+                >
+                  <img
+                    src={thumbs[idx % thumbs.length]}
+                    alt={c.category}
+                    className="w-14 h-14 rounded-xl object-cover shrink-0 border border-slate-100"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold ${c.badgeClass}`}>
+                        {c.category.toUpperCase()}
+                      </span>
+                      <span className="text-[10px] text-slate-400">{c.timeAgo}</span>
+                    </div>
+                    <h4 className="text-xs font-extrabold text-slate-900 truncate mt-1">{c.title}</h4>
+                    <p className="text-[10px] text-slate-500 truncate mt-0.5">📍 {c.areaDescription}</p>
+                    <p className="text-[10px] text-slate-500 truncate">🏛️ {c.sender}</p>
                   </div>
-                  <h4 className="text-xs font-extrabold text-slate-900 truncate mt-1">{c.title}</h4>
-                  <p className="text-[10px] text-slate-500 truncate mt-0.5">📍 {c.loc}</p>
-                  <p className="text-[10px] text-slate-500 truncate">🕒 {c.time}</p>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -639,7 +670,7 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-1.5">
               <MapPin className="w-4 h-4 text-blue-600" />
-              <h3 className="text-sm font-extrabold text-slate-900">Popular in Your Area</h3>
+              <h3 className="text-sm font-extrabold text-slate-900">Popular in {shortArea}</h3>
             </div>
             <button
               type="button"
@@ -710,7 +741,7 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
 };
 
 /* ============================================================================
-   2. BUSINESSES DASHBOARD (Page 4 Desktop)
+   2. BUSINESSES DASHBOARD (Page 4 Desktop) — WIRED TO /api/v1/businesses + OVERPASS
    ============================================================================ */
 export const BusinessesDashboard: React.FC<DashboardCommonProps> = ({
   onOpenModal,
@@ -718,98 +749,87 @@ export const BusinessesDashboard: React.FC<DashboardCommonProps> = ({
   savedIds,
   onToggleSave,
   selectedArea,
+  liveIntel,
+  marketplace: propMarketplace,
 }) => {
+  const fallbackMarketplace = useLiveCommunityMarketplace(liveIntel);
+  const marketplace = propMarketplace || fallbackMarketplace;
+
   const [selectedCat, setSelectedCat] = useState('All');
   const [localSearch, setLocalSearch] = useState('');
-  const [openNowOnly, setOpenNowOnly] = useState(true);
-  const [sortBy, setSortBy] = useState<'Relevance' | 'Top Rated' | 'Nearest'>('Relevance');
+  const [openNowOnly, setOpenNowOnly] = useState(false);
+  const [sortBy, setSortBy] = useState<'Nearest' | 'Top Rated' | 'Relevance'>('Nearest');
   const [minRating, setMinRating] = useState<'Any' | '4.5+' | '4.0+'>('Any');
+
+  // Merchant Add Business Modal State
+  const [showAddBiz, setShowAddBiz] = useState(false);
+  const [newBizName, setNewBizName] = useState('');
+  const [newBizCat, setNewBizCat] = useState('Restaurants');
+  const [newBizPhone, setNewBizPhone] = useState('+91 98110 24024');
+  const [newBizAddress, setNewBizAddress] = useState('');
+
+  const shortArea = selectedArea.split(',')[0]?.trim() || selectedArea;
 
   const categories = [
     'All',
     'Restaurants',
-    'Cafes',
-    'Shopping',
-    'Healthcare',
-    'Education',
-    'Gyms & Fitness',
-    'Salons & Beauty',
-    'Home Services',
-    'Automotive',
+    'Cafés',
+    'Groceries',
+    'Pharmacies',
+    'Electronics',
+    'Fitness',
+    'Salons',
+    'Services',
   ];
 
-  const popularBusinesses = [
-    {
-      id: 'biz-chai',
-      name: 'The Urban Chai Café',
-      rating: '4.5',
-      reviews: '(1.2K)',
-      cat: 'Cafes',
-      sub: 'Café • Sector 10',
-      dist: '800 m',
-      img: './assets/crops/biz-card-chai.webp',
-    },
-    {
-      id: 'biz-bikanervala',
-      name: 'Bikanervala',
-      rating: '4.3',
-      reviews: '(2.4K)',
-      cat: 'Restaurants',
-      sub: 'Restaurant • Rohini',
-      dist: '1.2 km',
-      img: './assets/crops/biz-card-bikanervala.webp',
-    },
-    {
-      id: 'biz-cultfit',
-      name: 'Cult Fit Gym',
-      rating: '4.6',
-      reviews: '(980)',
-      cat: 'Gyms & Fitness',
-      sub: 'Gym • Sector 11',
-      dist: '1.5 km',
-      img: './assets/crops/biz-card-cultfit.webp',
-    },
-    {
-      id: 'biz-looks',
-      name: 'Looks Salon',
-      rating: '4.4',
-      reviews: '(420)',
-      cat: 'Salons & Beauty',
-      sub: 'Salon • Rohini',
-      dist: '1.2 km',
-      img: './assets/crops/biz-card-looks.webp',
-    },
-  ];
-
-  const filteredBiz = popularBusinesses
+  const filteredBiz = marketplace.businesses
     .filter((b) => {
-      const matchesCat = selectedCat === 'All' || b.cat === selectedCat;
+      const matchesCat =
+        selectedCat === 'All' ||
+        b.cat.toLowerCase().includes(selectedCat.toLowerCase()) ||
+        selectedCat.toLowerCase().includes(b.cat.toLowerCase());
       const matchesQuery =
         !localSearch ||
         b.name.toLowerCase().includes(localSearch.toLowerCase()) ||
-        b.sub.toLowerCase().includes(localSearch.toLowerCase());
+        b.sub.toLowerCase().includes(localSearch.toLowerCase()) ||
+        b.cat.toLowerCase().includes(localSearch.toLowerCase());
       const numRating = parseFloat(b.rating);
       const matchesRating =
         minRating === 'Any' || (minRating === '4.5+' ? numRating >= 4.5 : numRating >= 4.0);
-      return matchesCat && matchesQuery && matchesRating;
+      const matchesOpen = !openNowOnly || b.status === 'Open';
+      return matchesCat && matchesQuery && matchesRating && matchesOpen;
     })
     .sort((a, b) => {
       if (sortBy === 'Top Rated') return parseFloat(b.rating) - parseFloat(a.rating);
+      if (sortBy === 'Nearest') return a.distanceKm - b.distanceKm;
       return 0;
     });
 
   const browseGrid = [
-    { name: 'Restaurants', count: '320+ places', icon: Utensils, color: 'bg-orange-50 text-orange-600' },
-    { name: 'Cafes', count: '140+ places', icon: Coffee, color: 'bg-amber-50 text-amber-600' },
-    { name: 'Shopping', count: '250+ places', icon: ShoppingBag, color: 'bg-violet-50 text-violet-600' },
-    { name: 'Healthcare', count: '120+ places', icon: Hospital, color: 'bg-rose-50 text-rose-600' },
-    { name: 'Education', count: '90+ places', icon: GraduationCap, color: 'bg-blue-50 text-blue-600' },
-    { name: 'Gyms & Fitness', count: '75+ places', icon: Dumbbell, color: 'bg-indigo-50 text-indigo-600' },
-    { name: 'Salons & Beauty', count: '180+ places', icon: Scissors, color: 'bg-pink-50 text-pink-600' },
-    { name: 'Home Services', count: '200+ places', icon: Wrench, color: 'bg-teal-50 text-teal-600' },
-    { name: 'Automotive', count: '85+ places', icon: Car, color: 'bg-sky-50 text-sky-600' },
-    { name: 'More Categories', count: 'View all', icon: MoreHorizontal, color: 'bg-slate-100 text-slate-600' },
+    { name: 'Restaurants', count: 'Live OSM & Verified', icon: Utensils, color: 'bg-orange-50 text-orange-600' },
+    { name: 'Cafés', count: 'Work & Hangout', icon: Coffee, color: 'bg-amber-50 text-amber-600' },
+    { name: 'Groceries', count: 'Supermarkets & Mandi', icon: ShoppingBag, color: 'bg-violet-50 text-violet-600' },
+    { name: 'Pharmacies', count: '24×7 Chemists', icon: Hospital, color: 'bg-rose-50 text-rose-600' },
+    { name: 'Electronics', count: 'Mobiles & Repair', icon: GraduationCap, color: 'bg-blue-50 text-blue-600' },
+    { name: 'Fitness', count: 'Gyms & Arenas', icon: Dumbbell, color: 'bg-indigo-50 text-indigo-600' },
+    { name: 'Salons', count: 'Grooming & Spa', icon: Scissors, color: 'bg-pink-50 text-pink-600' },
+    { name: 'Services', count: 'Home & Utility', icon: Wrench, color: 'bg-teal-50 text-teal-600' },
+    { name: 'All', count: `${marketplace.businesses.length} discovered`, icon: MoreHorizontal, color: 'bg-slate-100 text-slate-600' },
   ];
+
+  const handleCreateBiz = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBizName.trim()) return;
+    await marketplace.addBusiness({
+      name: newBizName.trim(),
+      cat: newBizCat,
+      phone: newBizPhone.trim(),
+      address: newBizAddress.trim() || `${shortArea}, ${liveIntel.location.city}`,
+    });
+    setNewBizName('');
+    setNewBizAddress('');
+    setShowAddBiz(false);
+  };
 
   return (
     <div className="space-y-4">
@@ -823,31 +843,110 @@ export const BusinessesDashboard: React.FC<DashboardCommonProps> = ({
         }
         title="Discover Local Businesses"
         subtitle="Real places. Real people. Right around you."
-        description="Explore restaurants, shops, services and more — with real reviews, live status and AI-powered recommendations."
+        description={`Live OpenStreetMap Overpass POI discovery & verified merchant storefronts around ${shortArea} (${marketplace.businesses.length} active listings).`}
         rightWidget={
-          <div className="grid grid-cols-2 gap-2.5 w-full lg:w-[360px]">
-            {[
-              { icon: ShieldCheck, title: 'Verified Listings', sub: 'Trusted information', cls: 'text-blue-300' },
-              { icon: Radio, title: 'Live Status', sub: 'Open/Closed, wait times', cls: 'text-emerald-300' },
-              { icon: MessageSquare, title: 'Real Reviews', sub: 'From local users', cls: 'text-amber-300' },
-              { icon: Sparkles, title: 'AI Recommendations', sub: 'Based on what matters to you', cls: 'text-purple-300' },
-            ].map((feat) => (
-              <div
-                key={feat.title}
-                className="bg-slate-900/50 backdrop-blur-md border border-white/15 rounded-xl p-2.5 flex items-center gap-2.5"
-              >
-                <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
-                  <feat.icon className={`w-4 h-4 ${feat.cls}`} />
+          <div className="flex flex-col gap-2.5 w-full lg:w-[360px]">
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { icon: ShieldCheck, title: 'OSM + API Live', sub: `${marketplace.businesses.length} nearby places`, cls: 'text-blue-300' },
+                { icon: Radio, title: 'Live Status', sub: 'Open/Closed & distance', cls: 'text-emerald-300' },
+                { icon: MessageSquare, title: 'Direct Call', sub: 'Zero middleman commission', cls: 'text-amber-300' },
+                { icon: Sparkles, title: 'AI Discovery', sub: `Grounded in ${shortArea}`, cls: 'text-purple-300' },
+              ].map((feat) => (
+                <div
+                  key={feat.title}
+                  className="bg-slate-900/50 backdrop-blur-md border border-white/15 rounded-xl p-2.5 flex items-center gap-2.5"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
+                    <feat.icon className={`w-4 h-4 ${feat.cls}`} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-white truncate">{feat.title}</p>
+                    <p className="text-[10px] text-blue-100/80 truncate">{feat.sub}</p>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-white truncate">{feat.title}</p>
-                  <p className="text-[10px] text-blue-100/80 truncate">{feat.sub}</p>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowAddBiz((v) => !v)}
+              className="w-full py-2 rounded-xl bg-white text-indigo-950 hover:bg-blue-50 text-xs font-extrabold flex items-center justify-center gap-1.5 shadow cursor-pointer transition"
+            >
+              <Plus className="w-4 h-4 text-indigo-600" />
+              <span>List Your Local Business in {shortArea}</span>
+            </button>
           </div>
         }
       />
+
+      {/* Merchant Onboarding Drawer (/api/v1/businesses POST) */}
+      {showAddBiz && (
+        <form
+          onSubmit={handleCreateBiz}
+          className="bg-indigo-50/90 border border-indigo-200 rounded-2xl p-4 shadow-card space-y-3"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="text-xs font-extrabold text-indigo-950">
+                🏪 List a Local Business in {selectedArea} (Synced with /api/v1/businesses)
+              </h4>
+              <p className="text-[11px] text-slate-600">
+                Instantly appears in local discovery for residents in {shortArea}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowAddBiz(false)}
+              className="text-slate-400 hover:text-slate-700"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+            <input
+              type="text"
+              required
+              value={newBizName}
+              onChange={(e) => setNewBizName(e.target.value)}
+              placeholder="Business / Shop Name *"
+              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-800 focus:outline-none"
+            />
+            <select
+              value={newBizCat}
+              onChange={(e) => setNewBizCat(e.target.value)}
+              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-800 focus:outline-none"
+            >
+              {categories.filter((c) => c !== 'All').map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+            <input
+              type="text"
+              value={newBizPhone}
+              onChange={(e) => setNewBizPhone(e.target.value)}
+              placeholder="Contact / WhatsApp Number"
+              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-800 focus:outline-none"
+            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newBizAddress}
+                onChange={(e) => setNewBizAddress(e.target.value)}
+                placeholder={`Street / Block in ${shortArea}`}
+                className="flex-1 px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-800 focus:outline-none"
+              />
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold shrink-0 cursor-pointer"
+              >
+                Publish
+              </button>
+            </div>
+          </div>
+        </form>
+      )}
 
       {/* Category Pills Strip */}
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
@@ -856,7 +955,7 @@ export const BusinessesDashboard: React.FC<DashboardCommonProps> = ({
             key={cat}
             type="button"
             onClick={() => setSelectedCat(cat)}
-            className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition shadow-sm border ${
+            className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition shadow-sm border cursor-pointer ${
               selectedCat === cat
                 ? 'bg-blue-600 text-white border-blue-600'
                 : 'bg-white text-slate-700 border-slate-200/80 hover:bg-slate-50'
@@ -875,7 +974,7 @@ export const BusinessesDashboard: React.FC<DashboardCommonProps> = ({
             type="text"
             value={localSearch}
             onChange={(e) => setLocalSearch(e.target.value)}
-            placeholder="Search for any business (e.g. cafe, salon, hospital...)"
+            placeholder={`Search ${marketplace.businesses.length} businesses in ${shortArea} (e.g. cafe, chemist, mart)...`}
             className="bg-transparent text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none w-full"
           />
         </div>
@@ -884,7 +983,7 @@ export const BusinessesDashboard: React.FC<DashboardCommonProps> = ({
             type="button"
             onClick={() =>
               setSortBy((prev) =>
-                prev === 'Relevance' ? 'Top Rated' : prev === 'Top Rated' ? 'Nearest' : 'Relevance'
+                prev === 'Nearest' ? 'Top Rated' : prev === 'Top Rated' ? 'Relevance' : 'Nearest'
               )
             }
             className="px-3 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200/80 font-medium text-slate-700 transition cursor-pointer"
@@ -916,14 +1015,13 @@ export const BusinessesDashboard: React.FC<DashboardCommonProps> = ({
           >
             {openNowOnly ? '● Open Now' : 'Open Now'}
           </button>
-          {(selectedCat !== 'All' || localSearch || minRating !== 'Any' || sortBy !== 'Relevance') && (
+          {(selectedCat !== 'All' || localSearch || minRating !== 'Any') && (
             <button
               type="button"
               onClick={() => {
                 setSelectedCat('All');
                 setLocalSearch('');
                 setMinRating('Any');
-                setSortBy('Relevance');
               }}
               className="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 font-semibold text-rose-600 text-[11px]"
             >
@@ -936,26 +1034,28 @@ export const BusinessesDashboard: React.FC<DashboardCommonProps> = ({
       {/* Main Content Split: Left (8 cols) + Right Map (4 cols) */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
         <div className="xl:col-span-8 space-y-4">
-          {/* Popular Near You */}
+          {/* Discovered Businesses Near You */}
           <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
-                  <Star className="w-4 h-4 text-amber-400 fill-amber-400" /> Popular Near You
+                  <Star className="w-4 h-4 text-amber-400 fill-amber-400" /> Businesses Near {shortArea} ({filteredBiz.length})
                 </h3>
-                <p className="text-[11px] text-slate-500">Top rated and trending businesses in your area</p>
+                <p className="text-[11px] text-slate-500">
+                  Live commercial POIs via OpenStreetMap Overpass & FastAPI `/api/v1/businesses`
+                </p>
               </div>
               <button
                 type="button"
-                onClick={() => setSelectedCat('All')}
-                className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                onClick={() => marketplace.refreshMarketplace()}
+                className="text-xs font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
               >
-                View all
+                {marketplace.loading ? 'Syncing...' : '↻ Refresh Live POIs'}
               </button>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {filteredBiz.map((b) => {
+              {filteredBiz.slice(0, 8).map((b) => {
                 const isSaved = savedIds.includes(b.id);
                 return (
                   <div
@@ -963,57 +1063,63 @@ export const BusinessesDashboard: React.FC<DashboardCommonProps> = ({
                     onClick={() =>
                       onOpenModal({
                         title: b.name,
-                        subtitle: b.sub,
+                        subtitle: `${b.sub} (${b.source})`,
                         category: b.cat,
-                        badge: 'Open Now',
+                        badge: `${b.status} • ${b.closes}`,
                         rating: `${b.rating} ${b.reviews}`,
-                        location: `${b.dist} away • Outer North Delhi`,
-                        description: `Verified local business in Rohini with live status tracking, digital catalog, and community reviews.`,
-                        primaryActionLabel: 'Get Directions & Call',
+                        location: `${b.dist} away • ${b.address}`,
+                        description: `${b.description}\n\n📞 Phone / WhatsApp: ${b.phone}\n📦 Active Catalog: ${b.activeProductsCount} products • ${b.activeOffersCount} live offers.`,
+                        primaryActionLabel: `Call ${b.phone}`,
                         image: b.img,
                       })
                     }
-                    className="cursor-pointer rounded-xl border border-slate-200/80 overflow-hidden hover:shadow-md transition bg-white group"
+                    className="cursor-pointer rounded-xl border border-slate-200/80 overflow-hidden hover:shadow-md transition bg-white group flex flex-col justify-between"
                   >
-                    <div className="relative h-28 overflow-hidden">
-                      <img
-                        src={b.img}
-                        alt={b.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                      />
-                      <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-emerald-500 text-white text-[10px] font-bold shadow">
-                        Open Now
-                      </span>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onToggleSave({
-                            id: b.id,
-                            title: b.name,
-                            subtitle: b.sub,
-                            category: 'Businesses',
-                            meta: b.dist,
-                            image: b.img,
-                            savedAt: 'Just now',
-                          });
-                        }}
-                        className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/45 text-white flex items-center justify-center hover:bg-rose-500 transition"
-                      >
-                        <Heart className={`w-3.5 h-3.5 ${isSaved ? 'fill-rose-500 text-rose-500' : ''}`} />
-                      </button>
-                    </div>
-                    <div className="p-2.5">
-                      <div className="flex items-start justify-between gap-1">
-                        <h4 className="text-xs font-extrabold text-slate-900 truncate">{b.name}</h4>
-                        <Bookmark className={`w-3.5 h-3.5 shrink-0 ${isSaved ? 'fill-indigo-600 text-indigo-600' : 'text-slate-400'}`} />
+                    <div>
+                      <div className="relative h-28 overflow-hidden">
+                        <img
+                          src={b.img}
+                          alt={b.name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                        />
+                        <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-emerald-500 text-white text-[10px] font-bold shadow">
+                          {b.status} • {b.dist}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleSave({
+                              id: b.id,
+                              title: b.name,
+                              subtitle: b.sub,
+                              category: 'Businesses',
+                              meta: b.dist,
+                              image: b.img,
+                              savedAt: 'Just now',
+                            });
+                          }}
+                          className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/45 text-white flex items-center justify-center hover:bg-rose-500 transition"
+                        >
+                          <Heart className={`w-3.5 h-3.5 ${isSaved ? 'fill-rose-500 text-rose-500' : ''}`} />
+                        </button>
                       </div>
-                      <p className="text-[11px] text-slate-600 flex items-center gap-1 mt-1">
-                        <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                        <span className="font-bold text-slate-800">{b.rating}</span>
-                        <span className="text-slate-400">{b.reviews}</span>
-                      </p>
-                      <p className="text-[10px] text-slate-500 mt-0.5 truncate">{b.sub}</p>
+                      <div className="p-2.5">
+                        <div className="flex items-start justify-between gap-1">
+                          <h4 className="text-xs font-extrabold text-slate-900 truncate">{b.name}</h4>
+                          <Bookmark className={`w-3.5 h-3.5 shrink-0 ${isSaved ? 'fill-indigo-600 text-indigo-600' : 'text-slate-400'}`} />
+                        </div>
+                        <p className="text-[11px] text-slate-600 flex items-center gap-1 mt-1">
+                          <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                          <span className="font-bold text-slate-800">{b.rating}</span>
+                          <span className="text-slate-400">{b.reviews}</span>
+                        </p>
+                        <p className="text-[10px] text-slate-500 mt-0.5 truncate">{b.sub}</p>
+                      </div>
+                    </div>
+                    <div className="px-2.5 pb-2.5 flex items-center justify-between text-[10px] text-indigo-600 font-bold">
+                      <span className="truncate">{b.source.includes('OpenStreetMap') ? '● Live OSM POI' : '✓ Verified'}</span>
+                      <span>📞 Call ›</span>
                     </div>
                   </div>
                 );
@@ -1023,14 +1129,14 @@ export const BusinessesDashboard: React.FC<DashboardCommonProps> = ({
 
           {/* Browse by Category */}
           <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
-            <h3 className="text-sm font-extrabold text-slate-900 mb-3">Browse by Category</h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+            <h3 className="text-sm font-extrabold text-slate-900 mb-3">Browse by Category in {shortArea}</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 gap-2.5">
               {browseGrid.map((cat) => (
                 <button
                   key={cat.name}
                   type="button"
-                  onClick={() => setSelectedCat(cat.name === 'More Categories' ? 'All' : cat.name)}
-                  className="p-2.5 rounded-xl border border-slate-200/70 hover:border-indigo-300 hover:bg-indigo-50/30 flex items-center justify-between gap-2 text-left transition"
+                  onClick={() => setSelectedCat(cat.name)}
+                  className="p-2.5 rounded-xl border border-slate-200/70 hover:border-indigo-300 hover:bg-indigo-50/30 flex items-center justify-between gap-2 text-left transition cursor-pointer"
                 >
                   <div className="flex items-center gap-2 min-w-0">
                     <div className={`w-8 h-8 rounded-lg ${cat.color} flex items-center justify-center shrink-0`}>
@@ -1054,7 +1160,9 @@ export const BusinessesDashboard: React.FC<DashboardCommonProps> = ({
             <InteractiveMap
               heightClass="h-[395px]"
               showTopFilterPills={['All', 'Restaurants', 'Healthcare', 'Shopping', 'More ⌄']}
-              centerLabel={'Rohini\nSector 10'}
+              centerLabel={selectedArea}
+              centerCoords={{ lat: liveIntel.location.lat, lng: liveIntel.location.lng }}
+              pois={liveIntel.nearbyPois}
             />
           </div>
         </div>
@@ -1065,18 +1173,18 @@ export const BusinessesDashboard: React.FC<DashboardCommonProps> = ({
         <div className="flex items-center justify-between mb-3">
           <div>
             <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4 text-indigo-600" /> AI Recommendations for You
+              <Sparkles className="w-4 h-4 text-indigo-600" /> AI Recommendations for {shortArea}
             </h3>
             <p className="text-[11px] text-slate-500">
-              Personalized suggestions based on your location, time, weather and local activity
+              Personalized suggestions based on your location ({selectedArea}), weather ({liveIntel.weather.temperatureC}°C) and local activity
             </p>
           </div>
           <button
             type="button"
-            onClick={() => onAskAi('Recommend the best local businesses in Rohini for tonight')}
+            onClick={() => onAskAi(`Recommend the best local businesses in ${selectedArea} for tonight`)}
             className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
           >
-            <span>View all</span>
+            <span>Ask AI</span>
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -1085,28 +1193,28 @@ export const BusinessesDashboard: React.FC<DashboardCommonProps> = ({
           {[
             {
               title: 'Best Places for Dinner Tonight',
-              sub: 'Popular and open now near you',
+              sub: `Popular and open now near ${shortArea}`,
               img: './assets/crops/biz-ai-dinner.webp',
             },
             {
               title: 'Good Cafes to Work From',
-              sub: 'Quiet cafes with Wi-Fi in Rohini',
+              sub: `Quiet cafes with Wi-Fi in ${shortArea}`,
               img: './assets/crops/biz-ai-cafe.webp',
             },
             {
               title: 'Fitness Options Nearby',
-              sub: 'Top rated gyms within 2 km',
+              sub: `Top rated gyms within 2 km of ${shortArea}`,
               img: './assets/crops/biz-ai-fitness.webp',
             },
             {
               title: 'Essential Services Nearby',
-              sub: 'Pharmacies, clinics and more',
+              sub: `24×7 pharmacies & clinics in ${shortArea}`,
               img: './assets/crops/biz-ai-essential.webp',
             },
           ].map((rec) => (
             <div
               key={rec.title}
-              onClick={() => onAskAi(`Show me ${rec.title} in Outer North Delhi`)}
+              onClick={() => onAskAi(`Show me ${rec.title} in ${selectedArea}`)}
               className="cursor-pointer p-2.5 rounded-xl border border-slate-200/80 hover:border-indigo-300 hover:shadow-sm flex items-center justify-between gap-2.5 transition"
             >
               <div className="flex items-center gap-2.5 min-w-0">
@@ -1126,113 +1234,62 @@ export const BusinessesDashboard: React.FC<DashboardCommonProps> = ({
 };
 
 /* ============================================================================
-   3. PRODUCT DASHBOARD (Page 6 Desktop)
+   3. PRODUCT DASHBOARD (Page 6 Desktop) — WIRED TO /api/v1/products & MANDI/FUEL
    ============================================================================ */
 export const ProductsDashboard: React.FC<DashboardCommonProps> = ({
   onNavigate,
   onOpenModal,
   onAskAi,
+  selectedArea,
+  liveIntel,
+  marketplace: propMarketplace,
   onAddToCart,
 }) => {
+  const fallbackMarketplace = useLiveCommunityMarketplace(liveIntel);
+  const marketplace = propMarketplace || fallbackMarketplace;
+
   const [selectedCat, setSelectedCat] = useState('All');
   const [addedIds, setAddedIds] = useState<string[]>([]);
+  const [showAddProd, setShowAddProd] = useState(false);
+  const [prodName, setProdName] = useState('');
+  const [prodCat, setProdCat] = useState('Groceries');
+  const [prodLocalPrice, setProdLocalPrice] = useState('120');
+  const [prodOnlinePrice, setProdOnlinePrice] = useState('145');
+
+  const shortArea = selectedArea.split(',')[0]?.trim() || selectedArea;
+  const { mandiRates, fuelRates } = liveIntel;
 
   const categories = [
     'All',
     'Groceries',
-    'Fruits & Vegetables',
-    'Dairy & Beverages',
-    'Pharmacy',
+    'Bakery & Dairy',
+    'Medicines',
     'Electronics',
-    'Fashion',
     'Home & Kitchen',
-    'Stationery',
-    'Bakery',
   ];
 
-  const popularProducts = [
-    {
-      id: 'prod-dal',
-      name: 'Arhar Dal',
-      unit: '1 kg',
-      price: 120,
-      stores: '5 stores nearby',
-      badge: 'Popular',
-      cat: 'Groceries',
-      img: './assets/crops/prod-arhar-dal.webp',
-    },
-    {
-      id: 'prod-milk',
-      name: 'Amul Fresh Milk',
-      unit: '1 L',
-      price: 58,
-      stores: '5 stores nearby',
-      cat: 'Dairy & Beverages',
-      img: './assets/crops/prod-amul-milk.webp',
-    },
-    {
-      id: 'prod-atta',
-      name: 'Aashirvaad Atta',
-      unit: '5 kg',
-      price: 265,
-      stores: '4 stores nearby',
-      cat: 'Groceries',
-      img: './assets/crops/prod-atta.webp',
-    },
-    {
-      id: 'prod-banana',
-      name: 'Banana (Fresh)',
-      unit: '1 kg',
-      price: 40,
-      stores: '6 stores nearby',
-      cat: 'Fruits & Vegetables',
-      img: './assets/crops/prod-banana.webp',
-    },
-    {
-      id: 'prod-dettol',
-      name: 'Dettol Handwash',
-      unit: '200 ml',
-      price: 99,
-      stores: '3 stores nearby',
-      cat: 'Pharmacy',
-      img: './assets/crops/prod-dettol.webp',
-    },
-  ];
+  const filteredProducts = marketplace.products.filter(
+    (p) => selectedCat === 'All' || p.cat.toLowerCase().includes(selectedCat.toLowerCase())
+  );
 
-  const nearbyStores = [
-    {
-      name: 'Apna Super Mart',
-      rating: '4.5 (1.2K)',
-      type: 'Grocery Store',
-      dist: '650 m',
-      img: './assets/crops/store-apna-mart.webp',
-    },
-    {
-      name: 'Sharma Fresh Mart',
-      rating: '4.3 (980)',
-      type: 'Fruits & Vegetables',
-      dist: '800 m',
-      img: './assets/crops/store-sharma-fresh.webp',
-    },
-    {
-      name: 'Gupta Electronics',
-      rating: '4.4 (620)',
-      type: 'Electronics',
-      dist: '1.1 km',
-      img: './assets/crops/store-gupta-elec.webp',
-    },
-    {
-      name: 'MedPlus Pharmacy',
-      rating: '4.6 (2.1K)',
-      type: 'Pharmacy',
-      dist: '1.3 km',
-      img: './assets/crops/store-medplus.webp',
-    },
-  ];
+  const nearbyStores = marketplace.businesses.slice(0, 4);
 
-  const handleAdd = (p: { id: string; name: string; price: number }) => {
+  const handleAdd = (p: { id: string; name: string; localPriceNum: number }) => {
     setAddedIds((prev) => (prev.includes(p.id) ? prev : [...prev, p.id]));
-    onAddToCart?.({ name: p.name, price: p.price });
+    onAddToCart?.({ name: p.name, price: p.localPriceNum });
+  };
+
+  const handleCreateProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!prodName.trim()) return;
+    await marketplace.addProduct({
+      name: prodName.trim(),
+      cat: prodCat,
+      localPriceNum: Number(prodLocalPrice) || 120,
+      onlinePriceNum: Number(prodOnlinePrice) || 145,
+    });
+    setProdName('');
+    setShowAddProd(false);
   };
 
   return (
@@ -1242,7 +1299,7 @@ export const ProductsDashboard: React.FC<DashboardCommonProps> = ({
         tag={
           <>
             <MapPin className="w-3.5 h-3.5 text-blue-300" />
-            <span>Outer North Delhi, Delhi</span>
+            <span>{selectedArea}</span>
           </>
         }
         title={
@@ -1252,18 +1309,77 @@ export const ProductsDashboard: React.FC<DashboardCommonProps> = ({
             <span className="text-[#93C5FD]">Right Around You</span>
           </>
         }
-        description="Find local stores, compare prices, check availability and discover the best places to buy everyday essentials in your area."
+        description={`Compare offline neighborhood store prices vs. quick-commerce apps in ${shortArea} and check live APMC Mandi & Fuel benchmarks.`}
         bottomPills={[
           { icon: <span>🧺</span>, label: 'Groceries nearby', onClick: () => setSelectedCat('Groceries') },
-          { icon: <span>🍎</span>, label: 'Fresh fruits & vegetables', onClick: () => setSelectedCat('Fruits & Vegetables') },
-          { icon: <span>💊</span>, label: 'Pharmacies open now', onClick: () => setSelectedCat('Pharmacy') },
+          { icon: <span>🥛</span>, label: 'Fresh Dairy & Bakery', onClick: () => setSelectedCat('Bakery & Dairy') },
+          { icon: <span>💊</span>, label: 'Pharmacies open now', onClick: () => setSelectedCat('Medicines') },
           { icon: <span>📱</span>, label: 'Electronics stores', onClick: () => setSelectedCat('Electronics') },
         ]}
         primaryCta={{
-          label: 'Ask AI for recommendations',
-          onClick: () => onAskAi('Where can I find the best prices on daily essentials in Rohini today?'),
+          label: '+ Add Merchant Product',
+          onClick: () => setShowAddProd((v) => !v),
         }}
       />
+
+      {showAddProd && (
+        <form
+          onSubmit={handleCreateProduct}
+          className="bg-indigo-50/90 border border-indigo-200 rounded-2xl p-4 shadow-card space-y-3"
+        >
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-extrabold text-indigo-950">
+              📦 Add Product to Local Inventory in {shortArea} (POST `/api/v1/products`)
+            </h4>
+            <button type="button" onClick={() => setShowAddProd(false)} className="text-slate-400 hover:text-slate-700">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+            <input
+              type="text"
+              required
+              value={prodName}
+              onChange={(e) => setProdName(e.target.value)}
+              placeholder="Product Name (e.g. Organic Toor Dal 1kg)"
+              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs"
+            />
+            <select
+              value={prodCat}
+              onChange={(e) => setProdCat(e.target.value)}
+              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs"
+            >
+              {categories.filter((c) => c !== 'All').map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+            <input
+              type="number"
+              value={prodLocalPrice}
+              onChange={(e) => setProdLocalPrice(e.target.value)}
+              placeholder="Local Store Price (₹)"
+              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs"
+            />
+            <div className="flex gap-2">
+              <input
+                type="number"
+                value={prodOnlinePrice}
+                onChange={(e) => setProdOnlinePrice(e.target.value)}
+                placeholder="Online App Price (₹)"
+                className="flex-1 px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs"
+              />
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-extrabold cursor-pointer"
+              >
+                Add
+              </button>
+            </div>
+          </div>
+        </form>
+      )}
 
       {/* Category Pills */}
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
@@ -1272,7 +1388,7 @@ export const ProductsDashboard: React.FC<DashboardCommonProps> = ({
             key={cat}
             type="button"
             onClick={() => setSelectedCat(cat)}
-            className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap border transition ${
+            className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap border transition cursor-pointer ${
               selectedCat === cat
                 ? 'bg-blue-600 text-white border-blue-600'
                 : 'bg-white text-slate-700 border-slate-200/80 hover:bg-slate-50'
@@ -1288,60 +1404,86 @@ export const ProductsDashboard: React.FC<DashboardCommonProps> = ({
         <div className="xl:col-span-8 space-y-4">
           {/* Popular Products in Your Area */}
           <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
-            <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5 mb-3">
-              <span>🔥</span> Popular Products in Your Area
-            </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-              {popularProducts
-                .filter((p) => selectedCat === 'All' || p.cat === selectedCat)
-                .map((p) => {
-                  const isAdded = addedIds.includes(p.id);
-                  return (
-                    <div
-                      key={p.id}
-                      className="rounded-xl border border-slate-200/80 p-2.5 flex flex-col justify-between hover:shadow-md transition bg-white relative"
-                    >
-                      <div>
-                        <div className="relative h-24 rounded-lg overflow-hidden bg-slate-50 mb-2">
-                          <img src={p.img} alt={p.name} className="w-full h-full object-contain" />
-                          {p.badge && (
-                            <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded bg-amber-400 text-slate-950 text-[9px] font-extrabold">
-                              {p.badge}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-start justify-between gap-1">
-                          <div>
-                            <h4 className="text-xs font-extrabold text-slate-900 line-clamp-1">{p.name}</h4>
-                            <p className="text-[10px] text-slate-400">{p.unit}</p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleAdd(p)}
-                            className={`w-6 h-6 rounded-full flex items-center justify-center border transition shrink-0 ${
-                              isAdded
-                                ? 'bg-emerald-500 border-emerald-500 text-white'
-                                : 'bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-600 hover:text-white'
-                            }`}
-                          >
-                            {isAdded ? <Check className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-                          </button>
-                        </div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
+                <span>🔥</span> Popular Products & Offline vs. Online Price Comparison ({shortArea})
+              </h3>
+              <span className="text-[11px] font-semibold text-emerald-600">
+                ● Live Store Inventory
+              </span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 gap-3">
+              {filteredProducts.map((p) => {
+                const isAdded = addedIds.includes(p.id);
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() =>
+                      onOpenModal({
+                        title: p.name,
+                        subtitle: `${p.store} • ${p.dist} away`,
+                        category: `${p.cat} • Offline vs Online Comparison`,
+                        badge: p.discount || 'Verified Price',
+                        price: `Local: ${p.price} (Online: ${p.oldPrice || p.price})`,
+                        location: p.storeAddress,
+                        description: `${p.freshnessLabel}. Buy directly from ${p.store} at ${p.price} instead of ${p.oldPrice || p.price} on ${p.onlineProvider} (Save ₹${p.savingsAmount}).`,
+                        primaryActionLabel: 'Reserve for Pickup / Delivery',
+                        image: p.img,
+                      })
+                    }
+                    className="cursor-pointer rounded-xl border border-slate-200/80 p-3 flex flex-col justify-between hover:shadow-md transition bg-white relative"
+                  >
+                    <div>
+                      <div className="relative h-24 rounded-lg overflow-hidden bg-slate-50 mb-2">
+                        <img src={p.img} alt={p.name} className="w-full h-full object-contain" />
+                        {p.discount && (
+                          <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded bg-emerald-500 text-white text-[9px] font-extrabold">
+                            {p.discount}
+                          </span>
+                        )}
                       </div>
-                      <div className="mt-2 pt-2 border-t border-slate-100">
-                        <p className="text-sm font-extrabold text-slate-900">₹{p.price}</p>
-                        <p className="text-[10px] text-emerald-600 font-semibold mt-0.5">📍 {p.stores}</p>
+                      <div className="flex items-start justify-between gap-1">
+                        <div>
+                          <h4 className="text-xs font-extrabold text-slate-900 line-clamp-1">{p.name}</h4>
+                          <p className="text-[10px] text-slate-400">{p.unit}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAdd(p);
+                          }}
+                          className={`w-6 h-6 rounded-full flex items-center justify-center border transition shrink-0 ${
+                            isAdded
+                              ? 'bg-emerald-500 border-emerald-500 text-white'
+                              : 'bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-600 hover:text-white'
+                          }`}
+                        >
+                          {isAdded ? <Check className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+                        </button>
                       </div>
                     </div>
-                  );
-                })}
+                    <div className="mt-2 pt-2 border-t border-slate-100">
+                      <div className="flex items-baseline gap-1.5">
+                        <p className="text-sm font-extrabold text-slate-900">{p.price}</p>
+                        {p.oldPrice && (
+                          <span className="text-[10px] text-slate-400 line-through">{p.oldPrice}</span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-emerald-600 font-semibold mt-0.5 truncate">
+                        🏪 {p.store} ({p.dist})
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
           {/* Nearby Stores */}
           <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-extrabold text-slate-900">Nearby Stores</h3>
+              <h3 className="text-sm font-extrabold text-slate-900">Nearby Stores in {shortArea}</h3>
               <button
                 type="button"
                 onClick={() => onNavigate('businesses')}
@@ -1354,16 +1496,16 @@ export const ProductsDashboard: React.FC<DashboardCommonProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {nearbyStores.map((st) => (
                 <div
-                  key={st.name}
+                  key={st.id}
                   onClick={() =>
                     onOpenModal({
                       title: st.name,
-                      subtitle: st.type,
+                      subtitle: st.sub,
                       category: 'Verified Local Merchant',
-                      badge: 'Open Now',
-                      rating: st.rating,
-                      location: `${st.dist} away • Outer North Delhi`,
-                      description: 'Live product inventory synced with MyArea24 Local Discovery Network. Supports in-store pickup and home delivery.',
+                      badge: st.status,
+                      rating: `${st.rating} ${st.reviews}`,
+                      location: `${st.dist} away • ${st.address}`,
+                      description: `${st.description}\n📞 Direct Store Contact: ${st.phone}`,
                       primaryActionLabel: 'View Store Catalog',
                       image: st.img,
                     })
@@ -1373,17 +1515,17 @@ export const ProductsDashboard: React.FC<DashboardCommonProps> = ({
                   <div className="relative h-24">
                     <img src={st.img} alt={st.name} className="w-full h-full object-cover" />
                     <span className="absolute bottom-1.5 right-1.5 px-2 py-0.5 rounded bg-slate-900/80 text-white text-[9px] font-bold">
-                      Open Now
+                      {st.status}
                     </span>
                   </div>
                   <div className="p-2.5">
                     <h4 className="text-xs font-extrabold text-slate-900 truncate">{st.name}</h4>
                     <div className="flex items-center justify-between text-[10px] text-slate-500 mt-1">
-                      <span className="text-amber-600 font-bold">★ {st.rating}</span>
+                      <span className="text-amber-600 font-bold">★ {st.rating} {st.reviews}</span>
                       <span>📍 {st.dist}</span>
                     </div>
-                    <p className="text-[10px] text-slate-500 mt-0.5">{st.type}</p>
-                    <p className="text-[10px] font-bold text-emerald-600 mt-0.5">Open Now</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5 truncate">{st.cat}</p>
+                    <p className="text-[10px] font-bold text-emerald-600 mt-0.5">{st.closes}</p>
                   </div>
                 </div>
               ))}
@@ -1395,8 +1537,8 @@ export const ProductsDashboard: React.FC<DashboardCommonProps> = ({
             <div className="flex items-center justify-between mb-2.5">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-indigo-600" />
-                <h3 className="text-xs font-extrabold text-slate-900">AI Recommendations for You</h3>
-                <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[9px] font-bold">BETA</span>
+                <h3 className="text-xs font-extrabold text-slate-900">AI Shopping Insights for {shortArea}</h3>
+                <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[9px] font-bold">LIVE</span>
               </div>
               <button
                 type="button"
@@ -1408,9 +1550,9 @@ export const ProductsDashboard: React.FC<DashboardCommonProps> = ({
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
               {[
-                { title: 'Best places to buy fresh vegetables', sub: 'Top rated stores within 1 km', icon: '🥦' },
-                { title: 'Pharmacies open now near you', sub: 'With home delivery options', icon: '💊' },
-                { title: 'Electronics stores with ongoing offers', sub: 'Smart TVs, mobiles and more', icon: '📱' },
+                { title: `Best places to buy fresh vegetables in ${shortArea}`, sub: 'APMC Mandi linked stores within 1 km', icon: '🥦' },
+                { title: `24×7 Pharmacies open now in ${shortArea}`, sub: 'With doorstep delivery options', icon: '💊' },
+                { title: `Electronics stores with ongoing offers in ${shortArea}`, sub: 'Smart TVs, accessories and repair', icon: '📱' },
               ].map((item) => (
                 <button
                   key={item.title}
@@ -1432,12 +1574,12 @@ export const ProductsDashboard: React.FC<DashboardCommonProps> = ({
           </div>
         </div>
 
-        {/* Right Column (4 cols): Today's Best Deals + Price Insights */}
+        {/* Right Column (4 cols): Today's Best Deals + Live APMC Mandi & Fuel Price Insights */}
         <div className="xl:col-span-4 space-y-4">
           {/* Today's Best Deals Near You */}
           <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-extrabold text-slate-900">Today's Best Deals Near You</h3>
+              <h3 className="text-sm font-extrabold text-slate-900">Today's Best Deals in {shortArea}</h3>
               <button
                 type="button"
                 onClick={() => onNavigate('offers')}
@@ -1448,72 +1590,85 @@ export const ProductsDashboard: React.FC<DashboardCommonProps> = ({
               </button>
             </div>
             <div className="grid grid-cols-2 gap-2.5">
-              {[
-                { name: 'Fresh Carrots', price: '₹30/kg', old: '₹40', off: '25% OFF', store: 'Sharma Fresh Mart', icon: '🥕' },
-                { name: 'Farm Eggs (12)', price: '₹72', old: '₹90', off: '20% OFF', store: 'Daily Fresh Store', icon: '🥚' },
-                { name: 'India Gate Rice', price: '₹280 (5 kg)', old: '₹320', off: '12% OFF', store: 'Gupta Store', icon: '🌾' },
-                { name: 'Fortune Sunlite Oil', price: '₹160 (1 L)', old: '₹185', off: '14% OFF', store: 'Aggarwal Store', icon: '🌻' },
-              ].map((deal) => (
+              {marketplace.products.slice(0, 4).map((deal) => (
                 <div
-                  key={deal.name}
-                  className="p-2.5 rounded-xl border border-slate-200/80 hover:border-blue-300 transition bg-slate-50/40"
+                  key={deal.id}
+                  onClick={() => handleAdd(deal)}
+                  className="cursor-pointer p-2.5 rounded-xl border border-slate-200/80 hover:border-blue-300 transition bg-slate-50/40"
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="text-2xl">{deal.icon}</span>
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-slate-900 truncate">{deal.name}</p>
-                      <p className="text-xs font-extrabold text-slate-900 mt-0.5">
-                        {deal.price} <span className="text-[10px] text-slate-400 line-through font-normal">{deal.old}</span>
-                      </p>
-                      <span className="inline-block px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 text-[9px] font-extrabold mt-0.5">
-                        {deal.off}
-                      </span>
-                      <p className="text-[10px] text-slate-500 truncate mt-0.5">{deal.store}</p>
-                    </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-900 truncate">{deal.name}</p>
+                    <p className="text-xs font-extrabold text-slate-900 mt-0.5">
+                      {deal.price}{' '}
+                      {deal.oldPrice && (
+                        <span className="text-[10px] text-slate-400 line-through font-normal">{deal.oldPrice}</span>
+                      )}
+                    </p>
+                    <span className="inline-block px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 text-[9px] font-extrabold mt-0.5">
+                      {deal.discount || `Save ${deal.savingsPercent}%`}
+                    </span>
+                    <p className="text-[10px] text-slate-500 truncate mt-0.5">{deal.store}</p>
                   </div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Price Insights for Your Area */}
+          {/* Live APMC Mandi & Fuel Price Insights for Your Area */}
           <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
-                <span className="text-blue-600">📈</span> Price Insights for Your Area
+                <span className="text-blue-600">📈</span> Live Mandi & Fuel Rates ({fuelRates.city})
               </h3>
               <button
                 type="button"
                 onClick={() => onNavigate('market-rates')}
                 className="text-xs font-semibold text-blue-600 flex items-center gap-1"
               >
-                <span>View full insights</span>
+                <span>Full table</span>
                 <ArrowRight className="w-3 h-3" />
               </button>
             </div>
 
-            <div className="space-y-3">
-              {[
-                { name: 'Tomato (1 kg)', price: '₹30', change: '↓ 15%', cls: 'text-emerald-600', icon: '🍅', path: 'M0,8 Q20,10 40,16 T80,22', stroke: '#10b981' },
-                { name: 'Onion (1 kg)', price: '₹28', change: '↓ 10%', cls: 'text-emerald-600', icon: '🧅', path: 'M0,10 Q25,12 50,18 T80,20', stroke: '#10b981' },
-                { name: 'Milk (1 L)', price: '₹58', change: '→ 0%', cls: 'text-blue-600', icon: '🥛', path: 'M0,14 L80,14', stroke: '#3b82f6' },
-                { name: 'Cooking Oil (1 L)', price: '₹160', change: '↑ 8%', cls: 'text-rose-600', icon: '🍾', path: 'M0,22 Q30,18 55,10 T80,6', stroke: '#ef4444' },
-              ].map((row) => (
-                <div key={row.name} className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-100 last:border-none last:pb-0">
+            <div className="space-y-2.5">
+              {mandiRates.map((row) => (
+                <div
+                  key={row.commodity}
+                  onClick={() => onNavigate('market-rates')}
+                  className="cursor-pointer flex items-center justify-between gap-2 pb-2 border-b border-slate-100"
+                >
                   <div className="flex items-center gap-2.5">
                     <span className="text-xl">{row.icon}</span>
                     <div>
-                      <p className="text-xs font-bold text-slate-800">{row.name}</p>
-                      <p className="text-xs font-extrabold text-slate-900">
-                        {row.price} <span className={`text-[10px] font-bold ml-1 ${row.cls}`}>{row.change}</span>
+                      <p className="text-xs font-bold text-slate-800">
+                        {row.commodity} (1 {row.unit})
                       </p>
+                      <p className="text-[10px] text-slate-400">{row.mandiName}</p>
                     </div>
                   </div>
-                  <svg width="80" height="28" className="overflow-visible">
-                    <path d={row.path} fill="none" stroke={row.stroke} strokeWidth="2" strokeLinecap="round" />
-                  </svg>
+                  <div className="text-right">
+                    <p className="text-xs font-extrabold text-slate-900">₹{row.pricePerKg}</p>
+                    <p className="text-[10px] font-bold text-emerald-600">{row.trend}</p>
+                  </div>
                 </div>
               ))}
+
+              {/* Fuel Benchmark Row */}
+              <div
+                onClick={() => onNavigate('fuel-rates')}
+                className="cursor-pointer pt-1 flex items-center justify-between text-xs"
+              >
+                <div>
+                  <p className="font-extrabold text-slate-900">⛽ Petrol / Diesel / CNG</p>
+                  <p className="text-[10px] text-slate-500">{fuelRates.city} OMC Retail</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-extrabold text-slate-900">
+                    ₹{fuelRates.petrol.toFixed(2)} / ₹{fuelRates.diesel.toFixed(2)}
+                  </p>
+                  <p className="text-[10px] font-bold text-emerald-600">CNG ₹{fuelRates.cng.toFixed(2)}/kg</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1523,83 +1678,53 @@ export const ProductsDashboard: React.FC<DashboardCommonProps> = ({
 };
 
 /* ============================================================================
-   4. SERVICES DASHBOARD (Page 8 Desktop)
+   4. SERVICES DASHBOARD (Page 8 Desktop) — WIRED TO /api/v1/services
    ============================================================================ */
 export const ServicesDashboard: React.FC<DashboardCommonProps> = ({
   onOpenModal,
   onAskAi,
+  selectedArea,
+  liveIntel,
+  marketplace: propMarketplace,
 }) => {
+  const fallbackMarketplace = useLiveCommunityMarketplace(liveIntel);
+  const marketplace = propMarketplace || fallbackMarketplace;
+
   const [selectedCat, setSelectedCat] = useState('All');
+  const [showAddSvc, setShowAddSvc] = useState(false);
+  const [proName, setProName] = useState('');
+  const [proCat, setProCat] = useState('Home Repair');
+  const [proPrice, setProPrice] = useState('299');
+  const [proPhone, setProPhone] = useState('+91 98112 44101');
+
+  const shortArea = selectedArea.split(',')[0]?.trim() || selectedArea;
 
   const serviceCats = [
-    { label: 'Home Repairs', icon: '🔧' },
+    { label: 'All', icon: '⊞' },
+    { label: 'Home Repair', icon: '🔧' },
     { label: 'Cleaning', icon: '🧹' },
-    { label: 'Electrical', icon: '⚡' },
-    { label: 'Plumbing', icon: '🚰' },
-    { label: 'AC & Appliances', icon: '❄️' },
-    { label: 'Beauty & Wellness', icon: '✂️' },
-    { label: 'Tutoring & Education', icon: '📚' },
-    { label: 'Pet Care', icon: '🐾' },
-    { label: 'Vehicle Services', icon: '🚗' },
-    { label: 'Event & Party', icon: '🎉' },
-    { label: 'More', icon: '⊞' },
+    { label: 'Beauty & Salon', icon: '✂️' },
+    { label: 'Tutoring', icon: '📚' },
+    { label: 'Health', icon: '🏥' },
+    { label: 'Moving', icon: '🚚' },
   ];
 
-  const popularServices = [
-    {
-      title: 'AC Service & Repair',
-      badge: 'Popular',
-      rating: '4.6 (1.2K)',
-      bookings: '500+ bookings',
-      price: '₹499 onwards',
-      img: './assets/crops/srv-ac-repair.webp',
-    },
-    {
-      title: 'Home Deep Cleaning',
-      rating: '4.4 (980)',
-      bookings: '300+ bookings',
-      price: '₹1,499 onwards',
-      img: './assets/crops/srv-cleaning.webp',
-    },
-    {
-      title: 'Electrician Services',
-      rating: '4.5 (870)',
-      bookings: '400+ bookings',
-      price: '₹299 onwards',
-      img: './assets/crops/srv-electrician.webp',
-    },
-    {
-      title: 'Plumbing Services',
-      rating: '4.6 (620)',
-      bookings: '250+ bookings',
-      price: '₹349 onwards',
-      img: './assets/crops/srv-plumbing.webp',
-    },
-  ];
+  const filteredServices = marketplace.services.filter(
+    (s) => selectedCat === 'All' || s.cat.toLowerCase().includes(selectedCat.toLowerCase())
+  );
 
-  const professionals = [
-    {
-      name: 'Amit AC Services',
-      rating: '4.6 (520 reviews)',
-      loc: 'Rohini Sector 9',
-      spec: 'AC Repair • Installation',
-      img: './assets/crops/pro-amit.webp',
-    },
-    {
-      name: 'Sharma Home Cleaning',
-      rating: '4.4 (430 reviews)',
-      loc: 'Rohini Sector 10',
-      spec: 'Deep Cleaning • Regular',
-      img: './assets/crops/pro-sharma.webp',
-    },
-    {
-      name: 'Delhi Electric Solutions',
-      rating: '4.7 (390 reviews)',
-      loc: 'Rohini Sector 8',
-      spec: 'Wiring • Repairs • Installation',
-      img: './assets/crops/pro-delhi-elec.webp',
-    },
-  ];
+  const handleCreateService = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!proName.trim()) return;
+    await marketplace.addService({
+      name: proName.trim(),
+      cat: proCat,
+      priceNum: Number(proPrice) || 299,
+      phone: proPhone.trim(),
+    });
+    setProName('');
+    setShowAddSvc(false);
+  };
 
   return (
     <div className="space-y-4">
@@ -1608,25 +1733,83 @@ export const ServicesDashboard: React.FC<DashboardCommonProps> = ({
         tag={
           <>
             <MapPin className="w-3.5 h-3.5 text-blue-300" />
-            <span>Outer North Delhi, Delhi</span>
+            <span>{selectedArea}</span>
           </>
         }
         title="Local Services"
         subtitle="Trusted people. Reliable services. Right in your area."
-        description="Book home services, find local professionals and get things done easily — all from your neighbourhood."
+        description={`Book verified home professionals in ${shortArea} with transparent pricing and direct phone/WhatsApp contact.`}
         bottomPills={[
           { icon: <span>🛡️</span>, label: 'Verified professionals' },
-          { icon: <span>📍</span>, label: 'Local & nearby' },
+          { icon: <span>📍</span>, label: `Local in ${shortArea}` },
           { icon: <span>⭐</span>, label: 'Ratings & reviews' },
-          { icon: <span>💰</span>, label: 'Transparent pricing' },
-          { icon: <span>✨</span>, label: 'AI recommendations', onClick: () => onAskAi('Recommend top-rated AC repair & home services in Rohini') },
+          { icon: <span>➕</span>, label: 'Register as Service Pro', onClick: () => setShowAddSvc((v) => !v) },
         ]}
         askAiWidget={{
-          placeholder: 'Search for a service...',
+          placeholder: `Search for a service in ${shortArea}...`,
           chips: ['AC Repair', 'Electrician', 'Plumber', 'Deep Cleaning'],
-          onAsk: (q) => onAskAi(`Find trusted local professionals for ${q} in Rohini`),
+          onAsk: (q) => onAskAi(`Find trusted local professionals for ${q} in ${selectedArea}`),
         }}
       />
+
+      {showAddSvc && (
+        <form
+          onSubmit={handleCreateService}
+          className="bg-indigo-50/90 border border-indigo-200 rounded-2xl p-4 shadow-card space-y-3"
+        >
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-extrabold text-indigo-950">
+              🔧 Register as a Local Professional in {shortArea} (POST `/api/v1/services`)
+            </h4>
+            <button type="button" onClick={() => setShowAddSvc(false)} className="text-slate-400 hover:text-slate-700">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+            <input
+              type="text"
+              required
+              value={proName}
+              onChange={(e) => setProName(e.target.value)}
+              placeholder="Provider / Technician Name *"
+              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs"
+            />
+            <select
+              value={proCat}
+              onChange={(e) => setProCat(e.target.value)}
+              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs"
+            >
+              {serviceCats.filter((c) => c.label !== 'All').map((c) => (
+                <option key={c.label} value={c.label}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+            <input
+              type="number"
+              value={proPrice}
+              onChange={(e) => setProPrice(e.target.value)}
+              placeholder="Starting Visit Fee (₹)"
+              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs"
+            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={proPhone}
+                onChange={(e) => setProPhone(e.target.value)}
+                placeholder="Phone / WhatsApp"
+                className="flex-1 px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs"
+              />
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-extrabold cursor-pointer"
+              >
+                Register
+              </button>
+            </div>
+          </div>
+        </form>
+      )}
 
       {/* Service Category Strip */}
       <div className="bg-white rounded-2xl p-3 shadow-card border border-slate-200/70 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
@@ -1634,9 +1817,9 @@ export const ServicesDashboard: React.FC<DashboardCommonProps> = ({
           <button
             key={c.label}
             type="button"
-            onClick={() => setSelectedCat(c.label === selectedCat ? 'All' : c.label)}
-            className={`flex flex-col items-center gap-1.5 min-w-[82px] py-1.5 px-2 rounded-xl transition ${
-              selectedCat === c.label ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-slate-50 text-slate-700'
+            onClick={() => setSelectedCat(c.label)}
+            className={`flex flex-col items-center gap-1.5 min-w-[82px] py-1.5 px-2 rounded-xl transition cursor-pointer ${
+              selectedCat === c.label ? 'bg-indigo-50 text-indigo-700 font-bold' : 'hover:bg-slate-50 text-slate-700'
             }`}
           >
             <span className="text-xl">{c.icon}</span>
@@ -1653,34 +1836,40 @@ export const ServicesDashboard: React.FC<DashboardCommonProps> = ({
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
-                  <Star className="w-4 h-4 text-amber-400 fill-amber-400" /> Popular Services Near You
+                  <Star className="w-4 h-4 text-amber-400 fill-amber-400" /> Available Services in {shortArea} ({filteredServices.length})
                 </h3>
-                <p className="text-[11px] text-slate-500">Most booked services in Outer North Delhi</p>
+                <p className="text-[11px] text-slate-500">Live professionals connected via `/api/v1/services`</p>
               </div>
-              <span className="text-xs font-semibold text-blue-600 cursor-pointer">See All ›</span>
+              <button
+                type="button"
+                onClick={() => setShowAddSvc(true)}
+                className="text-xs font-semibold text-blue-600 cursor-pointer"
+              >
+                + Register Pro ›
+              </button>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {popularServices.map((srv) => (
+              {filteredServices.map((srv) => (
                 <div
-                  key={srv.title}
+                  key={srv.id}
                   className="rounded-xl border border-slate-200/80 overflow-hidden bg-white flex flex-col justify-between hover:shadow-md transition"
                 >
                   <div>
                     <div className="relative h-28">
-                      <img src={srv.img} alt={srv.title} className="w-full h-full object-cover" />
-                      {srv.badge && (
-                        <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-emerald-500 text-white text-[9px] font-bold">
-                          {srv.badge}
-                        </span>
-                      )}
+                      <img src={srv.img} alt={srv.name} className="w-full h-full object-cover" />
+                      <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-emerald-500 text-white text-[9px] font-bold">
+                        {srv.dist} • {srv.exp}
+                      </span>
                     </div>
                     <div className="p-2.5">
-                      <h4 className="text-xs font-extrabold text-slate-900 truncate">{srv.title}</h4>
-                      <p className="text-[11px] text-amber-600 font-bold mt-0.5">★ {srv.rating}</p>
-                      <p className="text-[10px] text-slate-500">{srv.bookings}</p>
+                      <h4 className="text-xs font-extrabold text-slate-900 truncate">{srv.name}</h4>
+                      <p className="text-[11px] text-amber-600 font-bold mt-0.5">
+                        ★ {srv.rating} {srv.reviews}
+                      </p>
+                      <p className="text-[10px] text-slate-500 truncate">{srv.role}</p>
                       <p className="text-xs font-extrabold text-slate-900 mt-1">{srv.price}</p>
-                      <p className="text-[10px] font-semibold text-emerald-600">Open Today</p>
+                      <p className="text-[10px] font-semibold text-emerald-600">{srv.avail}</p>
                     </div>
                   </div>
                   <div className="px-2.5 pb-2.5">
@@ -1688,19 +1877,20 @@ export const ServicesDashboard: React.FC<DashboardCommonProps> = ({
                       type="button"
                       onClick={() =>
                         onOpenModal({
-                          title: srv.title,
-                          category: 'Home Service Booking',
-                          price: srv.price,
-                          rating: srv.rating,
-                          location: 'Same-day visit in Outer North Delhi',
-                          description: `Book a background-verified local professional for ${srv.title}. Includes 30-day service warranty and transparent upfront pricing.`,
-                          primaryActionLabel: 'Confirm Booking Slot',
+                          title: srv.name,
+                          subtitle: srv.role,
+                          category: `${srv.cat} • Verified Local Pro`,
+                          price: `${srv.price} (${srv.priceUnit})`,
+                          rating: `${srv.rating} ${srv.reviews}`,
+                          location: `${srv.dist} away in ${srv.locality}, ${srv.city}`,
+                          description: `${srv.description}\n\n📞 Phone / WhatsApp: ${srv.phone}\n🕒 Hours: ${srv.timing}`,
+                          primaryActionLabel: `Book / Call ${srv.phone}`,
                           image: srv.img,
                         })
                       }
-                      className="w-full py-1.5 rounded-lg bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white text-xs font-bold transition"
+                      className="w-full py-1.5 rounded-lg bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white text-xs font-bold transition cursor-pointer"
                     >
-                      Book Now
+                      Book / Call Now
                     </button>
                   </div>
                 </div>
@@ -1713,23 +1903,24 @@ export const ServicesDashboard: React.FC<DashboardCommonProps> = ({
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-blue-600" /> Featured Local Professionals
+                  <ShieldCheck className="w-4 h-4 text-blue-600" /> Direct-Call Local Professionals ({shortArea})
                 </h3>
-                <p className="text-[11px] text-slate-500">Verified and top-rated service providers in your area</p>
+                <p className="text-[11px] text-slate-500">Background-verified specialists in {selectedArea}</p>
               </div>
-              <span className="text-xs font-semibold text-blue-600 cursor-pointer">See All ›</span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {professionals.map((pro) => (
-                <div key={pro.name} className="p-3 rounded-xl border border-slate-200/80 flex flex-col justify-between gap-2.5">
+              {marketplace.services.slice(0, 3).map((pro) => (
+                <div key={pro.id} className="p-3 rounded-xl border border-slate-200/80 flex flex-col justify-between gap-2.5">
                   <div className="flex items-center gap-2.5">
                     <img src={pro.img} alt={pro.name} className="w-12 h-12 rounded-xl object-cover shrink-0" />
                     <div className="min-w-0">
                       <h4 className="text-xs font-extrabold text-slate-900 truncate">{pro.name}</h4>
-                      <p className="text-[10px] text-amber-600 font-bold">★ {pro.rating}</p>
-                      <p className="text-[10px] text-slate-500 truncate">📍 {pro.loc}</p>
-                      <p className="text-[10px] text-slate-500 truncate">🔧 {pro.spec}</p>
+                      <p className="text-[10px] text-amber-600 font-bold">
+                        ★ {pro.rating} {pro.reviews}
+                      </p>
+                      <p className="text-[10px] text-slate-500 truncate">📍 {pro.locality} ({pro.dist})</p>
+                      <p className="text-[10px] text-slate-500 truncate">🔧 {pro.cat}</p>
                     </div>
                   </div>
                   <button
@@ -1737,51 +1928,22 @@ export const ServicesDashboard: React.FC<DashboardCommonProps> = ({
                     onClick={() =>
                       onOpenModal({
                         title: `Contact ${pro.name}`,
-                        subtitle: pro.spec,
+                        subtitle: pro.role,
                         category: 'Verified Professional',
-                        rating: pro.rating,
-                        location: pro.loc,
-                        description: 'Connect directly via phone or WhatsApp for instant quote and doorstep visit.',
-                        primaryActionLabel: 'Call Professional Now',
+                        rating: `${pro.rating} ${pro.reviews}`,
+                        location: `${pro.locality}, ${pro.city}`,
+                        description: `${pro.description}\nDirect Phone / WhatsApp: ${pro.phone}`,
+                        primaryActionLabel: `Call ${pro.phone}`,
                         image: pro.img,
                       })
                     }
-                    className="w-full py-1.5 rounded-lg bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white text-xs font-bold transition"
+                    className="w-full py-1.5 rounded-lg bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
                   >
-                    Contact
+                    <Phone className="w-3 h-3" /> Contact ({pro.phone})
                   </button>
                 </div>
               ))}
             </div>
-          </div>
-
-          {/* Need a Custom Service Banner */}
-          <div className="bg-gradient-to-r from-indigo-50 via-purple-50 to-indigo-100/80 rounded-2xl p-4 border border-indigo-200/70 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0">
-                <Wrench className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="text-sm font-extrabold text-slate-900">Need a Custom Service?</h4>
-                <p className="text-xs text-slate-600">
-                  Can't find what you're looking for? Tell us your requirement and we'll find the best local professionals for you.
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() =>
-                onOpenModal({
-                  title: 'Post a Custom Service Request',
-                  category: 'Custom Service Match',
-                  description: 'Describe what needs fixing or installation in your home/office and receive verified quotes within 15 minutes.',
-                  primaryActionLabel: 'Submit Service Request',
-                })
-              }
-              className="px-4 py-2 rounded-xl bg-white hover:bg-indigo-600 text-indigo-700 hover:text-white text-xs font-bold border border-indigo-200 shadow-sm shrink-0 transition"
-            >
-              Post a Request →
-            </button>
           </div>
         </div>
 
@@ -1789,31 +1951,37 @@ export const ServicesDashboard: React.FC<DashboardCommonProps> = ({
         <div className="xl:col-span-4 space-y-4">
           <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
             <div className="flex items-center justify-between mb-2.5">
-              <h3 className="text-sm font-extrabold text-slate-900">Service Providers Near You</h3>
-              <span className="text-xs font-semibold text-blue-600 cursor-pointer">View Full Map →</span>
+              <h3 className="text-sm font-extrabold text-slate-900">Service Providers Near {shortArea}</h3>
             </div>
-            <InteractiveMap heightClass="h-56" centerLabel={'Rohini\nSector 10'} />
+            <InteractiveMap
+              heightClass="h-56"
+              centerLabel={selectedArea}
+              centerCoords={{ lat: liveIntel.location.lat, lng: liveIntel.location.lng }}
+              pois={liveIntel.nearbyPois}
+            />
           </div>
 
           <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
             <div className="flex items-center gap-2 mb-1">
               <Sparkles className="w-4 h-4 text-indigo-600" />
-              <h3 className="text-sm font-extrabold text-slate-900">AI Recommendations for You</h3>
-              <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[9px] font-bold">BETA</span>
+              <h3 className="text-sm font-extrabold text-slate-900">AI Service Insights ({shortArea})</h3>
+              <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[9px] font-bold">LIVE</span>
             </div>
-            <p className="text-[11px] text-slate-500 mb-3">Based on your area, weather and recent activity</p>
+            <p className="text-[11px] text-slate-500 mb-3">
+              Based on {shortArea} weather ({liveIntel.weather.temperatureC}°C) and local demand
+            </p>
             <div className="space-y-2.5">
               {[
-                { icon: '☂️', title: 'Get AC serviced before peak summer', sub: 'High temperatures expected next week' },
-                { icon: '🧹', title: 'Deep cleaning services in demand this week', sub: 'Popular in Rohini with good reviews' },
-                { icon: '⚡', title: 'Nearby electricians available now', sub: '2 verified professionals within 2 km' },
-                { icon: '🚰', title: 'Plumbing services with same-day support', sub: 'Top rated providers in your area' },
+                { icon: '❄️', title: `AC servicing in ${shortArea}`, sub: `Current temp is ${liveIntel.weather.temperatureC}°C — book same-day slot` },
+                { icon: '🧹', title: `Deep cleaning services in ${shortArea}`, sub: 'Top rated providers with eco-friendly supplies' },
+                { icon: '⚡', title: `Emergency electricians in ${shortArea}`, sub: 'Verified technicians within 1 km' },
+                { icon: '🚰', title: `Plumbing & water motor repair`, sub: 'Same-day visit across your block' },
               ].map((item) => (
                 <button
                   key={item.title}
                   type="button"
                   onClick={() => onAskAi(item.title)}
-                  className="w-full p-2.5 rounded-xl border border-slate-200/70 hover:border-indigo-300 flex items-center justify-between gap-2 text-left transition"
+                  className="w-full p-2.5 rounded-xl border border-slate-200/70 hover:border-indigo-300 flex items-center justify-between gap-2 text-left transition cursor-pointer"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
                     <span className="text-lg">{item.icon}</span>
@@ -1834,112 +2002,62 @@ export const ServicesDashboard: React.FC<DashboardCommonProps> = ({
 };
 
 /* ============================================================================
-   5. OFFERS DASHBOARD (Page 10 Desktop)
+   5. OFFERS DASHBOARD (Page 10 Desktop) — WIRED TO /api/v1/offers
    ============================================================================ */
 export const OffersDashboard: React.FC<DashboardCommonProps> = ({
   onOpenModal,
   onAskAi,
   savedIds,
   onToggleSave,
+  selectedArea,
+  liveIntel,
+  marketplace: propMarketplace,
 }) => {
+  const fallbackMarketplace = useLiveCommunityMarketplace(liveIntel);
+  const marketplace = propMarketplace || fallbackMarketplace;
+
   const [selectedCat, setSelectedCat] = useState('All Offers');
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [showAddOffer, setShowAddOffer] = useState(false);
+  const [offerTitle, setOfferTitle] = useState('');
+  const [offerStore, setOfferStore] = useState('');
+  const [offerBadge, setOfferBadge] = useState('30% OFF');
+  const [offerCode, setOfferCode] = useState('LOCAL30');
+
+  const shortArea = selectedArea.split(',')[0]?.trim() || selectedArea;
 
   const offerCats = [
     { label: 'All Offers', icon: '⊞' },
     { label: 'Food & Dining', icon: '🍴' },
-    { label: 'Shopping', icon: '🛍️' },
-    { label: 'Beauty & Wellness', icon: '✂️' },
-    { label: 'Health & Fitness', icon: '🏋️' },
+    { label: 'Groceries', icon: '🛍️' },
+    { label: 'Salon & Spa', icon: '✂️' },
+    { label: 'Fitness & Health', icon: '🏋️' },
     { label: 'Services', icon: '🔧' },
-    { label: 'Education', icon: '🎓' },
-    { label: 'Healthcare', icon: '🏥' },
-    { label: 'Automotive', icon: '🚗' },
-    { label: 'Home & Living', icon: '🏠' },
-    { label: 'Entertainment', icon: '🎬' },
-    { label: 'More', icon: '⋯' },
   ];
 
-  const trendingOffers = [
-    {
-      id: 'off-lapinoz',
-      brand: "La Pino'z Pizza",
-      badge: '50% OFF',
-      title: '50% OFF on Medium Pizzas',
-      sub: 'Dine-in & Takeaway',
-      cat: 'Food & Dining',
-      rating: '4.5 (1.2K)',
-      dist: '800 m',
-      img: './assets/crops/offer-lapinoz.webp',
-    },
-    {
-      id: 'off-looks',
-      brand: 'Looks Salon',
-      badge: '30% OFF',
-      title: '30% OFF on All Hair Services',
-      sub: 'Valid till 30 Apr 2025',
-      cat: 'Beauty & Wellness',
-      rating: '4.4 (980)',
-      dist: '1.2 km',
-      img: './assets/crops/offer-looks.webp',
-    },
-    {
-      id: 'off-cultfit',
-      brand: 'Cult.fit',
-      badge: '1 MONTH FREE',
-      title: '1 Month Free + 50% OFF on Annual Plan',
-      sub: 'Limited Period',
-      cat: 'Health & Fitness',
-      rating: '4.6 (2.1K)',
-      dist: '1.5 km',
-      img: './assets/crops/offer-cultfit.webp',
-    },
-    {
-      id: 'off-dmart',
-      brand: 'DMart',
-      badge: 'UP TO 40% OFF',
-      title: 'Up to 40% OFF on Daily Essentials',
-      sub: 'In-store & Online',
-      cat: 'Shopping',
-      rating: '4.5 (3.4K)',
-      dist: '2.1 km',
-      img: './assets/crops/offer-dmart.webp',
-    },
-  ];
+  const filteredOffers = marketplace.offers.filter(
+    (o) => selectedCat === 'All Offers' || o.cat.toLowerCase().includes(selectedCat.toLowerCase())
+  );
 
-  const limitedOffers = [
-    {
-      brand: 'Burger Singh',
-      left: '2 days left',
-      deal: 'Flat 40% OFF',
-      sub: 'On orders above ₹299',
-      meta: '★ 4.3 | 900 m',
-      img: './assets/crops/offer-burger-singh.webp',
-    },
-    {
-      brand: 'Croma',
-      left: '3 days left',
-      deal: 'Up to 35% OFF',
-      sub: 'On selected electronics',
-      meta: '★ 4.6 | 1.8 km',
-      img: './assets/crops/offer-croma.webp',
-    },
-    {
-      brand: 'Urban Company',
-      left: '1 day left',
-      deal: '₹200 OFF',
-      sub: 'On AC Service',
-      meta: '★ 4.8 | 2.3 km',
-      img: './assets/crops/offer-urban-company.webp',
-    },
-    {
-      brand: 'Chaayos',
-      left: '4 days left',
-      deal: 'Buy 1 Get 1 Free',
-      sub: 'On selected beverages',
-      meta: '★ 4.2 | 1.1 km',
-      img: './assets/crops/offer-chaayos.webp',
-    },
-  ];
+  const handleCopyCode = (code: string) => {
+    navigator.clipboard?.writeText(code);
+    setCopiedCode(code);
+    setTimeout(() => setCopiedCode(null), 2200);
+  };
+
+  const handleCreateOffer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!offerTitle.trim()) return;
+    await marketplace.addOffer({
+      title: offerTitle.trim(),
+      store: offerStore.trim() || `${shortArea} Partner Store`,
+      badge: offerBadge.trim() || '25% OFF',
+      code: offerCode.trim() || 'MYAREA25',
+    });
+    setOfferTitle('');
+    setOfferStore('');
+    setShowAddOffer(false);
+  };
 
   return (
     <div className="space-y-4">
@@ -1948,17 +2066,16 @@ export const OffersDashboard: React.FC<DashboardCommonProps> = ({
         tag={
           <>
             <MapPin className="w-3.5 h-3.5 text-blue-300" />
-            <span>Outer North Delhi, Delhi</span>
+            <span>{selectedArea}</span>
           </>
         }
         title="Best Local Offers"
         subtitle="Save more. Explore more. Support local."
-        description="Exclusive deals from restaurants, shops, salons, gyms and more — right here in your neighbourhood."
+        description={`Exclusive verified deals and instant coupon codes from businesses in ${shortArea} (powered by /api/v1/offers).`}
         bottomPills={[
           { icon: <span>🛡️</span>, label: 'Verified offers' },
-          { icon: <span>🏪</span>, label: 'Real local businesses' },
-          { icon: <span>⏳</span>, label: 'Limited time deals' },
-          { icon: <span>✨</span>, label: 'AI personalised offers' },
+          { icon: <span>🏪</span>, label: `Local stores in ${shortArea}` },
+          { icon: <span>➕</span>, label: 'Post a Merchant Offer', onClick: () => setShowAddOffer((v) => !v) },
         ]}
         rightWidget={
           <div className="w-full lg:w-[340px] bg-white/12 backdrop-blur-md border border-white/20 rounded-2xl p-4">
@@ -1967,32 +2084,80 @@ export const OffersDashboard: React.FC<DashboardCommonProps> = ({
                 <Gift className="w-5 h-5 text-pink-200" />
               </div>
               <div>
-                <p className="text-xs font-extrabold text-white">Never miss a great deal!</p>
+                <p className="text-xs font-extrabold text-white">Are you a merchant in {shortArea}?</p>
                 <p className="text-[11px] text-blue-100/85">
-                  Get personalised offers from your favourite local businesses.
+                  Publish flash deals and coupon codes for nearby residents.
                 </p>
               </div>
             </div>
             <button
               type="button"
-              onClick={() =>
-                onOpenModal({
-                  title: 'Instant Deal Alerts Enabled!',
-                  category: 'Hyperlocal Offer Notifications',
-                  description: 'You will now receive real-time alerts when restaurants, salons, and supermarkets in Rohini drop flash discounts.',
-                  primaryActionLabel: 'Awesome, Got It',
-                })
-              }
-              className="w-full bg-white text-slate-800 hover:bg-blue-50 rounded-full px-3.5 py-2 text-xs font-bold flex items-center justify-between shadow-sm transition"
+              onClick={() => setShowAddOffer((v) => !v)}
+              className="w-full bg-white text-slate-800 hover:bg-blue-50 rounded-full px-3.5 py-2 text-xs font-bold flex items-center justify-between shadow-sm transition cursor-pointer"
             >
               <span className="flex items-center gap-1.5">
-                <Bell className="w-3.5 h-3.5 text-indigo-600" /> Enable Notifications
+                <Bell className="w-3.5 h-3.5 text-indigo-600" /> + Post New Local Offer
               </span>
               <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center">→</span>
             </button>
           </div>
         }
       />
+
+      {showAddOffer && (
+        <form
+          onSubmit={handleCreateOffer}
+          className="bg-indigo-50/90 border border-indigo-200 rounded-2xl p-4 shadow-card space-y-3"
+        >
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-extrabold text-indigo-950">
+              🏷️ Publish a Hyperlocal Offer in {shortArea} (POST `/api/v1/offers`)
+            </h4>
+            <button type="button" onClick={() => setShowAddOffer(false)} className="text-slate-400 hover:text-slate-700">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+            <input
+              type="text"
+              required
+              value={offerTitle}
+              onChange={(e) => setOfferTitle(e.target.value)}
+              placeholder="Offer Title (e.g. Flat 30% Off on Bill)"
+              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs"
+            />
+            <input
+              type="text"
+              value={offerStore}
+              onChange={(e) => setOfferStore(e.target.value)}
+              placeholder={`Store Name in ${shortArea}`}
+              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs"
+            />
+            <input
+              type="text"
+              value={offerBadge}
+              onChange={(e) => setOfferBadge(e.target.value)}
+              placeholder="Discount Badge (e.g. 30% OFF)"
+              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs"
+            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={offerCode}
+                onChange={(e) => setOfferCode(e.target.value)}
+                placeholder="Coupon Code"
+                className="flex-1 px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs uppercase"
+              />
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-extrabold cursor-pointer"
+              >
+                Publish
+              </button>
+            </div>
+          </div>
+        </form>
+      )}
 
       {/* Category Strip */}
       <div className="bg-white rounded-2xl p-2.5 shadow-card border border-slate-200/70 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
@@ -2001,7 +2166,7 @@ export const OffersDashboard: React.FC<DashboardCommonProps> = ({
             key={c.label}
             type="button"
             onClick={() => setSelectedCat(c.label)}
-            className={`flex flex-col items-center gap-1 min-w-[76px] py-1.5 px-2 rounded-xl transition ${
+            className={`flex flex-col items-center gap-1 min-w-[95px] py-1.5 px-2 rounded-xl transition cursor-pointer ${
               selectedCat === c.label
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'hover:bg-slate-50 text-slate-700'
@@ -2020,137 +2185,89 @@ export const OffersDashboard: React.FC<DashboardCommonProps> = ({
           <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
-                <span>🔥</span> Trending Offers Near You
+                <span>🔥</span> Live Offers in {shortArea} ({filteredOffers.length})
               </h3>
-              <span className="text-xs font-semibold text-blue-600 cursor-pointer">See All ›</span>
+              <span className="text-xs font-semibold text-emerald-600">● Instant Coupon Redemption</span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {trendingOffers
-                .filter((o) => selectedCat === 'All Offers' || o.cat === selectedCat)
-                .map((off) => {
-                  const isSaved = savedIds.includes(off.id);
-                  return (
-                    <div
-                      key={off.id}
-                      className="rounded-xl border border-slate-200/80 overflow-hidden bg-white flex flex-col justify-between hover:shadow-md transition"
-                    >
-                      <div>
-                        <div className="relative h-28">
-                          <img src={off.img} alt={off.brand} className="w-full h-full object-cover" />
-                          <span className="absolute top-2 left-2 px-2 py-0.5 rounded bg-rose-600 text-white text-[9px] font-extrabold shadow">
-                            {off.badge}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              onToggleSave({
-                                id: off.id,
-                                title: `${off.brand} — ${off.badge}`,
-                                subtitle: off.title,
-                                category: 'Offers',
-                                meta: off.dist,
-                                image: off.img,
-                                savedAt: 'Just now',
-                              })
-                            }
-                            className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/40 text-white flex items-center justify-center"
-                          >
-                            <Heart className={`w-3.5 h-3.5 ${isSaved ? 'fill-rose-500 text-rose-500' : ''}`} />
-                          </button>
-                        </div>
-                        <div className="p-2.5">
-                          <p className="text-[10px] font-bold text-slate-500">{off.brand}</p>
-                          <h4 className="text-xs font-extrabold text-slate-900 line-clamp-2 mt-0.5">{off.title}</h4>
-                          <p className="text-[10px] text-slate-400 mt-0.5">{off.sub}</p>
-                          <span className="inline-block mt-1.5 px-2 py-0.5 rounded bg-blue-50 text-blue-600 text-[9px] font-semibold">
-                            {off.cat}
-                          </span>
-                          <p className="text-[10px] text-slate-500 mt-1.5">
-                            ★ {off.rating} • 📍 {off.dist}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="px-2.5 pb-2.5">
+              {filteredOffers.map((off) => {
+                const isSaved = savedIds.includes(off.id);
+                return (
+                  <div
+                    key={off.id}
+                    className="rounded-xl border border-slate-200/80 overflow-hidden bg-white flex flex-col justify-between hover:shadow-md transition"
+                  >
+                    <div>
+                      <div className="relative h-28">
+                        <img src={off.img} alt={off.store} className="w-full h-full object-cover" />
+                        <span className="absolute top-2 left-2 px-2 py-0.5 rounded bg-rose-600 text-white text-[9px] font-extrabold shadow">
+                          {off.badge}
+                        </span>
                         <button
                           type="button"
                           onClick={() =>
-                            onOpenModal({
-                              title: `${off.brand}: ${off.title}`,
-                              subtitle: off.sub,
-                              category: off.cat,
-                              badge: off.badge,
-                              rating: off.rating,
-                              location: `${off.dist} away in Rohini`,
-                              description: 'Use coupon code MYAREA24 at checkout or show this QR code at the store counter to redeem immediately.',
-                              primaryActionLabel: 'Redeem Coupon Code',
+                            onToggleSave({
+                              id: off.id,
+                              title: `${off.store} — ${off.badge}`,
+                              subtitle: off.title,
+                              category: 'Offers',
+                              meta: off.dist,
                               image: off.img,
+                              savedAt: 'Just now',
                             })
                           }
-                          className="w-full py-1.5 rounded-lg bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white text-xs font-bold transition"
+                          className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/40 text-white flex items-center justify-center"
                         >
-                          View Offer
+                          <Heart className={`w-3.5 h-3.5 ${isSaved ? 'fill-rose-500 text-rose-500' : ''}`} />
                         </button>
                       </div>
+                      <div className="p-2.5">
+                        <p className="text-[10px] font-bold text-slate-500 truncate">{off.store}</p>
+                        <h4 className="text-xs font-extrabold text-slate-900 line-clamp-2 mt-0.5">{off.title}</h4>
+                        <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">{off.sub}</p>
+                        <div className="flex items-center justify-between mt-1.5">
+                          <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-600 text-[9px] font-semibold">
+                            {off.cat}
+                          </span>
+                          <span className="text-[10px] text-rose-600 font-bold">⏳ {off.valid}</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 mt-1">📍 {off.dist} away</p>
+                      </div>
                     </div>
-                  );
-                })}
-            </div>
-          </div>
-
-          {/* Limited Time Offers */}
-          <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
-                <Clock className="w-4 h-4 text-rose-500" /> Limited Time Offers
-              </h3>
-              <span className="text-xs font-semibold text-blue-600 cursor-pointer">See All ›</span>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {limitedOffers.map((lim) => (
-                <div key={lim.brand} className="rounded-xl border border-slate-200/80 overflow-hidden bg-white hover:shadow-md transition">
-                  <div className="relative h-20">
-                    <img src={lim.img} alt={lim.brand} className="w-full h-full object-cover" />
-                    <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded bg-rose-600 text-white text-[9px] font-bold">
-                      🕒 {lim.left}
-                    </span>
+                    <div className="px-2.5 pb-2.5 space-y-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleCopyCode(off.code)}
+                        className="w-full py-1 px-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-[10px] font-extrabold flex items-center justify-between cursor-pointer"
+                      >
+                        <span>Code: {off.code}</span>
+                        <span className="text-indigo-600 flex items-center gap-0.5">
+                          <Copy className="w-3 h-3" /> {copiedCode === off.code ? 'Copied!' : 'Copy'}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onOpenModal({
+                            title: `${off.store}: ${off.title}`,
+                            subtitle: off.sub,
+                            category: `${off.cat} • Code: ${off.code}`,
+                            badge: off.badge,
+                            location: `${off.dist} away • ${off.storeAddress}`,
+                            description: `${off.description}\n\nCoupon Code: ${off.code} (${off.valid})\nStore Contact: ${off.phone}`,
+                            primaryActionLabel: `Redeem Code ${off.code}`,
+                            image: off.img,
+                          })
+                        }
+                        className="w-full py-1.5 rounded-lg bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white text-xs font-bold transition cursor-pointer"
+                      >
+                        View & Redeem
+                      </button>
+                    </div>
                   </div>
-                  <div className="p-2.5">
-                    <h4 className="text-xs font-extrabold text-slate-900">{lim.brand}</h4>
-                    <p className="text-xs font-extrabold text-rose-600">{lim.deal}</p>
-                    <p className="text-[10px] text-slate-500 truncate">{lim.sub}</p>
-                    <p className="text-[10px] text-slate-400 mt-1">{lim.meta}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Top Categories This Week */}
-          <div className="bg-white rounded-2xl p-3.5 shadow-card border border-slate-200/70 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h4 className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
-                <span>📊</span> Top Categories This Week
-              </h4>
-              <p className="text-[10px] text-slate-400">Most popular offer categories in your area</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              {[
-                { rank: 1, name: 'Food & Dining', count: '120+ offers', icon: '🍴' },
-                { rank: 2, name: 'Shopping', count: '95+ offers', icon: '🛍️' },
-                { rank: 3, name: 'Beauty & Wellness', count: '75+ offers', icon: '✂️' },
-                { rank: 4, name: 'Health & Fitness', count: '60+ offers', icon: '🏋️' },
-                { rank: 5, name: 'Services', count: '50+ offers', icon: '🔧' },
-              ].map((tc) => (
-                <div key={tc.name} className="flex items-center gap-1.5 text-xs">
-                  <span className="text-[10px] font-bold text-slate-400">{tc.rank}</span>
-                  <span>{tc.icon}</span>
-                  <div>
-                    <p className="text-[11px] font-bold text-slate-800 leading-none">{tc.name}</p>
-                    <p className="text-[9px] text-slate-400">{tc.count}</p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
@@ -2159,31 +2276,34 @@ export const OffersDashboard: React.FC<DashboardCommonProps> = ({
         <div className="xl:col-span-4 space-y-4">
           <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
             <div className="flex items-center justify-between mb-2.5">
-              <h3 className="text-sm font-extrabold text-slate-900">Offers Around You</h3>
-              <span className="text-xs font-semibold text-blue-600 cursor-pointer">View Full Map →</span>
+              <h3 className="text-sm font-extrabold text-slate-900">Offers Around {shortArea}</h3>
             </div>
-            <InteractiveMap heightClass="h-52" centerLabel={'Rohini\nSector 10'} />
+            <InteractiveMap
+              heightClass="h-52"
+              centerLabel={selectedArea}
+              centerCoords={{ lat: liveIntel.location.lat, lng: liveIntel.location.lng }}
+              pois={liveIntel.nearbyPois}
+            />
           </div>
 
           <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
             <div className="flex items-center gap-2 mb-1">
               <Sparkles className="w-4 h-4 text-indigo-600" />
-              <h3 className="text-sm font-extrabold text-slate-900">AI Recommended Offers for You</h3>
-              <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[9px] font-bold">BETA</span>
+              <h3 className="text-sm font-extrabold text-slate-900">AI Recommended Deals ({shortArea})</h3>
             </div>
-            <p className="text-[11px] text-slate-500 mb-3">Based on your interests, past activity and local trends</p>
+            <p className="text-[11px] text-slate-500 mb-3">Based on your location and active merchant promos</p>
             <div className="space-y-2">
               {[
-                { icon: '🍴', title: 'Best food deals near you', sub: 'Great offers at top-rated restaurants' },
-                { icon: '✂️', title: 'Salon offers this week', sub: 'Popular deals at nearby salons' },
-                { icon: '🏋️', title: 'Gym memberships with discounts', sub: 'Limited time offers on fitness plans' },
-                { icon: '🛍️', title: 'Deals on daily essentials', sub: 'Save more at local supermarkets' },
+                { icon: '🍴', title: `Best food deals in ${shortArea}`, sub: 'Up to 50% OFF at nearby restaurants' },
+                { icon: '✂️', title: `Salon offers in ${shortArea}`, sub: 'Popular grooming packages nearby' },
+                { icon: '🏋️', title: `Gym memberships with discounts`, sub: 'Free trial + annual savings' },
+                { icon: '🛍️', title: `Deals on daily essentials`, sub: 'Compare local supermarket vs online' },
               ].map((rec) => (
                 <button
                   key={rec.title}
                   type="button"
                   onClick={() => onAskAi(rec.title)}
-                  className="w-full p-2.5 rounded-xl border border-slate-200/70 hover:border-indigo-300 flex items-center justify-between gap-2 text-left transition"
+                  className="w-full p-2.5 rounded-xl border border-slate-200/70 hover:border-indigo-300 flex items-center justify-between gap-2 text-left transition cursor-pointer"
                 >
                   <div className="flex items-center gap-2.5">
                     <span className="text-lg">{rec.icon}</span>
@@ -2204,94 +2324,55 @@ export const OffersDashboard: React.FC<DashboardCommonProps> = ({
 };
 
 /* ============================================================================
-   6. EVENTS DASHBOARD (Page 12 Desktop)
+   6. EVENTS DASHBOARD (Page 12 Desktop) — WIRED TO /api/v1/events + CONTEXTUAL INTEL
    ============================================================================ */
 export const EventsDashboard: React.FC<DashboardCommonProps> = ({
   onOpenModal,
   onAskAi,
+  selectedArea,
+  liveIntel,
+  marketplace: propMarketplace,
 }) => {
-  const [selectedTab, setSelectedTab] = useState('This Week');
+  const fallbackMarketplace = useLiveCommunityMarketplace(liveIntel);
+  const marketplace = propMarketplace || fallbackMarketplace;
+
+  const [selectedCat, setSelectedCat] = useState('All Events');
   const [selectedDay, setSelectedDay] = useState(16);
+  const [showAddEvent, setShowAddEvent] = useState(false);
+  const [evTitle, setEvTitle] = useState('');
+  const [evCat, setEvCat] = useState('Community');
+  const [evTime, setEvTime] = useState('6:00 PM – 9:00 PM');
+  const [evVenue, setEvVenue] = useState('');
 
-  const featuredEvents = [
-    {
-      day: 'SAT',
-      date: '16',
-      title: 'Rohini Live Music Fest',
-      cat: 'Music • Concert',
-      time: '6:00 PM – 11:00 PM',
-      loc: 'Japanese Park, Rohini',
-      cta: 'Book Tickets',
-      primary: true,
-      img: './assets/crops/evt-music-fest.webp',
-    },
-    {
-      day: 'SUN',
-      date: '17',
-      title: 'Rohini Food Carnival',
-      cat: 'Food • Festival',
-      time: '12:00 PM – 10:00 PM',
-      loc: 'Rohini Sec 10, DDA Ground',
-      cta: 'View Details',
-      primary: false,
-      img: './assets/crops/evt-food-carnival.webp',
-    },
-    {
-      day: 'SAT',
-      date: '23',
-      title: 'Yoga in the Park',
-      cat: 'Health • Wellness',
-      time: '7:00 AM – 9:00 AM',
-      loc: 'Central Park, Rohini',
-      cta: 'Register Now',
-      primary: false,
-      img: './assets/crops/evt-yoga.webp',
-    },
-    {
-      day: 'SUN',
-      date: '24',
-      title: 'Local Art Exhibition',
-      cat: 'Art • Culture',
-      time: '10:00 AM – 7:00 PM',
-      loc: 'Rohini Art Gallery',
-      cta: 'View Details',
-      primary: false,
-      img: './assets/crops/evt-art-exhib.webp',
-    },
+  const shortArea = selectedArea.split(',')[0]?.trim() || selectedArea;
+
+  const eventCats = [
+    'All Events',
+    'Music & Arts',
+    'Food & Markets',
+    'Sports & Fitness',
+    'Workshops',
+    'Civic & Health',
+    'Community',
   ];
 
-  const upcomingRows = [
-    {
-      month: 'MAR',
-      date: '18',
-      title: 'Dance Workshop',
-      time: '3:00 PM – 5:00 PM',
-      loc: 'Rohini Sec 8, Community Centre',
-      badge: 'Free',
-      badgeCls: 'bg-emerald-50 text-emerald-700',
-      img: './assets/crops/evt-dance.webp',
-    },
-    {
-      month: 'MAR',
-      date: '20',
-      title: 'Tech Talk: AI in Daily Life',
-      time: '5:00 PM – 7:00 PM',
-      loc: 'Rohini Tech Hub',
-      badge: 'Workshop',
-      badgeCls: 'bg-indigo-50 text-indigo-700',
-      img: './assets/crops/evt-techtalk.webp',
-    },
-    {
-      month: 'MAR',
-      date: '22',
-      title: 'Cricket Tournament',
-      time: '8:00 AM – 6:00 PM',
-      loc: 'Rohini Sports Complex',
-      badge: 'Sports',
-      badgeCls: 'bg-sky-50 text-sky-700',
-      img: './assets/crops/evt-cricket.webp',
-    },
-  ];
+  const filteredEvents = marketplace.events.filter(
+    (e) => selectedCat === 'All Events' || e.cat.toLowerCase().includes(selectedCat.toLowerCase())
+  );
+
+  const handleCreateEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!evTitle.trim()) return;
+    await marketplace.addEvent({
+      title: evTitle.trim(),
+      cat: evCat,
+      time: evTime.trim(),
+      loc: evVenue.trim() || `${shortArea} Community Ground`,
+    });
+    setEvTitle('');
+    setEvVenue('');
+    setShowAddEvent(false);
+  };
 
   return (
     <div className="space-y-4">
@@ -2300,7 +2381,7 @@ export const EventsDashboard: React.FC<DashboardCommonProps> = ({
         tag={
           <>
             <MapPin className="w-3.5 h-3.5 text-blue-300" />
-            <span>Outer North Delhi, Delhi</span>
+            <span>{selectedArea}</span>
           </>
         }
         title={
@@ -2310,46 +2391,105 @@ export const EventsDashboard: React.FC<DashboardCommonProps> = ({
             <span className="text-[#93C5FD]">Closer to You</span>
           </>
         }
-        description="Discover what's happening in your area — concerts, workshops, festivals, community events and more."
+        description={`Discover concerts, farmers markets, RWA meetups & health camps in ${shortArea} — enriched with live Contextual Event Intelligence (parking, traffic & dispersal weather).`}
         rightWidget={
-          <div className="bg-slate-900/55 backdrop-blur-md border border-white/20 rounded-2xl p-4 w-full lg:w-[330px]">
-            <div className="flex items-center gap-3 pb-3 border-b border-white/15">
-              <div className="w-10 h-10 rounded-xl bg-blue-500/30 flex items-center justify-center">
-                <Calendar className="w-5 h-5 text-blue-200" />
+          <div className="bg-slate-900/55 backdrop-blur-md border border-white/20 rounded-2xl p-4 w-full lg:w-[330px] space-y-3">
+            <div className="flex items-center justify-between pb-2.5 border-b border-white/15">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-500/30 flex items-center justify-center">
+                  <Calendar className="w-5 h-5 text-blue-200" />
+                </div>
+                <div>
+                  <p className="text-xl font-extrabold text-white leading-none">{marketplace.events.length}</p>
+                  <p className="text-xs text-blue-100 mt-0.5">Live events in {shortArea}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-xl font-extrabold text-white leading-none">25+</p>
-                <p className="text-xs text-blue-100 mt-0.5">Events this week</p>
-              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddEvent((v) => !v)}
+                className="px-3 py-1.5 rounded-xl bg-white text-indigo-950 text-xs font-extrabold cursor-pointer"
+              >
+                + Host Event
+              </button>
             </div>
-            <div className="flex items-center justify-between pt-3 text-[10px] text-blue-100">
+            <div className="flex items-center justify-between text-[10px] text-blue-100">
               <span>🎉 Festivals</span>
               <span>🎨 Workshops</span>
               <span>🎵 Live Music</span>
-              <span>🤝 Community</span>
+              <span>🤝 RWA Civic</span>
             </div>
           </div>
         }
       />
 
+      {showAddEvent && (
+        <form
+          onSubmit={handleCreateEvent}
+          className="bg-indigo-50/90 border border-indigo-200 rounded-2xl p-4 shadow-card space-y-3"
+        >
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-extrabold text-indigo-950">
+              📅 Host / Submit a Community Event in {shortArea} (POST `/api/v1/events`)
+            </h4>
+            <button type="button" onClick={() => setShowAddEvent(false)} className="text-slate-400 hover:text-slate-700">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+            <input
+              type="text"
+              required
+              value={evTitle}
+              onChange={(e) => setEvTitle(e.target.value)}
+              placeholder="Event Title *"
+              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs"
+            />
+            <select
+              value={evCat}
+              onChange={(e) => setEvCat(e.target.value)}
+              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs"
+            >
+              {eventCats.filter((c) => c !== 'All Events').map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+            <input
+              type="text"
+              value={evTime}
+              onChange={(e) => setEvTime(e.target.value)}
+              placeholder="Time (e.g. Sunday 5:00 PM)"
+              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs"
+            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={evVenue}
+                onChange={(e) => setEvVenue(e.target.value)}
+                placeholder={`Venue in ${shortArea}`}
+                className="flex-1 px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs"
+              />
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-extrabold cursor-pointer"
+              >
+                Publish
+              </button>
+            </div>
+          </div>
+        </form>
+      )}
+
       {/* Category Pills */}
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-        {[
-          'All Events',
-          'Music & Concerts',
-          'Festivals',
-          'Workshops',
-          'Community',
-          'Sports',
-          'Food & Drinks',
-          'Art & Culture',
-          'Business & Tech',
-        ].map((cat, idx) => (
+        {eventCats.map((cat) => (
           <button
             key={cat}
             type="button"
-            className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap border transition ${
-              idx === 0
+            onClick={() => setSelectedCat(cat)}
+            className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap border transition cursor-pointer ${
+              selectedCat === cat
                 ? 'bg-blue-600 text-white border-blue-600'
                 : 'bg-white text-slate-700 border-slate-200/80 hover:bg-slate-50'
             }`}
@@ -2362,129 +2502,105 @@ export const EventsDashboard: React.FC<DashboardCommonProps> = ({
       {/* Main Content Split */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
         <div className="xl:col-span-8 space-y-4">
-          {/* Featured Events Near You */}
+          {/* Featured Events Near You with Contextual Event Intelligence */}
           <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
-                <Star className="w-4 h-4 text-amber-400 fill-amber-400" /> Featured Events Near You
-              </h3>
-              <span className="text-xs font-semibold text-blue-600 cursor-pointer">See All ›</span>
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
+                  <Star className="w-4 h-4 text-amber-400 fill-amber-400" /> Events Near {shortArea} ({filteredEvents.length})
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  Includes live Contextual Event Intelligence (`/api/v1/events/contextual-intelligence`)
+                </p>
+              </div>
+              <span className="text-xs font-semibold text-blue-600">● Live Feed</span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {featuredEvents.map((ev) => (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-3.5">
+              {filteredEvents.map((ev) => (
                 <div
-                  key={ev.title}
+                  key={ev.id}
                   className="rounded-xl border border-slate-200/80 overflow-hidden bg-white flex flex-col justify-between hover:shadow-md transition"
                 >
                   <div>
-                    <div className="relative h-28">
+                    <div className="relative h-32">
                       <img src={ev.img} alt={ev.title} className="w-full h-full object-cover" />
+                      <span className="absolute top-2 left-2 px-2 py-0.5 rounded bg-slate-900/85 text-white text-[10px] font-extrabold">
+                        {ev.date} • {ev.price}
+                      </span>
+                      <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-emerald-500 text-white text-[9px] font-bold">
+                        👥 {ev.rsvp}
+                      </span>
                     </div>
-                    <div className="p-2.5">
-                      <div className="flex items-start gap-2">
-                        <div className="px-1.5 py-0.5 rounded bg-blue-50 text-center shrink-0">
-                          <p className="text-[8px] font-bold text-blue-600">{ev.day}</p>
-                          <p className="text-sm font-extrabold text-slate-900 leading-none">{ev.date}</p>
+                    <div className="p-3">
+                      <span className="text-[10px] font-extrabold text-indigo-600 uppercase">{ev.cat}</span>
+                      <h4 className="text-xs font-extrabold text-slate-900 mt-0.5">{ev.title}</h4>
+                      <p className="text-[10px] text-slate-500 mt-1">🕒 {ev.time}</p>
+                      <p className="text-[10px] text-slate-500 truncate">📍 {ev.loc} ({ev.dist})</p>
+
+                      {/* Contextual Event Intelligence Box */}
+                      <div className="mt-2.5 p-2 rounded-lg bg-slate-50 border border-slate-200/60 space-y-1 text-[10px]">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500 font-semibold">🅿️ Parking Pressure:</span>
+                          <span
+                            className={`font-extrabold ${
+                              ev.parkingPressure === 'LOW' ? 'text-emerald-600' : 'text-amber-600'
+                            }`}
+                          >
+                            {ev.parkingPressure} (~{ev.expectedAttendance} expected)
+                          </span>
                         </div>
-                        <div className="min-w-0">
-                          <h4 className="text-xs font-extrabold text-slate-900 line-clamp-1">{ev.title}</h4>
-                          <p className="text-[10px] text-slate-400">{ev.cat}</p>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500 font-semibold">🛣️ Corridor:</span>
+                          <span className="font-bold text-slate-800 truncate max-w-[160px]">{ev.commuteCorridor}</span>
                         </div>
+                        <p className="text-slate-600 truncate">🌦️ {ev.exitWeatherAdvisory}</p>
                       </div>
-                      <p className="text-[10px] text-slate-500 mt-2 truncate">🕒 {ev.time}</p>
-                      <p className="text-[10px] text-slate-500 truncate">📍 {ev.loc}</p>
                     </div>
                   </div>
-                  <div className="px-2.5 pb-2.5">
+                  <div className="px-3 pb-3">
                     <button
                       type="button"
                       onClick={() =>
                         onOpenModal({
                           title: ev.title,
-                          subtitle: ev.cat,
-                          category: 'Featured Local Event',
+                          subtitle: `${ev.cat} • Organized by ${ev.organizer}`,
+                          category: `Contextual Event Intelligence (${ev.source})`,
+                          badge: ev.price,
                           location: `${ev.loc} • ${ev.time}`,
-                          description: 'Live Event Intelligence: High footfall expected. Venue parking fills up 30 mins prior to start.',
-                          primaryActionLabel: ev.cta,
+                          description: `👥 Expected Attendance: ~${ev.expectedAttendance} people\n🅿️ Parking Pressure: ${ev.parkingPressure}\n🚗 Arterial Traffic Impact: ${ev.trafficImpact} on ${ev.commuteCorridor}\n🌦️ Exit Weather Advisory: ${ev.exitWeatherAdvisory}`,
+                          primaryActionLabel: 'Confirm Free RSVP / Book Pass',
                           image: ev.img,
                         })
                       }
-                      className={`w-full py-1.5 rounded-lg text-xs font-bold transition ${
-                        ev.primary
-                          ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
-                          : 'bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white'
-                      }`}
+                      className="w-full py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition cursor-pointer"
                     >
-                      {ev.cta}
+                      RSVP & View Event Intelligence
                     </button>
                   </div>
                 </div>
               ))}
             </div>
           </div>
-
-          {/* Upcoming Events + Map Split */}
-          <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
-            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-extrabold text-slate-900">Upcoming Events</h3>
-                <div className="flex items-center gap-1 ml-2">
-                  {['This Week', 'This Month', 'Free Events', 'For Families'].map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => setSelectedTab(t)}
-                      className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition ${
-                        selectedTab === t ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'
-                      }`}
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <span className="text-xs font-semibold text-blue-600 cursor-pointer">See All ›</span>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
-              <div className="lg:col-span-7 space-y-2.5">
-                {upcomingRows.map((row) => (
-                  <div
-                    key={row.title}
-                    className="p-2 rounded-xl border border-slate-200/70 hover:border-blue-300 flex items-center justify-between gap-2.5 transition"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-9 text-center shrink-0">
-                        <p className="text-[9px] font-bold text-rose-500">{row.month}</p>
-                        <p className="text-base font-extrabold text-slate-900 leading-none">{row.date}</p>
-                      </div>
-                      <img src={row.img} alt={row.title} className="w-14 h-11 rounded-lg object-cover shrink-0" />
-                      <div className="min-w-0">
-                        <h4 className="text-xs font-extrabold text-slate-900 truncate">{row.title}</h4>
-                        <p className="text-[10px] text-slate-500 truncate">🕒 {row.time}</p>
-                        <p className="text-[10px] text-slate-500 truncate">📍 {row.loc}</p>
-                      </div>
-                    </div>
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${row.badgeCls}`}>
-                      {row.badge}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              <div className="lg:col-span-5">
-                <InteractiveMap heightClass="h-52" centerLabel={'Rohini\nSector 10'} showSearchBottomButton={false} />
-              </div>
-            </div>
-          </div>
         </div>
 
-        {/* Right Column (4 cols): Events Calendar + Today's Highlights */}
+        {/* Right Column (4 cols): Interactive Map + Calendar + Highlights */}
         <div className="xl:col-span-4 space-y-4">
+          <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
+            <h3 className="text-sm font-extrabold text-slate-900 mb-2.5">Event Venues Around {shortArea}</h3>
+            <InteractiveMap
+              heightClass="h-52"
+              centerLabel={selectedArea}
+              centerCoords={{ lat: liveIntel.location.lat, lng: liveIntel.location.lng }}
+              pois={liveIntel.nearbyPois}
+              showSearchBottomButton={false}
+            />
+          </div>
+
           <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-extrabold text-slate-900">Events Calendar</h3>
-              <span className="text-xs font-semibold text-blue-600">March 2025</span>
+              <span className="text-xs font-semibold text-blue-600">{shortArea}</span>
             </div>
             <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-semibold text-slate-400 mb-1.5">
               {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => (
@@ -2492,7 +2608,7 @@ export const EventsDashboard: React.FC<DashboardCommonProps> = ({
               ))}
             </div>
             <div className="grid grid-cols-7 gap-1 text-center text-xs">
-              {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => {
+              {Array.from({ length: 30 }, (_, i) => i + 1).map((day) => {
                 const hasEvent = [12, 16, 17, 18, 20, 22, 23, 24].includes(day);
                 const isSelected = selectedDay === day;
                 return (
@@ -2500,7 +2616,7 @@ export const EventsDashboard: React.FC<DashboardCommonProps> = ({
                     key={day}
                     type="button"
                     onClick={() => setSelectedDay(day)}
-                    className={`h-7 rounded-full flex flex-col items-center justify-center font-semibold transition ${
+                    className={`h-7 rounded-full flex flex-col items-center justify-center font-semibold transition cursor-pointer ${
                       isSelected
                         ? 'bg-indigo-600 text-white font-bold shadow'
                         : hasEvent
@@ -2518,20 +2634,18 @@ export const EventsDashboard: React.FC<DashboardCommonProps> = ({
           <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
-                <span>✨</span> Today's Highlights
+                <span>✨</span> Ask AI About Local Events
               </h3>
-              <span className="text-xs font-semibold text-blue-600 cursor-pointer">See All ›</span>
             </div>
-            <div className="space-y-2.5">
+            <div className="space-y-2">
               {[
-                { title: 'RWA Community Meeting', sub: '6:00 PM • Rohini Sec 9 Community Centre', icon: '🤝' },
-                { title: 'Kids Art & Craft Workshop', sub: '4:00 PM • Rohini Public Library', icon: '🎨' },
-                { title: 'Street Food Pop-up', sub: '5:00 PM • Rohini Sec 11 Market', icon: '🍔' },
-                { title: 'Open Mic Night', sub: '7:00 PM • The Brew Room, Rohini', icon: '🎤' },
+                { title: `Weekend family events in ${shortArea}`, sub: 'Check weather & parking before stepping out', icon: '👨‍👩‍👧' },
+                { title: `Free health & RWA camps in ${shortArea}`, sub: 'Community wellness schedules', icon: '🏥' },
+                { title: `Live music & food fests near ${shortArea}`, sub: 'Evening dispersal traffic check', icon: '🎵' },
               ].map((hl) => (
                 <div
                   key={hl.title}
-                  onClick={() => onAskAi(`Tell me more about ${hl.title} today`)}
+                  onClick={() => onAskAi(hl.title)}
                   className="cursor-pointer p-2 rounded-xl hover:bg-slate-50 flex items-center justify-between gap-2 transition"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
@@ -2543,9 +2657,7 @@ export const EventsDashboard: React.FC<DashboardCommonProps> = ({
                       <p className="text-[10px] text-slate-500 truncate">{hl.sub}</p>
                     </div>
                   </div>
-                  <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[9px] font-bold shrink-0">
-                    Today
-                  </span>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                 </div>
               ))}
             </div>

@@ -4,6 +4,10 @@ import { HeroBanner } from '../components/HeroBanner';
 import { InteractiveMap } from '../components/InteractiveMap';
 import { askLiveAiAssistant } from '../services/liveIntelligence';
 import {
+  speakTextWithSarvamOrBrowser,
+  startVoiceRecognition,
+} from '../services/communityMarketplaceService';
+import {
   MapPin,
   Sun,
   Moon,
@@ -16,6 +20,8 @@ import {
   Send,
   Paperclip,
   Mic,
+  Volume2,
+  VolumeX,
   CheckCircle2,
   Eye,
   Gauge,
@@ -1629,8 +1635,72 @@ export const AlertsDashboard: React.FC<
           </div>
         </div>
 
-        {/* Right 4 cols: Citizen Ground Reports + Subscribe to Ward Notices */}
+        {/* Right 4 cols: Live Nearby Emergency POIs + Citizen Ground Reports + Subscribe */}
         <div className="xl:col-span-4 space-y-4">
+          {/* Live Nearby Hospitals, Police Stations & Pharmacies (Overpass + /api/v1/emergency/facilities) */}
+          <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
+            <div className="flex items-center justify-between mb-2.5">
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-900">
+                  🏥 Nearby Hospitals & Police ({shortArea})
+                </h3>
+                <p className="text-[10px] text-slate-500">
+                  Live Overpass & `/api/v1/emergency/facilities` radius scan
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => onNavigate('emergency')}
+                className="text-[11px] font-bold text-rose-600 hover:text-rose-700 cursor-pointer"
+              >
+                SOS Hub ›
+              </button>
+            </div>
+            <div className="space-y-2 text-xs">
+              {liveIntel.nearbyPois
+                .filter((p) => ['hospital', 'police', 'pharmacy', 'fire'].includes(p.category))
+                .slice(0, 4)
+                .map((poi) => (
+                  <div
+                    key={poi.id}
+                    className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between gap-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-extrabold text-slate-900 truncate">
+                        {poi.category === 'hospital'
+                          ? '🏥 '
+                          : poi.category === 'police'
+                          ? '🛡️ '
+                          : poi.category === 'pharmacy'
+                          ? '💊 '
+                          : '🚒 '}
+                        {poi.name}
+                      </p>
+                      <p className="text-[10px] text-slate-500 truncate">
+                        {poi.distanceKm} km away • {poi.sublabel}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onOpenModal({
+                          title: `Emergency Contact: ${poi.name}`,
+                          category: `Verified ${poi.sublabel} • ${poi.distanceKm} km away`,
+                          badge: '24/7 Active',
+                          location: `${selectedArea} (${poi.latitude.toFixed(3)}°N, ${poi.longitude.toFixed(3)}°E)`,
+                          description: `Direct Helpline: ${poi.phone || '112 / 108'}. Coordinates synced for emergency dispatch.`,
+                          primaryActionLabel: `Dial ${poi.phone || '112'}`,
+                        })
+                      }
+                      className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white text-[11px] font-extrabold shrink-0 transition cursor-pointer"
+                    >
+                      📞 {poi.phone || '112'}
+                    </button>
+                  </div>
+                ))}
+            </div>
+          </div>
+
           <div className="bg-white rounded-2xl p-4 shadow-card border border-slate-200/70">
             <div className="flex items-center justify-between mb-2.5">
               <h3 className="text-sm font-extrabold text-slate-900">👥 Citizen Ground Signals</h3>
@@ -1700,7 +1770,7 @@ export const AlertsDashboard: React.FC<
 };
 
 /* ============================================================================
-   12. AI ASSISTANT DASHBOARD (Page 24 Desktop) — 100% LIVE GROUNDED RAG
+   12. AI ASSISTANT DASHBOARD (Page 24 Desktop) — 100% LIVE GROUNDED RAG + SARVAM AI VOICE
    ============================================================================ */
 interface ChatMessage {
   role: 'ai' | 'user';
@@ -1720,8 +1790,68 @@ export const AiAssistantDashboard: React.FC<DashboardCommonProps> = ({
   const [input, setInput] = useState('');
   const [thinking, setThinking] = useState(false);
 
+  // Sarvam AI / Browser Neural Voice Input (STT) & Read Aloud (TTS) State
+  const [voiceLang, setVoiceLang] = useState<'hi-IN' | 'en-IN'>('hi-IN');
+  const [isListening, setIsListening] = useState(false);
+  const [speakingIdx, setSpeakingIdx] = useState<number | null>(null);
+  const [autoSpeak, setAutoSpeak] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState<string | null>(null);
+  const [activeStopFn, setActiveStopFn] = useState<(() => void) | null>(null);
+
   const { weather, airQuality, traffic, alerts } = liveIntel;
   const shortArea = selectedArea.split(',')[0]?.trim() || selectedArea;
+
+  const handleSpeakMessage = async (text: string, idx: number) => {
+    if (speakingIdx === idx && activeStopFn) {
+      activeStopFn();
+      setSpeakingIdx(null);
+      setActiveStopFn(null);
+      return;
+    }
+    if (activeStopFn) {
+      activeStopFn();
+    }
+    setSpeakingIdx(idx);
+    const ctl = await speakTextWithSarvamOrBrowser(text, voiceLang, () => {
+      setSpeakingIdx(null);
+      setActiveStopFn(null);
+    });
+    setVoiceStatus(`Speaking via ${ctl.provider} (${voiceLang === 'hi-IN' ? 'Hindi' : 'English'})`);
+    setActiveStopFn(() => ctl.stop);
+  };
+
+  const handleToggleMic = () => {
+    if (isListening && activeStopFn) {
+      activeStopFn();
+      setIsListening(false);
+      return;
+    }
+    setIsListening(true);
+    setVoiceStatus(
+      voiceLang === 'hi-IN'
+        ? '🎙️ सुन रहा हूँ... हिंदी या अंग्रेजी में बोलें (Listening in Hindi/Hinglish)...'
+        : '🎙️ Listening in English (en-IN)... Speak your question now.'
+    );
+    const rec = startVoiceRecognition(
+      voiceLang,
+      (transcript, isFinal) => {
+        setInput(transcript);
+        if (isFinal && transcript.trim().length > 2) {
+          setIsListening(false);
+          setVoiceStatus(null);
+          handleSend(transcript.trim());
+        }
+      },
+      (errMsg) => {
+        setVoiceStatus(errMsg);
+        setIsListening(false);
+      },
+      () => {
+        setIsListening(false);
+      }
+    );
+    setActiveStopFn(() => rec.stop);
+  };
 
   const handleSend = async (promptText?: string) => {
     const q = (promptText ?? input).trim();
@@ -1732,17 +1862,23 @@ export const AiAssistantDashboard: React.FC<DashboardCommonProps> = ({
     setThinking(true);
     try {
       const res = await askLiveAiAssistant(q, liveIntel);
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'ai',
-          text: res.responseText,
-          keyFindings: res.keyFindings,
-          recommendations: res.recommendations,
-          sources: res.sources,
-          confidence: res.confidence,
-        },
-      ]);
+      const newMsg: ChatMessage = {
+        role: 'ai',
+        text: res.responseText,
+        keyFindings: res.keyFindings,
+        recommendations: res.recommendations,
+        sources: res.sources,
+        confidence: res.confidence,
+      };
+      setMessages((prev) => {
+        const next = [...prev, newMsg];
+        if (autoSpeak) {
+          setTimeout(() => {
+            handleSpeakMessage(res.responseText, next.length - 1);
+          }, 150);
+        }
+        return next;
+      });
     } finally {
       setThinking(false);
     }
@@ -1752,12 +1888,21 @@ export const AiAssistantDashboard: React.FC<DashboardCommonProps> = ({
     <div className="space-y-4">
       <HeroBanner
         dashboardId="ai-assistant"
-        title="AI Assistant"
-        subtitle="Your Smart Companion Grounded in Live Weather, CPCB AQI, Traffic & SACHET Alerts"
+        title="AI Assistant (Saathi AI)"
+        subtitle="Your Smart Companion Grounded in Live Weather, CPCB AQI, Traffic, SACHET Alerts & Sarvam AI Voice"
         bottomPills={[
-          { icon: <span>⚡</span>, label: 'Live Sensor Grounded' },
+          {
+            icon: <span>🎙️</span>,
+            label: voiceLang === 'hi-IN' ? 'Voice: हिंदी / Hinglish (hi-IN)' : 'Voice: English (en-IN)',
+            active: true,
+            onClick: () => setVoiceLang((l) => (l === 'hi-IN' ? 'en-IN' : 'hi-IN')),
+          },
+          {
+            icon: <span>🔊</span>,
+            label: autoSpeak ? 'Auto Read-Aloud: ON' : 'Auto Read-Aloud: OFF',
+            onClick: () => setAutoSpeak((v) => !v),
+          },
           { icon: <span>📍</span>, label: shortArea },
-          { icon: <span>⭐</span>, label: 'Multi-Signal Correlation' },
           { icon: <span>🕒</span>, label: `Synced ${liveIntel.lastUpdated}` },
         ]}
         rightWidget={
@@ -1768,10 +1913,10 @@ export const AiAssistantDashboard: React.FC<DashboardCommonProps> = ({
               className="w-16 h-16 rounded-xl object-contain bg-white/90 p-1 shrink-0"
             />
             <div className="bg-white text-slate-900 rounded-xl p-2.5 text-xs shadow">
-              <p className="font-medium">Hi! I'm your</p>
+              <p className="font-medium">नमस्ते / Hi! I'm</p>
               <p className="font-extrabold text-indigo-700">MyArea24 Saathi AI.</p>
               <p className="text-[11px] text-slate-600">
-                Monitoring {shortArea} ({weather.temperatureC}°C, AQI {airQuality.aqiValue})
+                Voice & Text in हिंदी / English ({weather.temperatureC}°C, AQI {airQuality.aqiValue})
               </p>
             </div>
           </div>
@@ -1782,30 +1927,52 @@ export const AiAssistantDashboard: React.FC<DashboardCommonProps> = ({
         {/* Left 8 cols: Conversational Interface */}
         <div className="xl:col-span-8 space-y-4">
           <div className="bg-white rounded-2xl p-5 shadow-card border border-slate-200/70">
-            <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-4 border-b border-slate-100">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center text-sm">
                   🤖
                 </div>
                 <div>
                   <h3 className="text-sm font-extrabold text-slate-900">
-                    Chat with MyArea24 AI ({shortArea})
+                    Chat or Speak with MyArea24 AI ({shortArea})
                   </h3>
                   <p className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1">
-                    <Radio className="w-3 h-3" /> Grounded in live Open-Meteo, CPCB, TomTom & OSM telemetry
+                    <Radio className="w-3 h-3" /> Sarvam AI (Saarika STT & Bulbul TTS) + Live Telemetry RAG
                   </p>
                 </div>
               </div>
-              {messages.length > 0 && (
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setMessages([])}
-                  className="text-xs font-semibold text-slate-400 hover:text-slate-600 cursor-pointer"
+                  onClick={() => setVoiceLang((l) => (l === 'hi-IN' ? 'en-IN' : 'hi-IN'))}
+                  className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-extrabold cursor-pointer transition"
                 >
-                  Clear Chat
+                  {voiceLang === 'hi-IN' ? '🇮🇳 हिंदी (hi-IN)' : '🇬🇧 English (en-IN)'}
                 </button>
-              )}
+                {messages.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setMessages([])}
+                    className="text-xs font-semibold text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    Clear Chat
+                  </button>
+                )}
+              </div>
             </div>
+
+            {voiceStatus && (
+              <div className="mb-3 px-3.5 py-2 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-between text-xs font-bold text-indigo-900">
+                <span>{voiceStatus}</span>
+                <button
+                  type="button"
+                  onClick={() => setVoiceStatus(null)}
+                  className="text-[10px] text-indigo-600 hover:underline"
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
 
             {/* Greeting Box with Compact Live Telemetry Context */}
             <div className="bg-slate-50/90 rounded-2xl p-4 border border-slate-200/60 mb-4">
@@ -1836,7 +2003,9 @@ export const AiAssistantDashboard: React.FC<DashboardCommonProps> = ({
                   <span className="font-extrabold text-slate-900">{alerts.length} Active Notice(s)</span>
                 </div>
               </div>
-              <p className="text-xs font-bold text-slate-700">Ask me anything about your area right now:</p>
+              <p className="text-xs font-bold text-slate-700">
+                Ask by typing or tap the 🎙️ Microphone button to speak in Hindi or English:
+              </p>
             </div>
 
             {/* Conversation History */}
@@ -1854,7 +2023,31 @@ export const AiAssistantDashboard: React.FC<DashboardCommonProps> = ({
                           : 'bg-indigo-50/80 text-slate-800 border border-indigo-100 space-y-2'
                       }`}
                     >
-                      <p className="whitespace-pre-line">{m.text}</p>
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="whitespace-pre-line">{m.text}</p>
+                        {m.role === 'ai' && (
+                          <button
+                            type="button"
+                            onClick={() => handleSpeakMessage(m.text, idx)}
+                            title="Listen in Hindi / English (Sarvam AI TTS)"
+                            className={`px-2 py-1 rounded-lg text-[10px] font-extrabold flex items-center gap-1 shrink-0 transition cursor-pointer ${
+                              speakingIdx === idx
+                                ? 'bg-rose-600 text-white'
+                                : 'bg-white hover:bg-indigo-100 text-indigo-700 border border-indigo-200'
+                            }`}
+                          >
+                            {speakingIdx === idx ? (
+                              <>
+                                <VolumeX className="w-3.5 h-3.5" /> Stop
+                              </>
+                            ) : (
+                              <>
+                                <Volume2 className="w-3.5 h-3.5" /> 🔊 सुने / Listen
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </div>
 
                       {m.keyFindings && m.keyFindings.length > 0 && (
                         <div className="pt-2 border-t border-indigo-200/60">
@@ -1909,11 +2102,11 @@ export const AiAssistantDashboard: React.FC<DashboardCommonProps> = ({
               </div>
             )}
 
-            {/* 6 Suggested Prompt Cards (2x3) */}
+            {/* 6 Suggested Prompt Cards (2x3) including Hindi / Hinglish Prompt */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-4">
               {[
                 { icon: '🌤️', text: `What's the weather and AQI like right now in ${shortArea}?` },
-                { icon: '🔺', text: `Any important alerts or civic notices in ${shortArea}?` },
+                { icon: '🇮🇳', text: `${shortArea} में आज मौसम, ट्रैफिक और मंडी के भाव कैसे हैं?` },
                 { icon: '🏃', text: `Is it safe to go for a jog outdoors in ${shortArea} right now?` },
                 { icon: '🏥', text: `Find nearby hospitals and pharmacies open in ${shortArea}` },
                 { icon: '🚗', text: `Are there any traffic jams on roads near ${shortArea}?` },
@@ -1931,7 +2124,7 @@ export const AiAssistantDashboard: React.FC<DashboardCommonProps> = ({
               ))}
             </div>
 
-            {/* Chat Input Bar */}
+            {/* Chat Input Bar with Sarvam AI Voice Input Button */}
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -1944,10 +2137,26 @@ export const AiAssistantDashboard: React.FC<DashboardCommonProps> = ({
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder={`Ask anything about ${shortArea}...`}
+                placeholder={
+                  voiceLang === 'hi-IN'
+                    ? `${shortArea} के बारे में हिंदी या English में पूछें...`
+                    : `Ask anything about ${shortArea}...`
+                }
                 className="flex-1 bg-transparent text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none"
               />
-              <Mic className="w-4 h-4 text-slate-400 cursor-pointer" />
+              <button
+                type="button"
+                onClick={handleToggleMic}
+                title={`Voice Input (${voiceLang === 'hi-IN' ? 'Hindi' : 'English'})`}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-extrabold flex items-center gap-1 transition cursor-pointer ${
+                  isListening
+                    ? 'bg-rose-600 text-white animate-pulse'
+                    : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700'
+                }`}
+              >
+                <Mic className="w-3.5 h-3.5" />
+                <span>{isListening ? 'Listening...' : voiceLang === 'hi-IN' ? 'बोलें' : 'Voice'}</span>
+              </button>
               <button
                 type="submit"
                 disabled={thinking}
@@ -2020,9 +2229,9 @@ export const AiAssistantDashboard: React.FC<DashboardCommonProps> = ({
             <div className="grid grid-cols-2 gap-2.5 text-xs">
               {[
                 { t: 'Zero Hallucination', s: 'Every metric is pulled from live sensors' },
+                { t: 'Sarvam AI Voice', s: 'Hindi (hi-IN) & English Speech-to-Text + TTS' },
                 { t: 'CPCB Standard', s: 'Official 2014 Indian NAQI sub-index math' },
                 { t: 'Real Road Names', s: 'Queries OpenStreetMap & TomTom corridors' },
-                { t: 'Change Location', s: 'Switch city or pin to test any area in India' },
               ].map((u) => (
                 <div key={u.t} className="p-2.5 rounded-xl bg-slate-50">
                   <p className="font-bold text-slate-800">{u.t}</p>

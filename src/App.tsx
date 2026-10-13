@@ -10,6 +10,11 @@ import {
   askLiveAiAssistant,
 } from './services/liveIntelligence';
 import {
+  useLiveCommunityMarketplace,
+  syncSavedBookmarkToBackend,
+  getStoredAuthUser,
+} from './services/communityMarketplaceService';
+import {
   HomeDashboard,
   BusinessesDashboard,
   ProductsDashboard,
@@ -94,6 +99,8 @@ const ICON_MAP: Record<DashboardId, React.ElementType> = {
   saved: Heart,
 };
 
+const SAVED_STORAGE_KEY = 'myarea24_saved_items_v1';
+
 export function App() {
   const [activeDashboard, setActiveDashboard] = useState<DashboardId>('home');
 
@@ -103,6 +110,8 @@ export function App() {
 
   // Unified Live Location Intelligence Engine (FastAPI Backend + Open-Meteo + OpenStreetMap)
   const liveIntel = useLiveIntelligence(currentLocation);
+  // Live Community & Marketplace Engine (/api/v1/businesses, products, services, offers, events + Overpass POIs)
+  const marketplace = useLiveCommunityMarketplace(liveIntel);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [commandOpen, setCommandOpen] = useState(false);
@@ -111,9 +120,28 @@ export function App() {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
-  // Interactive Saved State synced with Saved Dashboard
-  const [savedEntries, setSavedEntries] = useState<SavedEntry[]>(INITIAL_SAVED_ITEMS);
+  // Interactive Saved State synced with localStorage + FastAPI /api/v1/saved
+  const [savedEntries, setSavedEntries] = useState<SavedEntry[]>(() => {
+    try {
+      const raw = localStorage.getItem(SAVED_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return INITIAL_SAVED_ITEMS;
+  });
   const savedIds = savedEntries.map((s) => s.id);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SAVED_STORAGE_KEY, JSON.stringify(savedEntries));
+    } catch {
+      // ignore
+    }
+  }, [savedEntries]);
 
   // Shopping Cart / Added Products State
   const [cartItems, setCartItems] = useState<{ name: string; price: number }[]>([]);
@@ -127,6 +155,7 @@ export function App() {
   const [aiModalReply, setAiModalReply] = useState<string>('');
 
   const selectedArea = currentLocation.areaName;
+  const authUser = getStoredAuthUser();
 
   // Keyboard shortcut Cmd/Ctrl + K
   useEffect(() => {
@@ -162,9 +191,11 @@ export function App() {
       const exists = prev.some((e) => e.id === entry.id);
       if (exists) {
         showToast(`Removed "${entry.title}" from Saved`);
+        syncSavedBookmarkToBackend(entry, 'remove');
         return prev.filter((e) => e.id !== entry.id);
       } else {
         showToast(`Saved "${entry.title}" to your favorites!`);
+        syncSavedBookmarkToBackend(entry, 'add');
         return [entry, ...prev];
       }
     });
@@ -201,6 +232,7 @@ export function App() {
     selectedArea,
     currentLocation,
     liveIntel,
+    marketplace,
     onAddToCart: handleAddToCart,
     onOpenLocationPicker: () => setLocationModalOpen(true),
   };
@@ -551,10 +583,12 @@ export function App() {
                 className="pl-1.5 pr-3 py-1 rounded-full bg-[#F4F6FB] hover:bg-slate-100 border border-slate-200/80 flex items-center gap-2 transition cursor-pointer"
               >
                 <span className="w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-extrabold flex items-center justify-center">
-                  D
+                  {(authUser?.fullName || 'Divyansh Gupta').charAt(0).toUpperCase()}
                 </span>
                 <div className="text-left hidden xl:block">
-                  <p className="text-xs font-bold text-slate-800 leading-none">Divyansh Gupta</p>
+                  <p className="text-xs font-bold text-slate-800 leading-none">
+                    {authUser ? authUser.fullName : 'Divyansh Gupta'}
+                  </p>
                   <p className="text-[10px] text-slate-400 mt-0.5">{currentLocation.areaName}</p>
                 </div>
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
@@ -643,16 +677,29 @@ export function App() {
           >
             <div className="p-4 bg-gradient-to-r from-[#0B1739] to-[#27206A] text-white flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-indigo-500 border-2 border-white/40 flex items-center justify-center font-extrabold text-sm">
-                D
+                {(authUser?.fullName || 'Divyansh Gupta').charAt(0).toUpperCase()}
               </div>
               <div className="min-w-0">
-                <p className="text-xs font-extrabold truncate">Divyansh Gupta</p>
+                <p className="text-xs font-extrabold truncate">
+                  {authUser ? authUser.fullName : 'Divyansh Gupta'}
+                </p>
                 <p className="text-[10px] text-blue-200 truncate">
-                  📍 {currentLocation.areaName} ({currentLocation.pincode})
+                  {authUser ? `✓ ${authUser.email}` : `📍 ${currentLocation.areaName} (${currentLocation.pincode})`}
                 </p>
               </div>
             </div>
             <div className="p-2 space-y-0.5 text-xs">
+              <button
+                type="button"
+                onClick={() => handleNavigate('saved')}
+                className="w-full px-3 py-2 rounded-xl hover:bg-indigo-50 flex items-center justify-between font-semibold text-indigo-700"
+              >
+                <span className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />{' '}
+                  {authUser ? 'Email OTP Cloud Synced' : 'Sign In via Email OTP'}
+                </span>
+                <ChevronRight className="w-3.5 h-3.5 text-indigo-400" />
+              </button>
               <button
                 type="button"
                 onClick={() => {
