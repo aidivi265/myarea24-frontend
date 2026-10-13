@@ -13,6 +13,8 @@ import {
   Navigation,
   Loader2,
   Globe,
+  Trash2,
+  RotateCcw,
 } from 'lucide-react';
 import { reverseGeocodeLive, searchLocationsLive } from '../services/liveIntelligence';
 
@@ -119,6 +121,8 @@ export const POPULAR_AREAS: UserLocation[] = [
   },
 ];
 
+const SAVED_LOCATIONS_STORAGE_KEY = 'myarea24_saved_locations_v1';
+
 interface LocationPickerModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -135,13 +139,56 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [liveResults, setLiveResults] = useState<UserLocation[]>([]);
   const [searchingLive, setSearchingLive] = useState(false);
-  const [savedLocations, setSavedLocations] = useState<UserLocation[]>(DEFAULT_SAVED_LOCATIONS);
+  const [savedLocations, setSavedLocations] = useState<UserLocation[]>(() => {
+    try {
+      const raw = localStorage.getItem(SAVED_LOCATIONS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {
+      // ignore storage errors
+    }
+    return DEFAULT_SAVED_LOCATIONS;
+  });
   const [detectingGps, setDetectingGps] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [addingNew, setAddingNew] = useState(false);
   const [newLabel, setNewLabel] = useState<'Home' | 'Work' | 'Other'>('Home');
   const [newArea, setNewArea] = useState('');
   const [newAddress, setNewAddress] = useState('');
+
+  const updateSavedLocations = (updater: (prev: UserLocation[]) => UserLocation[]) => {
+    setSavedLocations((prev) => {
+      const next = updater(prev);
+      try {
+        localStorage.setItem(SAVED_LOCATIONS_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // ignore storage errors
+      }
+      return next;
+    });
+  };
+
+  const handleDeleteSavedLocation = (e: React.MouseEvent, idToDelete: string) => {
+    e.stopPropagation();
+    updateSavedLocations((prev) => prev.filter((item) => item.id !== idToDelete));
+  };
+
+  const handleToggleBookmarkArea = (e: React.MouseEvent, area: UserLocation) => {
+    e.stopPropagation();
+    const existing = savedLocations.find((s) => s.areaName === area.areaName);
+    if (existing) {
+      updateSavedLocations((prev) => prev.filter((item) => item.id !== existing.id));
+    } else {
+      const newSaved: UserLocation = {
+        ...area,
+        id: `loc-${Date.now()}`,
+        label: area.label || area.areaName.split(',')[0],
+      };
+      updateSavedLocations((prev) => [newSaved, ...prev]);
+    }
+  };
 
   // Debounced Pan-India + Nominatim Live Search
   useEffect(() => {
@@ -243,7 +290,7 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
       pincode: best?.pincode || '',
       coords: best?.coords || currentLocation.coords || { lat: 28.7196, lng: 77.1186 },
     };
-    setSavedLocations((prev) => [created, ...prev]);
+    updateSavedLocations((prev) => [created, ...prev]);
     onSelectLocation(created);
     setAddingNew(false);
     setNewArea('');
@@ -347,15 +394,27 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
             <div>
               <div className="flex items-center justify-between mb-2.5">
                 <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
-                  Saved Addresses
+                  Saved Addresses ({savedLocations.length})
                 </p>
-                <button
-                  type="button"
-                  onClick={() => setAddingNew((v) => !v)}
-                  className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Add New
-                </button>
+                <div className="flex items-center gap-3">
+                  {savedLocations.length < DEFAULT_SAVED_LOCATIONS.length && (
+                    <button
+                      type="button"
+                      onClick={() => updateSavedLocations(() => DEFAULT_SAVED_LOCATIONS)}
+                      className="text-[11px] font-semibold text-slate-500 hover:text-slate-700 flex items-center gap-1"
+                      title="Restore default saved locations"
+                    >
+                      <RotateCcw className="w-3 h-3" /> Reset
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setAddingNew((v) => !v)}
+                    className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add New
+                  </button>
+                </div>
               </div>
 
               {addingNew && (
@@ -412,55 +471,84 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
                 </form>
               )}
 
-              <div className="space-y-2">
-                {savedLocations.map((loc) => {
-                  const isSelected =
-                    currentLocation.areaName === loc.areaName && currentLocation.label === loc.label;
-                  const Icon =
-                    loc.label === 'Home' ? Home : loc.label === 'Work' ? Briefcase : Bookmark;
-                  return (
-                    <button
-                      key={loc.id}
-                      type="button"
-                      onClick={() => {
-                        onSelectLocation(loc);
-                        onClose();
-                      }}
-                      className={`w-full p-3 rounded-xl border text-left flex items-start justify-between gap-3 transition ${
-                        isSelected
-                          ? 'bg-indigo-50/70 border-indigo-500 ring-1 ring-indigo-500/30'
-                          : 'bg-white hover:bg-slate-50 border-slate-200/80'
-                      }`}
-                    >
-                      <div className="flex items-start gap-3 min-w-0">
-                        <div
-                          className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
-                            isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
-                          }`}
-                        >
-                          <Icon className="w-4 h-4" />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-extrabold text-slate-900">{loc.label}</span>
-                            <span className="text-[11px] font-semibold text-indigo-600 truncate">
-                              • {loc.areaName}
-                            </span>
+              {savedLocations.length === 0 ? (
+                <div className="p-4 rounded-xl border border-dashed border-slate-200 bg-slate-50/60 text-center">
+                  <p className="text-xs font-semibold text-slate-600">No saved addresses</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Click "+ Add New" above or bookmark any locality below
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => updateSavedLocations(() => DEFAULT_SAVED_LOCATIONS)}
+                    className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white border border-slate-200 text-[11px] font-bold text-indigo-600 hover:bg-indigo-50 transition"
+                  >
+                    <RotateCcw className="w-3 h-3" /> Restore Default Addresses
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {savedLocations.map((loc) => {
+                    const isSelected =
+                      currentLocation.areaName === loc.areaName && currentLocation.label === loc.label;
+                    const Icon =
+                      loc.label === 'Home' ? Home : loc.label === 'Work' ? Briefcase : Bookmark;
+                    return (
+                      <div
+                        key={loc.id}
+                        onClick={() => {
+                          onSelectLocation(loc);
+                          onClose();
+                        }}
+                        className={`w-full p-3 rounded-xl border text-left flex items-center justify-between gap-2 transition cursor-pointer ${
+                          isSelected
+                            ? 'bg-indigo-50/70 border-indigo-500 ring-1 ring-indigo-500/30'
+                            : 'bg-white hover:bg-slate-50 border-slate-200/80'
+                        }`}
+                      >
+                        <div className="flex items-start gap-3 min-w-0 flex-1">
+                          <div
+                            className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
+                              isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
+                            }`}
+                          >
+                            <Icon className="w-4 h-4" />
                           </div>
-                          <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
-                            {loc.fullAddress}
-                          </p>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-extrabold text-slate-900">{loc.label}</span>
+                              <span className="text-[11px] font-semibold text-indigo-600 truncate">
+                                • {loc.areaName}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
+                              {loc.fullAddress}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {isSelected && (
+                            <span
+                              className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center"
+                              title="Currently active location"
+                            >
+                              <Check className="w-3 h-3" />
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteSavedLocation(e, loc.id)}
+                            title={`Delete ${loc.label} (${loc.areaName})`}
+                            aria-label={`Delete ${loc.label}`}
+                            className="w-7 h-7 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </div>
-                      {isSelected && (
-                        <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center shrink-0 mt-1">
-                          <Check className="w-3 h-3" />
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
@@ -480,23 +568,23 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
             <div className="space-y-1.5">
               {displayAreas.map((area) => {
                 const isSelected = currentLocation.areaName === area.areaName;
+                const isBookmarked = savedLocations.some((s) => s.areaName === area.areaName);
                 return (
-                  <button
+                  <div
                     key={area.id}
-                    type="button"
                     onClick={() => {
                       onSelectLocation(area);
                       onClose();
                     }}
-                    className={`w-full p-2.5 rounded-xl flex items-center justify-between gap-3 text-left transition ${
+                    className={`w-full p-2.5 rounded-xl flex items-center justify-between gap-2 text-left transition cursor-pointer ${
                       isSelected ? 'bg-indigo-50 text-indigo-900' : 'hover:bg-slate-50'
                     }`}
                   >
-                    <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
                       <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
                         <Navigation className="w-3.5 h-3.5" />
                       </div>
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <p className="text-xs font-bold text-slate-900 truncate">{area.areaName}</p>
                           {area.coords && (
@@ -508,12 +596,26 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
                         <p className="text-[11px] text-slate-500 truncate">{area.fullAddress}</p>
                       </div>
                     </div>
-                    {isSelected ? (
-                      <span className="text-[10px] font-extrabold text-indigo-600 shrink-0">Selected</span>
-                    ) : (
-                      <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
-                    )}
-                  </button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={(e) => handleToggleBookmarkArea(e, area)}
+                        title={isBookmarked ? 'Remove from Saved Addresses' : 'Save to Saved Addresses'}
+                        className={`w-7 h-7 rounded-lg flex items-center justify-center transition ${
+                          isBookmarked
+                            ? 'text-indigo-600 bg-indigo-50 hover:bg-rose-50 hover:text-rose-600'
+                            : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'
+                        }`}
+                      >
+                        <Bookmark className={`w-3.5 h-3.5 ${isBookmarked ? 'fill-current' : ''}`} />
+                      </button>
+                      {isSelected ? (
+                        <span className="text-[10px] font-extrabold text-indigo-600 shrink-0">Selected</span>
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                      )}
+                    </div>
+                  </div>
                 );
               })}
 
