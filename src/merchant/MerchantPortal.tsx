@@ -70,18 +70,41 @@ import { MerchantPromotionsDashboard } from './dashboards/MerchantPromotionsDash
 import { MerchantPaymentsDashboard } from './dashboards/MerchantPaymentsDashboard';
 import { MerchantSettingsDashboard } from './dashboards/MerchantSettingsDashboard';
 import { MerchantMobileAppView } from './components/MerchantMobileAppView';
-import { MerchantActionModals } from './components/MerchantActionModals';
+import {
+  LiveCommunityMarketplaceState,
+  syncMerchantProductToGlobal,
+  syncMerchantProductToggle,
+  getStoredMerchantProfile,
+} from '../services/communityMarketplaceService';
+import { UserLocation } from '../components/LocationPickerModal';
 
 interface MerchantPortalProps {
   onSwitchToCitizen: () => void;
+  marketplace?: LiveCommunityMarketplaceState;
+  currentLocation?: UserLocation;
 }
 
 const STORAGE_KEY = 'myarea24_merchant_portal_state_v1';
 
-export function MerchantPortal({ onSwitchToCitizen }: MerchantPortalProps) {
-  // Business Storefront (The Daily Brew vs Sharma Fuel Station)
+export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation }: MerchantPortalProps) {
+  // Business Storefront: checks verified registration profile first, then fallback
   const [currentBusiness, setCurrentBusiness] = useState<MerchantBusinessInfo>(() => {
     try {
+      const regProfile = getStoredMerchantProfile();
+      if (regProfile && regProfile.isVerified) {
+        return {
+          ...DEFAULT_BUSINESS_THE_DAILY_BREW,
+          name: regProfile.businessName,
+          category: regProfile.category,
+          ownerName: regProfile.ownerName,
+          locationArea: regProfile.locality,
+          pincode: regProfile.pincode,
+          fullAddress: regProfile.fullAddress,
+          phone: regProfile.phone,
+          email: regProfile.email,
+          verificationStatus: 'Verified',
+        };
+      }
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
@@ -94,6 +117,12 @@ export function MerchantPortal({ onSwitchToCitizen }: MerchantPortalProps) {
   const [activeDashboard, setActiveDashboard] = useState<MerchantDashboardId>('overview');
   const [searchQuery, setSearchQuery] = useState('');
   const [modalType, setModalType] = useState<string | null>(null);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  const showMerchantToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 3500);
+  };
 
   // Data Collections
   const [products, setProducts] = useState<MerchantProductItem[]>(INITIAL_MERCHANT_PRODUCTS);
@@ -137,15 +166,32 @@ export function MerchantPortal({ onSwitchToCitizen }: MerchantPortalProps) {
   };
 
   const handleUpdateBusiness = (updated: Partial<MerchantBusinessInfo>) => {
-    setCurrentBusiness((prev) => ({ ...prev, ...updated }));
+    const nextBiz = { ...currentBusiness, ...updated };
+    setCurrentBusiness(nextBiz);
+    marketplace?.addBusiness({
+      name: nextBiz.name,
+      cat: nextBiz.category,
+      phone: nextBiz.phone,
+      address: nextBiz.fullAddress,
+    });
+    window.dispatchEvent(new CustomEvent('myarea24_marketplace_sync'));
+    showMerchantToast(`Storefront settings updated & synced live.`);
   };
 
   const handleToggleProductStatus = (id: string) => {
+    let nextStatus: 'Active' | 'Paused' = 'Active';
     setProducts((prev) =>
-      prev.map((p) =>
-        p.id === id ? { ...p, status: p.status === 'Active' ? 'Paused' : 'Active' } : p
-      )
+      prev.map((p) => {
+        if (p.id === id) {
+          nextStatus = p.status === 'Active' ? 'Paused' : 'Active';
+          return { ...p, status: nextStatus };
+        }
+        return p;
+      })
     );
+    syncMerchantProductToggle(id, nextStatus === 'Paused');
+    window.dispatchEvent(new CustomEvent('myarea24_marketplace_sync'));
+    showMerchantToast(`Product stock status updated to ${nextStatus}.`);
   };
 
   const handleToggleServiceStatus = (id: string) => {
@@ -791,19 +837,88 @@ export function MerchantPortal({ onSwitchToCitizen }: MerchantPortalProps) {
         </div>
 
       {/* =========================================================================
-          INTERACTIVE ACTION MODALS MANAGER
+          INTERACTIVE ACTION MODALS MANAGER & GLOBAL SYNC BRIDGE
          ========================================================================= */}
       <MerchantActionModals
         modalType={modalType}
         onClose={() => setModalType(null)}
-        onAddProduct={(newProd) => setProducts((prev) => [newProd, ...prev])}
-        onAddService={(newSrv) => setServices((prev) => [newSrv, ...prev])}
-        onAddOffer={(newOffer) => setOffers((prev) => [newOffer, ...prev])}
-        onAddPost={(newPost) => setPosts((prev) => [newPost, ...prev])}
-        onAddEvent={(newEvent) => setEvents((prev) => [newEvent, ...prev])}
-        onAddPromotion={(newPromo) => setPromotions((prev) => [newPromo, ...prev])}
+        onAddProduct={(newProd) => {
+          setProducts((prev) => [newProd, ...prev]);
+          syncMerchantProductToGlobal(newProd, {
+            name: currentBusiness.name,
+            address: currentBusiness.fullAddress,
+            phone: currentBusiness.phone,
+            locality: currentBusiness.locationArea,
+          });
+          marketplace?.addProduct({
+            name: newProd.name,
+            brand: currentBusiness.name,
+            cat: newProd.category,
+            localPriceNum: newProd.price,
+            onlinePriceNum: Math.round(newProd.price * 1.18),
+            store: currentBusiness.name,
+            storeAddress: currentBusiness.fullAddress,
+            phone: currentBusiness.phone,
+            inStock: newProd.status === 'Active',
+            unit: '1 item • Live Storefront',
+          });
+          window.dispatchEvent(new CustomEvent('myarea24_marketplace_sync'));
+          showMerchantToast(`✓ "${newProd.name}" added to catalog & published live to nearby citizens in ${currentBusiness.locationArea}!`);
+        }}
+        onAddService={(newSrv) => {
+          setServices((prev) => [newSrv, ...prev]);
+          marketplace?.addService({
+            name: newSrv.name,
+            cat: newSrv.category,
+            priceNum: newSrv.priceValue || 500,
+            phone: currentBusiness.phone,
+            locality: currentBusiness.locationArea,
+          });
+          window.dispatchEvent(new CustomEvent('myarea24_marketplace_sync'));
+          showMerchantToast(`✓ Service "${newSrv.name}" registered and published live!`);
+        }}
+        onAddOffer={(newOffer) => {
+          setOffers((prev) => [newOffer, ...prev]);
+          marketplace?.addOffer({
+            title: newOffer.title,
+            store: currentBusiness.name,
+            badge: newOffer.discountText,
+            code: newOffer.code,
+            cat: 'Food & Dining',
+            valid: '14 days left',
+          });
+          window.dispatchEvent(new CustomEvent('myarea24_marketplace_sync'));
+          showMerchantToast(`✓ Offer "${newOffer.title}" published live for area residents!`);
+        }}
+        onAddPost={(newPost) => {
+          setPosts((prev) => [newPost, ...prev]);
+          showMerchantToast(`✓ Community post "${newPost.title}" published!`);
+        }}
+        onAddEvent={(newEvent) => {
+          setEvents((prev) => [newEvent, ...prev]);
+          marketplace?.addEvent({
+            title: newEvent.title,
+            cat: newEvent.category,
+            loc: newEvent.venue,
+            time: newEvent.dateDisplay,
+          });
+          window.dispatchEvent(new CustomEvent('myarea24_marketplace_sync'));
+          showMerchantToast(`✓ Event "${newEvent.title}" published live in the local calendar!`);
+        }}
+        onAddPromotion={(newPromo) => {
+          setPromotions((prev) => [newPromo, ...prev]);
+          showMerchantToast(`✓ Local boost campaign "${newPromo.title}" launched!`);
+        }}
         businessName={currentBusiness.name}
       />
+
+      {/* LIVE TOAST FEEDBACK */}
+      {toastMsg && (
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-2xl border border-purple-500/40 flex items-center gap-2.5 text-xs font-bold animate-in fade-in slide-in-from-bottom-4">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{toastMsg}</span>
+        </div>
+      )}
     </div>
   );
 }

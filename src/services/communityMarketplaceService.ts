@@ -561,13 +561,54 @@ export function startVoiceRecognition(
       /api/v1/offers, /api/v1/events, /api/v1/emergency/facilities + Overpass
    ============================================================================ */
 
-const CUSTOM_BIZ_KEY = 'myarea24_custom_businesses_v1';
-const CUSTOM_PROD_KEY = 'myarea24_custom_products_v1';
-const CUSTOM_SVC_KEY = 'myarea24_custom_services_v1';
-const CUSTOM_OFFER_KEY = 'myarea24_custom_offers_v1';
-const CUSTOM_EVENT_KEY = 'myarea24_custom_events_v1';
+export const CUSTOM_BIZ_KEY = 'myarea24_custom_businesses_v1';
+export const CUSTOM_PROD_KEY = 'myarea24_custom_products_v1';
+export const CUSTOM_SVC_KEY = 'myarea24_custom_services_v1';
+export const CUSTOM_OFFER_KEY = 'myarea24_custom_offers_v1';
+export const CUSTOM_EVENT_KEY = 'myarea24_custom_events_v1';
+export const MERCHANT_REGISTRATION_KEY = 'myarea24_merchant_registered_v1';
 
-function loadLocalList<T>(key: string): T[] {
+export interface MerchantRegistrationProfile {
+  businessName: string;
+  category: string;
+  ownerName: string;
+  phone: string;
+  whatsapp: string;
+  email: string;
+  fullAddress: string;
+  locality: string;
+  city: string;
+  pincode: string;
+  docType: 'GSTIN' | 'MSME_UDYAM' | 'FSSAI' | 'TRADE_LICENSE' | 'SHOP_ACT';
+  docNumber: string;
+  openingTime: string;
+  closingTime: string;
+  isVerified: boolean;
+  registeredAt: string;
+}
+
+export function getStoredMerchantProfile(): MerchantRegistrationProfile | null {
+  try {
+    const raw = localStorage.getItem(MERCHANT_REGISTRATION_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.businessName && parsed.isVerified) {
+        return parsed;
+      }
+    }
+  } catch {}
+  return null;
+}
+
+export function saveMerchantRegistration(profile: MerchantRegistrationProfile): void {
+  try {
+    localStorage.setItem(MERCHANT_REGISTRATION_KEY, JSON.stringify(profile));
+    window.dispatchEvent(new CustomEvent('myarea24_merchant_registered', { detail: profile }));
+    window.dispatchEvent(new CustomEvent('myarea24_marketplace_sync'));
+  } catch {}
+}
+
+export function loadLocalList<T>(key: string): T[] {
   try {
     const raw = localStorage.getItem(key);
     if (raw) {
@@ -580,9 +621,10 @@ function loadLocalList<T>(key: string): T[] {
   return [];
 }
 
-function saveLocalList<T>(key: string, list: T[]): void {
+export function saveLocalList<T>(key: string, list: T[]): void {
   try {
     localStorage.setItem(key, JSON.stringify(list));
+    window.dispatchEvent(new CustomEvent('myarea24_marketplace_sync'));
   } catch {
     // ignore
   }
@@ -622,6 +664,19 @@ export function useLiveCommunityMarketplace(
 
   const refreshMarketplace = useCallback(() => {
     setRefreshTick((t) => t + 1);
+  }, []);
+
+  // Live Cross-Portal Synchronizer (triggers instant updates across tabs/portals on merchant updates)
+  useEffect(() => {
+    const handleSync = () => {
+      setRefreshTick((t) => t + 1);
+    };
+    window.addEventListener('myarea24_marketplace_sync', handleSync);
+    window.addEventListener('storage', handleSync);
+    return () => {
+      window.removeEventListener('myarea24_marketplace_sync', handleSync);
+      window.removeEventListener('storage', handleSync);
+    };
   }, []);
 
   useEffect(() => {
@@ -2134,4 +2189,95 @@ function buildLocalizedEvents(
       lng: lng - 0.0028,
     },
   ];
+}
+
+/* ============================================================================
+   MERCHANT PORTAL -> CITIZEN PORTAL LIVE GLOBAL SYNCHRONIZERS
+   Ensures every merchant action (add product, pause/resume stock, add deal)
+   is immediately and reliably visible to all citizens with all conditions set.
+   ============================================================================ */
+
+export function syncMerchantProductToGlobal(
+  prod: {
+    id?: string;
+    name: string;
+    price: number;
+    category: string;
+    description?: string;
+    image?: string;
+    status?: string;
+  },
+  business: {
+    name: string;
+    address: string;
+    phone: string;
+    locality?: string;
+    city?: string;
+  }
+): LiveProductItem | null {
+  // 1. Enforce Startup Business Conditions & Validation Rules
+  const cleanName = (prod.name || '').trim();
+  const cleanPrice = Number(prod.price || 0);
+  if (!cleanName || cleanName.length < 2 || cleanPrice <= 0) {
+    return null;
+  }
+
+  const locality = business.locality || 'Sector 10';
+  const city = business.city || 'Delhi';
+  const onlinePrice = Math.round(cleanPrice * 1.18); // 18% offline local savings benchmark
+  const savings = Math.max(0, onlinePrice - cleanPrice);
+
+  const mappedCat = mapToFrontendProdCategory(prod.category || 'Groceries');
+
+  const liveItem: LiveProductItem = {
+    id: prod.id || `merchant-prod-${Date.now()}`,
+    name: cleanName,
+    brand: business.name,
+    cat: mappedCat,
+    price: `₹${cleanPrice.toLocaleString('en-IN')}`,
+    localPriceNum: cleanPrice,
+    oldPrice: `₹${onlinePrice.toLocaleString('en-IN')}`,
+    onlinePriceNum: onlinePrice,
+    onlineProvider: 'Quick-Commerce MRP',
+    savingsAmount: savings,
+    savingsPercent: Math.round((savings / onlinePrice) * 100),
+    betterOffline: true,
+    unit: '1 unit • Live Store Stock',
+    store: business.name,
+    storeAddress: business.address,
+    phone: business.phone || '+91 98110 24024',
+    dist: '0.4 km',
+    distanceKm: 0.4,
+    rating: '4.8',
+    reviews: '(Verified)',
+    inStock: prod.status !== 'Paused',
+    freshnessLabel: 'Live Store Inventory',
+    discount: savings > 0 ? `Save ₹${savings}` : 'Store Price',
+    img: prod.image || pickProdImage(cleanName, mappedCat, 0),
+    lat: 28.7155,
+    lng: 77.1185,
+  };
+
+  const existing = loadLocalList<LiveProductItem>(CUSTOM_PROD_KEY);
+  // Remove duplicate with same id or matching name & store
+  const filtered = existing.filter(
+    (p) => p.id !== liveItem.id && !(p.name.toLowerCase() === liveItem.name.toLowerCase() && p.store === liveItem.store)
+  );
+  saveLocalList(CUSTOM_PROD_KEY, [liveItem, ...filtered]);
+  return liveItem;
+}
+
+export function syncMerchantProductToggle(productId: string, isPaused: boolean): void {
+  const existing = loadLocalList<LiveProductItem>(CUSTOM_PROD_KEY);
+  const updated = existing.map((p) => {
+    if (p.id === productId || p.id.includes(productId)) {
+      return {
+        ...p,
+        inStock: !isPaused,
+        freshnessLabel: isPaused ? 'Temporarily Paused' : 'In Stock Now',
+      };
+    }
+    return p;
+  });
+  saveLocalList(CUSTOM_PROD_KEY, updated);
 }

@@ -90,6 +90,22 @@ export function MerchantActionModals({
   });
 
   const [copiedReviewLink, setCopiedReviewLink] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const getProductImage = (cat: string) => {
+    switch (cat) {
+      case 'Groceries':
+        return './assets/crops/prod-arhar-dal.webp';
+      case 'Desserts':
+        return './assets/crops/offer-lapinoz.webp';
+      case 'Beverages':
+        return './assets/crops/biz-urban-chai.webp';
+      case 'Fuel':
+        return './assets/crops/store-apna-mart.webp';
+      default:
+        return './assets/crops/prod-atta.webp';
+    }
+  };
 
   return (
     <div
@@ -122,7 +138,7 @@ export function MerchantActionModals({
               <h3 className="font-extrabold text-sm text-white capitalize">
                 {modalType.replace(/_/g, ' ')}
               </h3>
-              <p className="text-[10px] text-purple-200">{businessName}</p>
+              <p className="text-[10px] text-purple-200">{businessName} • Live Area Network</p>
             </div>
           </div>
           <button
@@ -136,16 +152,30 @@ export function MerchantActionModals({
 
         {/* Modal Body */}
         <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+          {errorMsg && (
+            <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-bold text-[11px]">
+              ⚠️ {errorMsg}
+            </div>
+          )}
+
           {/* Form 1: Add Product */}
           {modalType.includes('product') && (
             <div className="space-y-3">
+              <div className="p-2.5 rounded-xl bg-purple-50 border border-purple-100 text-purple-900 text-[11px] leading-relaxed">
+                ⚡ <strong>Live Global Synchronization:</strong> When added, this product will immediately publish to citizen search, price comparison, and local store inventory with verified savings.
+              </div>
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Product Title</label>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Product Title <span className="text-rose-500">*</span>
+                </label>
                 <input
                   type="text"
-                  placeholder="e.g. Vanilla Bean Cold Brew"
+                  placeholder="e.g. Vanilla Bean Cold Brew (300ml)"
                   value={prodForm.name}
-                  onChange={(e) => setProdForm({ ...prodForm, name: e.target.value })}
+                  onChange={(e) => {
+                    setErrorMsg(null);
+                    setProdForm({ ...prodForm, name: e.target.value });
+                  }}
                   className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 font-medium focus:outline-none focus:border-purple-600"
                 />
               </div>
@@ -165,20 +195,26 @@ export function MerchantActionModals({
                   </select>
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Price (₹)</label>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Store Price (₹) <span className="text-rose-500">*</span>
+                  </label>
                   <input
                     type="number"
+                    min="1"
                     value={prodForm.price}
-                    onChange={(e) => setProdForm({ ...prodForm, price: Number(e.target.value) })}
+                    onChange={(e) => {
+                      setErrorMsg(null);
+                      setProdForm({ ...prodForm, price: Number(e.target.value) });
+                    }}
                     className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 font-bold focus:outline-none focus:border-purple-600"
                   />
                 </div>
               </div>
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Description</label>
+                <label className="block font-bold text-slate-700 mb-1">Description / Freshness</label>
                 <textarea
                   rows={2}
-                  placeholder="Freshly prepared with pure ingredients..."
+                  placeholder="Freshly prepared, in-stock for immediate pickup or delivery..."
                   value={prodForm.description}
                   onChange={(e) => setProdForm({ ...prodForm, description: e.target.value })}
                   className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 font-medium focus:outline-none"
@@ -188,23 +224,32 @@ export function MerchantActionModals({
               <button
                 type="button"
                 onClick={() => {
-                  if (!prodForm.name) return;
+                  if (!prodForm.name.trim() || prodForm.name.trim().length < 2) {
+                    setErrorMsg('Please enter a valid product name (minimum 2 characters).');
+                    return;
+                  }
+                  if (!prodForm.price || prodForm.price <= 0) {
+                    setErrorMsg('Product price must be greater than ₹0.');
+                    return;
+                  }
+
                   onAddProduct({
                     id: `prod-${Date.now()}`,
-                    name: prodForm.name,
+                    name: prodForm.name.trim(),
                     category: prodForm.category,
                     price: prodForm.price,
                     status: 'Active',
-                    views: 0,
+                    views: 1,
                     enquiries: 0,
-                    image: './assets/crops/biz-urban-chai.webp',
-                    description: prodForm.description,
+                    image: getProductImage(prodForm.category),
+                    description: prodForm.description.trim() || 'Fresh store stock ready for pickup',
                   });
                   onClose();
                 }}
-                className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold transition shadow-xs cursor-pointer"
+                className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold transition shadow-xs cursor-pointer flex items-center justify-center gap-2"
               >
-                Add Product to Catalog
+                <span>Publish Live to Local Citizens</span>
+                <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           )}

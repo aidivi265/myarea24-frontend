@@ -63,6 +63,7 @@ export interface DashboardCommonProps {
   marketplace?: LiveCommunityMarketplaceState;
   onAddToCart?: (item: { name: string; price: number }) => void;
   onOpenLocationPicker?: () => void;
+  onOpenMerchantRegistration?: () => void;
 }
 
 /* ============================================================================
@@ -186,6 +187,52 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
           onClick: () => onNavigate('ai-assistant'),
         }}
       />
+
+      {/* CITIZEN HELP & RAPID EMERGENCY ASSISTANCE HUB */}
+      <div className="bg-gradient-to-r from-rose-50/90 via-indigo-50/70 to-blue-50/90 border border-indigo-100 rounded-2xl p-4 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-3.5">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-rose-600 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+            <span className="text-xl">🚨</span>
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black uppercase tracking-wider text-rose-700 bg-rose-100/90 px-2 py-0.5 rounded-md">
+                Citizen Help Hub
+              </span>
+              <span className="text-xs font-extrabold text-slate-900">
+                Need Immediate Help or Emergency Services in {shortArea}?
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-600 mt-0.5">
+              1-tap access to 24×7 emergency helplines, nearest trauma facilities, open pharmacies, verified doorstep repair, and civic alerts.
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => onNavigate('emergency')}
+            className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+          >
+            <span>Emergency SOS (112 / 108)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate('services')}
+            className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+          >
+            <span>Doorstep Electrician / Plumber</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onAskAi(`I need urgent help in ${selectedArea}. What are the open emergency services nearby?`)}
+            className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Ask AI for Help</span>
+          </button>
+        </div>
+      </div>
 
       {/* ROW 2: 4 LIVE SIGNAL CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-3.5">
@@ -761,13 +808,6 @@ export const BusinessesDashboard: React.FC<DashboardCommonProps> = ({
   const [sortBy, setSortBy] = useState<'Nearest' | 'Top Rated' | 'Relevance'>('Nearest');
   const [minRating, setMinRating] = useState<'Any' | '4.5+' | '4.0+'>('Any');
 
-  // Merchant Add Business Modal State
-  const [showAddBiz, setShowAddBiz] = useState(false);
-  const [newBizName, setNewBizName] = useState('');
-  const [newBizCat, setNewBizCat] = useState('Restaurants');
-  const [newBizPhone, setNewBizPhone] = useState('+91 98110 24024');
-  const [newBizAddress, setNewBizAddress] = useState('');
-
   const shortArea = selectedArea.split(',')[0]?.trim() || selectedArea;
 
   const categories = [
@@ -817,20 +857,6 @@ export const BusinessesDashboard: React.FC<DashboardCommonProps> = ({
     { name: 'All', count: `${marketplace.businesses.length} discovered`, icon: MoreHorizontal, color: 'bg-slate-100 text-slate-600' },
   ];
 
-  const handleCreateBiz = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newBizName.trim()) return;
-    await marketplace.addBusiness({
-      name: newBizName.trim(),
-      cat: newBizCat,
-      phone: newBizPhone.trim(),
-      address: newBizAddress.trim() || `${shortArea}, ${liveIntel.location.city}`,
-    });
-    setNewBizName('');
-    setNewBizAddress('');
-    setShowAddBiz(false);
-  };
-
   return (
     <div className="space-y-4">
       <HeroBanner
@@ -869,84 +895,15 @@ export const BusinessesDashboard: React.FC<DashboardCommonProps> = ({
             </div>
             <button
               type="button"
-              onClick={() => setShowAddBiz((v) => !v)}
+              onClick={() => (onOpenMerchantRegistration ? onOpenMerchantRegistration() : onNavigate('businesses'))}
               className="w-full py-2 rounded-xl bg-white text-indigo-950 hover:bg-blue-50 text-xs font-extrabold flex items-center justify-center gap-1.5 shadow cursor-pointer transition"
             >
-              <Plus className="w-4 h-4 text-indigo-600" />
-              <span>List Your Local Business in {shortArea}</span>
+              <Store className="w-4 h-4 text-indigo-600" />
+              <span>Are you a shop owner? Join Merchant Hub</span>
             </button>
           </div>
         }
       />
-
-      {/* Merchant Onboarding Drawer (/api/v1/businesses POST) */}
-      {showAddBiz && (
-        <form
-          onSubmit={handleCreateBiz}
-          className="bg-indigo-50/90 border border-indigo-200 rounded-2xl p-4 shadow-card space-y-3"
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="text-xs font-extrabold text-indigo-950">
-                🏪 List a Local Business in {selectedArea} (Synced with /api/v1/businesses)
-              </h4>
-              <p className="text-[11px] text-slate-600">
-                Instantly appears in local discovery for residents in {shortArea}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowAddBiz(false)}
-              className="text-slate-400 hover:text-slate-700"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
-            <input
-              type="text"
-              required
-              value={newBizName}
-              onChange={(e) => setNewBizName(e.target.value)}
-              placeholder="Business / Shop Name *"
-              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-800 focus:outline-none"
-            />
-            <select
-              value={newBizCat}
-              onChange={(e) => setNewBizCat(e.target.value)}
-              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-800 focus:outline-none"
-            >
-              {categories.filter((c) => c !== 'All').map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-            <input
-              type="text"
-              value={newBizPhone}
-              onChange={(e) => setNewBizPhone(e.target.value)}
-              placeholder="Contact / WhatsApp Number"
-              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-800 focus:outline-none"
-            />
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={newBizAddress}
-                onChange={(e) => setNewBizAddress(e.target.value)}
-                placeholder={`Street / Block in ${shortArea}`}
-                className="flex-1 px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-800 focus:outline-none"
-              />
-              <button
-                type="submit"
-                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold shrink-0 cursor-pointer"
-              >
-                Publish
-              </button>
-            </div>
-          </div>
-        </form>
-      )}
 
       {/* Category Pills Strip */}
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
@@ -1250,11 +1207,6 @@ export const ProductsDashboard: React.FC<DashboardCommonProps> = ({
 
   const [selectedCat, setSelectedCat] = useState('All');
   const [addedIds, setAddedIds] = useState<string[]>([]);
-  const [showAddProd, setShowAddProd] = useState(false);
-  const [prodName, setProdName] = useState('');
-  const [prodCat, setProdCat] = useState('Groceries');
-  const [prodLocalPrice, setProdLocalPrice] = useState('120');
-  const [prodOnlinePrice, setProdOnlinePrice] = useState('145');
 
   const shortArea = selectedArea.split(',')[0]?.trim() || selectedArea;
   const { mandiRates, fuelRates } = liveIntel;
@@ -1277,19 +1229,6 @@ export const ProductsDashboard: React.FC<DashboardCommonProps> = ({
   const handleAdd = (p: { id: string; name: string; localPriceNum: number }) => {
     setAddedIds((prev) => (prev.includes(p.id) ? prev : [...prev, p.id]));
     onAddToCart?.({ name: p.name, price: p.localPriceNum });
-  };
-
-  const handleCreateProduct = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!prodName.trim()) return;
-    await marketplace.addProduct({
-      name: prodName.trim(),
-      cat: prodCat,
-      localPriceNum: Number(prodLocalPrice) || 120,
-      onlinePriceNum: Number(prodOnlinePrice) || 145,
-    });
-    setProdName('');
-    setShowAddProd(false);
   };
 
   return (
@@ -1317,69 +1256,10 @@ export const ProductsDashboard: React.FC<DashboardCommonProps> = ({
           { icon: <span>📱</span>, label: 'Electronics stores', onClick: () => setSelectedCat('Electronics') },
         ]}
         primaryCta={{
-          label: '+ Add Merchant Product',
-          onClick: () => setShowAddProd((v) => !v),
+          label: 'Compare Offline vs Online Savings',
+          onClick: () => setSelectedCat('Groceries'),
         }}
       />
-
-      {showAddProd && (
-        <form
-          onSubmit={handleCreateProduct}
-          className="bg-indigo-50/90 border border-indigo-200 rounded-2xl p-4 shadow-card space-y-3"
-        >
-          <div className="flex items-center justify-between">
-            <h4 className="text-xs font-extrabold text-indigo-950">
-              📦 Add Product to Local Inventory in {shortArea} (POST `/api/v1/products`)
-            </h4>
-            <button type="button" onClick={() => setShowAddProd(false)} className="text-slate-400 hover:text-slate-700">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
-            <input
-              type="text"
-              required
-              value={prodName}
-              onChange={(e) => setProdName(e.target.value)}
-              placeholder="Product Name (e.g. Organic Toor Dal 1kg)"
-              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs"
-            />
-            <select
-              value={prodCat}
-              onChange={(e) => setProdCat(e.target.value)}
-              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs"
-            >
-              {categories.filter((c) => c !== 'All').map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-            <input
-              type="number"
-              value={prodLocalPrice}
-              onChange={(e) => setProdLocalPrice(e.target.value)}
-              placeholder="Local Store Price (₹)"
-              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs"
-            />
-            <div className="flex gap-2">
-              <input
-                type="number"
-                value={prodOnlinePrice}
-                onChange={(e) => setProdOnlinePrice(e.target.value)}
-                placeholder="Online App Price (₹)"
-                className="flex-1 px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs"
-              />
-              <button
-                type="submit"
-                className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-extrabold cursor-pointer"
-              >
-                Add
-              </button>
-            </div>
-          </div>
-        </form>
-      )}
 
       {/* Category Pills */}
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
@@ -1691,12 +1571,6 @@ export const ServicesDashboard: React.FC<DashboardCommonProps> = ({
   const marketplace = propMarketplace || fallbackMarketplace;
 
   const [selectedCat, setSelectedCat] = useState('All');
-  const [showAddSvc, setShowAddSvc] = useState(false);
-  const [proName, setProName] = useState('');
-  const [proCat, setProCat] = useState('Home Repair');
-  const [proPrice, setProPrice] = useState('299');
-  const [proPhone, setProPhone] = useState('+91 98112 44101');
-
   const shortArea = selectedArea.split(',')[0]?.trim() || selectedArea;
 
   const serviceCats = [
@@ -1712,19 +1586,6 @@ export const ServicesDashboard: React.FC<DashboardCommonProps> = ({
   const filteredServices = marketplace.services.filter(
     (s) => selectedCat === 'All' || s.cat.toLowerCase().includes(selectedCat.toLowerCase())
   );
-
-  const handleCreateService = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!proName.trim()) return;
-    await marketplace.addService({
-      name: proName.trim(),
-      cat: proCat,
-      priceNum: Number(proPrice) || 299,
-      phone: proPhone.trim(),
-    });
-    setProName('');
-    setShowAddSvc(false);
-  };
 
   return (
     <div className="space-y-4">
@@ -1743,7 +1604,7 @@ export const ServicesDashboard: React.FC<DashboardCommonProps> = ({
           { icon: <span>🛡️</span>, label: 'Verified professionals' },
           { icon: <span>📍</span>, label: `Local in ${shortArea}` },
           { icon: <span>⭐</span>, label: 'Ratings & reviews' },
-          { icon: <span>➕</span>, label: 'Register as Service Pro', onClick: () => setShowAddSvc((v) => !v) },
+          { icon: <span>⚡</span>, label: 'Instant Emergency Repair', onClick: () => setSelectedCat('Home Repair') },
         ]}
         askAiWidget={{
           placeholder: `Search for a service in ${shortArea}...`,
@@ -1751,65 +1612,6 @@ export const ServicesDashboard: React.FC<DashboardCommonProps> = ({
           onAsk: (q) => onAskAi(`Find trusted local professionals for ${q} in ${selectedArea}`),
         }}
       />
-
-      {showAddSvc && (
-        <form
-          onSubmit={handleCreateService}
-          className="bg-indigo-50/90 border border-indigo-200 rounded-2xl p-4 shadow-card space-y-3"
-        >
-          <div className="flex items-center justify-between">
-            <h4 className="text-xs font-extrabold text-indigo-950">
-              🔧 Register as a Local Professional in {shortArea} (POST `/api/v1/services`)
-            </h4>
-            <button type="button" onClick={() => setShowAddSvc(false)} className="text-slate-400 hover:text-slate-700">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
-            <input
-              type="text"
-              required
-              value={proName}
-              onChange={(e) => setProName(e.target.value)}
-              placeholder="Provider / Technician Name *"
-              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs"
-            />
-            <select
-              value={proCat}
-              onChange={(e) => setProCat(e.target.value)}
-              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs"
-            >
-              {serviceCats.filter((c) => c.label !== 'All').map((c) => (
-                <option key={c.label} value={c.label}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-            <input
-              type="number"
-              value={proPrice}
-              onChange={(e) => setProPrice(e.target.value)}
-              placeholder="Starting Visit Fee (₹)"
-              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs"
-            />
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={proPhone}
-                onChange={(e) => setProPhone(e.target.value)}
-                placeholder="Phone / WhatsApp"
-                className="flex-1 px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs"
-              />
-              <button
-                type="submit"
-                className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-extrabold cursor-pointer"
-              >
-                Register
-              </button>
-            </div>
-          </div>
-        </form>
-      )}
 
       {/* Service Category Strip */}
       <div className="bg-white rounded-2xl p-3 shadow-card border border-slate-200/70 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
@@ -1838,15 +1640,11 @@ export const ServicesDashboard: React.FC<DashboardCommonProps> = ({
                 <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
                   <Star className="w-4 h-4 text-amber-400 fill-amber-400" /> Available Services in {shortArea} ({filteredServices.length})
                 </h3>
-                <p className="text-[11px] text-slate-500">Live professionals connected via `/api/v1/services`</p>
+                <p className="text-[11px] text-slate-500">Live verified doorstep professionals in {shortArea}</p>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowAddSvc(true)}
-                className="text-xs font-semibold text-blue-600 cursor-pointer"
-              >
-                + Register Pro ›
-              </button>
+              <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
+                ✓ 100% Background Verified
+              </span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -2018,11 +1816,6 @@ export const OffersDashboard: React.FC<DashboardCommonProps> = ({
 
   const [selectedCat, setSelectedCat] = useState('All Offers');
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
-  const [showAddOffer, setShowAddOffer] = useState(false);
-  const [offerTitle, setOfferTitle] = useState('');
-  const [offerStore, setOfferStore] = useState('');
-  const [offerBadge, setOfferBadge] = useState('30% OFF');
-  const [offerCode, setOfferCode] = useState('LOCAL30');
 
   const shortArea = selectedArea.split(',')[0]?.trim() || selectedArea;
 
@@ -2045,20 +1838,6 @@ export const OffersDashboard: React.FC<DashboardCommonProps> = ({
     setTimeout(() => setCopiedCode(null), 2200);
   };
 
-  const handleCreateOffer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!offerTitle.trim()) return;
-    await marketplace.addOffer({
-      title: offerTitle.trim(),
-      store: offerStore.trim() || `${shortArea} Partner Store`,
-      badge: offerBadge.trim() || '25% OFF',
-      code: offerCode.trim() || 'MYAREA25',
-    });
-    setOfferTitle('');
-    setOfferStore('');
-    setShowAddOffer(false);
-  };
-
   return (
     <div className="space-y-4">
       <HeroBanner
@@ -2075,7 +1854,7 @@ export const OffersDashboard: React.FC<DashboardCommonProps> = ({
         bottomPills={[
           { icon: <span>🛡️</span>, label: 'Verified offers' },
           { icon: <span>🏪</span>, label: `Local stores in ${shortArea}` },
-          { icon: <span>➕</span>, label: 'Post a Merchant Offer', onClick: () => setShowAddOffer((v) => !v) },
+          { icon: <span>⚡</span>, label: 'Instant Coupon Redemption', onClick: () => setSelectedCat('All Offers') },
         ]}
         rightWidget={
           <div className="w-full lg:w-[340px] bg-white/12 backdrop-blur-md border border-white/20 rounded-2xl p-4">
@@ -2092,72 +1871,17 @@ export const OffersDashboard: React.FC<DashboardCommonProps> = ({
             </div>
             <button
               type="button"
-              onClick={() => setShowAddOffer((v) => !v)}
+              onClick={() => (onOpenMerchantRegistration ? onOpenMerchantRegistration() : onNavigate('offers'))}
               className="w-full bg-white text-slate-800 hover:bg-blue-50 rounded-full px-3.5 py-2 text-xs font-bold flex items-center justify-between shadow-sm transition cursor-pointer"
             >
               <span className="flex items-center gap-1.5">
-                <Bell className="w-3.5 h-3.5 text-indigo-600" /> + Post New Local Offer
+                <Store className="w-3.5 h-3.5 text-indigo-600" /> Merchant Deals Hub
               </span>
               <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center">→</span>
             </button>
           </div>
         }
       />
-
-      {showAddOffer && (
-        <form
-          onSubmit={handleCreateOffer}
-          className="bg-indigo-50/90 border border-indigo-200 rounded-2xl p-4 shadow-card space-y-3"
-        >
-          <div className="flex items-center justify-between">
-            <h4 className="text-xs font-extrabold text-indigo-950">
-              🏷️ Publish a Hyperlocal Offer in {shortArea} (POST `/api/v1/offers`)
-            </h4>
-            <button type="button" onClick={() => setShowAddOffer(false)} className="text-slate-400 hover:text-slate-700">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
-            <input
-              type="text"
-              required
-              value={offerTitle}
-              onChange={(e) => setOfferTitle(e.target.value)}
-              placeholder="Offer Title (e.g. Flat 30% Off on Bill)"
-              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs"
-            />
-            <input
-              type="text"
-              value={offerStore}
-              onChange={(e) => setOfferStore(e.target.value)}
-              placeholder={`Store Name in ${shortArea}`}
-              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs"
-            />
-            <input
-              type="text"
-              value={offerBadge}
-              onChange={(e) => setOfferBadge(e.target.value)}
-              placeholder="Discount Badge (e.g. 30% OFF)"
-              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs"
-            />
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={offerCode}
-                onChange={(e) => setOfferCode(e.target.value)}
-                placeholder="Coupon Code"
-                className="flex-1 px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs uppercase"
-              />
-              <button
-                type="submit"
-                className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-extrabold cursor-pointer"
-              >
-                Publish
-              </button>
-            </div>
-          </div>
-        </form>
-      )}
 
       {/* Category Strip */}
       <div className="bg-white rounded-2xl p-2.5 shadow-card border border-slate-200/70 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
@@ -2338,11 +2062,6 @@ export const EventsDashboard: React.FC<DashboardCommonProps> = ({
 
   const [selectedCat, setSelectedCat] = useState('All Events');
   const [selectedDay, setSelectedDay] = useState(16);
-  const [showAddEvent, setShowAddEvent] = useState(false);
-  const [evTitle, setEvTitle] = useState('');
-  const [evCat, setEvCat] = useState('Community');
-  const [evTime, setEvTime] = useState('6:00 PM – 9:00 PM');
-  const [evVenue, setEvVenue] = useState('');
 
   const shortArea = selectedArea.split(',')[0]?.trim() || selectedArea;
 
@@ -2359,20 +2078,6 @@ export const EventsDashboard: React.FC<DashboardCommonProps> = ({
   const filteredEvents = marketplace.events.filter(
     (e) => selectedCat === 'All Events' || e.cat.toLowerCase().includes(selectedCat.toLowerCase())
   );
-
-  const handleCreateEvent = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!evTitle.trim()) return;
-    await marketplace.addEvent({
-      title: evTitle.trim(),
-      cat: evCat,
-      time: evTime.trim(),
-      loc: evVenue.trim() || `${shortArea} Community Ground`,
-    });
-    setEvTitle('');
-    setEvVenue('');
-    setShowAddEvent(false);
-  };
 
   return (
     <div className="space-y-4">
@@ -2406,10 +2111,10 @@ export const EventsDashboard: React.FC<DashboardCommonProps> = ({
               </div>
               <button
                 type="button"
-                onClick={() => setShowAddEvent((v) => !v)}
-                className="px-3 py-1.5 rounded-xl bg-white text-indigo-950 text-xs font-extrabold cursor-pointer"
+                onClick={() => (onOpenMerchantRegistration ? onOpenMerchantRegistration() : onNavigate('events'))}
+                className="px-3 py-1.5 rounded-xl bg-white text-indigo-950 text-xs font-extrabold cursor-pointer hover:bg-blue-50 transition"
               >
-                + Host Event
+                Organizer Hub ›
               </button>
             </div>
             <div className="flex items-center justify-between text-[10px] text-blue-100">
@@ -2421,65 +2126,6 @@ export const EventsDashboard: React.FC<DashboardCommonProps> = ({
           </div>
         }
       />
-
-      {showAddEvent && (
-        <form
-          onSubmit={handleCreateEvent}
-          className="bg-indigo-50/90 border border-indigo-200 rounded-2xl p-4 shadow-card space-y-3"
-        >
-          <div className="flex items-center justify-between">
-            <h4 className="text-xs font-extrabold text-indigo-950">
-              📅 Host / Submit a Community Event in {shortArea} (POST `/api/v1/events`)
-            </h4>
-            <button type="button" onClick={() => setShowAddEvent(false)} className="text-slate-400 hover:text-slate-700">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
-            <input
-              type="text"
-              required
-              value={evTitle}
-              onChange={(e) => setEvTitle(e.target.value)}
-              placeholder="Event Title *"
-              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs"
-            />
-            <select
-              value={evCat}
-              onChange={(e) => setEvCat(e.target.value)}
-              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs"
-            >
-              {eventCats.filter((c) => c !== 'All Events').map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-            <input
-              type="text"
-              value={evTime}
-              onChange={(e) => setEvTime(e.target.value)}
-              placeholder="Time (e.g. Sunday 5:00 PM)"
-              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs"
-            />
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={evVenue}
-                onChange={(e) => setEvVenue(e.target.value)}
-                placeholder={`Venue in ${shortArea}`}
-                className="flex-1 px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs"
-              />
-              <button
-                type="submit"
-                className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-extrabold cursor-pointer"
-              >
-                Publish
-              </button>
-            </div>
-          </div>
-        </form>
-      )}
 
       {/* Category Pills */}
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
