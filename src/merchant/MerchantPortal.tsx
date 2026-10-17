@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   MerchantDashboardId,
-  MerchantDeviceViewMode,
   MerchantBusinessInfo,
   MerchantProductItem,
   MerchantServiceItem,
@@ -55,6 +54,7 @@ import {
   ChevronRight,
   HelpCircle,
   CheckCircle2,
+  Globe,
 } from 'lucide-react';
 import { MerchantHomeDashboard } from './dashboards/MerchantHomeDashboard';
 import { MerchantProfileDashboard } from './dashboards/MerchantProfileDashboard';
@@ -70,7 +70,6 @@ import { MerchantPromotionsDashboard } from './dashboards/MerchantPromotionsDash
 import { MerchantPaymentsDashboard } from './dashboards/MerchantPaymentsDashboard';
 import { MerchantSettingsDashboard } from './dashboards/MerchantSettingsDashboard';
 import { MerchantMobileAppView } from './components/MerchantMobileAppView';
-import { MerchantVisualGuideComparison } from './components/MerchantVisualGuideComparison';
 import { MerchantActionModals } from './components/MerchantActionModals';
 
 interface MerchantPortalProps {
@@ -93,7 +92,6 @@ export function MerchantPortal({ onSwitchToCitizen }: MerchantPortalProps) {
   });
 
   const [activeDashboard, setActiveDashboard] = useState<MerchantDashboardId>('overview');
-  const [viewMode, setViewMode] = useState<MerchantDeviceViewMode>('desktop');
   const [searchQuery, setSearchQuery] = useState('');
   const [modalType, setModalType] = useState<string | null>(null);
 
@@ -349,108 +347,55 @@ export function MerchantPortal({ onSwitchToCitizen }: MerchantPortalProps) {
   return (
     <div className="min-h-screen bg-[#F4F6FB] text-slate-900 flex flex-col font-sans">
       {/* =========================================================================
-          TOP BANNER: DEVICE VIEW MODE & SWITCH TO CITIZEN APP
+          1. NATIVE MOBILE APP VIEW (< lg)
+             Automatically renders full-screen on mobile devices:
+             100% full-width, clean native app bar, native cards, and fixed bottom navigation.
          ========================================================================= */}
-      <div className="bg-[#0F0826] text-white px-4 py-2 flex items-center justify-between text-xs border-b border-indigo-950/60 sticky top-0 z-40 select-none">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={onSwitchToCitizen}
-            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 text-purple-200 hover:text-white transition font-bold cursor-pointer"
-          >
-            <span>← Switch to Citizen View</span>
-          </button>
-          <span className="hidden sm:inline text-white/40">|</span>
-          <span className="hidden sm:inline font-bold text-white/90">
-            Storefront: <strong className="text-purple-300 font-extrabold">{currentBusiness.name}</strong>
-          </span>
-        </div>
-
-        {/* View Mode Switcher: Desktop | App | Comparison */}
-        <div className="flex items-center gap-1 bg-white/10 p-1 rounded-2xl border border-white/10">
-          <button
-            type="button"
-            onClick={() => setViewMode('desktop')}
-            className={`px-3 py-1 rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer ${
-              viewMode === 'desktop' ? 'bg-purple-600 text-white shadow-xs' : 'text-purple-200 hover:text-white'
-            }`}
-          >
-            <Monitor className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">Desktop Website</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setViewMode('app')}
-            className={`px-3 py-1 rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer ${
-              viewMode === 'app' ? 'bg-purple-600 text-white shadow-xs' : 'text-purple-200 hover:text-white'
-            }`}
-          >
-            <Smartphone className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">Phone Application</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setViewMode('comparison')}
-            className={`px-3 py-1 rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer ${
-              viewMode === 'comparison' ? 'bg-indigo-600 text-white shadow-xs' : 'text-purple-200 hover:text-white'
-            }`}
-          >
-            <Eye className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">Visual Guide Comparison</span>
-          </button>
-        </div>
+      <div className="lg:hidden flex-1 flex flex-col w-full min-h-screen">
+        <MerchantMobileAppView
+          business={currentBusiness}
+          activeDashboard={activeDashboard}
+          onNavigate={setActiveDashboard}
+          onSwitchBusiness={handleSwitchBusiness}
+          onOpenQuickAction={setModalType}
+          products={products}
+          services={services}
+          offers={offers}
+          posts={posts}
+          events={events}
+          reviews={reviews}
+          conversations={conversations}
+          activeConversationId={activeConversationId}
+          leads={leads}
+          promotions={promotions}
+          invoices={invoices}
+          onToggleProductStatus={handleToggleProductStatus}
+          onToggleServiceStatus={handleToggleServiceStatus}
+          onToggleOfferStatus={handleToggleOfferStatus}
+          onToggleLikePost={handleToggleLikePost}
+          onSelectConversation={setActiveConversationId}
+          onSendMessage={handleSendMessage}
+          onUpdateLeadStatus={handleUpdateLeadStatus}
+          onAddReplyToReview={handleAddReplyToReview}
+          onUpdateBusiness={handleUpdateBusiness}
+          onOpenAddProductModal={() => setModalType('add_product')}
+          onOpenAddServiceModal={() => setModalType('add_service')}
+          onOpenCreateOfferModal={() => setModalType('add_offer')}
+          onOpenCreatePostModal={() => setModalType('create_post')}
+          onOpenCreateEventModal={() => setModalType('create_event')}
+          onOpenRequestReviewModal={() => setModalType('request_review')}
+          onOpenCreatePromoModal={(type) => setModalType(type ? `create_${type}` : 'create_promo')}
+          onSwitchToCitizen={onSwitchToCitizen}
+        />
       </div>
 
       {/* =========================================================================
-          IF VIEW MODE === 'app': RENDER THE EXACT PHONE APP MOCKUP
+          2. DESKTOP WEBSITE LAYOUT (>= lg)
+             Left Sidebar (235px) + Sticky Top Header (h-16) + Main Body
          ========================================================================= */}
-      {viewMode === 'app' ? (
-        <div className="flex-1 flex items-center justify-center p-4">
-          <MerchantMobileAppView
-            business={currentBusiness}
-            activeDashboard={activeDashboard}
-            onNavigate={setActiveDashboard}
-            onSwitchBusiness={handleSwitchBusiness}
-            onOpenQuickAction={setModalType}
-            products={products}
-            services={services}
-            offers={offers}
-            posts={posts}
-            events={events}
-            reviews={reviews}
-            conversations={conversations}
-            activeConversationId={activeConversationId}
-            leads={leads}
-            promotions={promotions}
-            invoices={invoices}
-            onToggleProductStatus={handleToggleProductStatus}
-            onToggleServiceStatus={handleToggleServiceStatus}
-            onToggleOfferStatus={handleToggleOfferStatus}
-            onToggleLikePost={handleToggleLikePost}
-            onSelectConversation={setActiveConversationId}
-            onSendMessage={handleSendMessage}
-            onUpdateLeadStatus={handleUpdateLeadStatus}
-            onAddReplyToReview={handleAddReplyToReview}
-            onUpdateBusiness={handleUpdateBusiness}
-            onOpenAddProductModal={() => setModalType('add_product')}
-            onOpenAddServiceModal={() => setModalType('add_service')}
-            onOpenCreateOfferModal={() => setModalType('add_offer')}
-            onOpenCreatePostModal={() => setModalType('create_post')}
-            onOpenCreateEventModal={() => setModalType('create_event')}
-            onOpenRequestReviewModal={() => setModalType('request_review')}
-            onOpenCreatePromoModal={(type) => setModalType(type ? `create_${type}` : 'create_promo')}
-            onSwitchToCitizen={onSwitchToCitizen}
-          />
-        </div>
-      ) : (
-        /* =======================================================================
-            DESKTOP WEBSITE LAYOUT (Left Sidebar 235px + Top Header + Main Body)
-           ======================================================================= */
-        <div className="flex-1 flex min-h-0">
-          {/* LEFT SIDEBAR (Exact Navigation from Page 1 of PDF) */}
-          <aside className="w-[235px] shrink-0 bg-white border-r border-slate-200/80 flex flex-col justify-between select-none sticky top-10 h-[calc(100vh-40px)]">
+      <div className="hidden lg:flex flex-1 min-h-0">
+        {/* LEFT SIDEBAR (Exact Navigation from Page 1 of PDF) */}
+        <aside className="w-[235px] shrink-0 bg-white border-r border-slate-200/80 flex flex-col justify-between select-none sticky top-0 h-screen">
             <div className="p-3.5 overflow-y-auto no-scrollbar">
               {/* Brand Logo & Merchant Portal Pill */}
               <div className="px-2 pt-1 pb-4">
@@ -587,6 +532,21 @@ export function MerchantPortal({ onSwitchToCitizen }: MerchantPortalProps) {
               </div>
             </div>
 
+            {/* Switch to Citizen Button in Sidebar */}
+            <div className="px-3.5 pb-2">
+              <button
+                type="button"
+                onClick={onSwitchToCitizen}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-blue-700 bg-blue-50/80 hover:bg-blue-100/80 border border-blue-200/60 transition cursor-pointer"
+              >
+                <span className="flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-blue-600" />
+                  <span>Citizen Portal</span>
+                </span>
+                <ChevronRight className="w-3.5 h-3.5 text-blue-400" />
+              </button>
+            </div>
+
             {/* Need Help? Box at bottom */}
             <div className="p-3.5 border-t border-slate-100">
               <div className="rounded-2xl bg-gradient-to-r from-purple-50 to-indigo-50 p-3 border border-purple-200/60">
@@ -609,7 +569,7 @@ export function MerchantPortal({ onSwitchToCitizen }: MerchantPortalProps) {
           {/* MAIN COLUMN: Header + Active Dashboard */}
           <div className="flex-1 flex flex-col min-w-0">
             {/* DESKTOP TOP HEADER */}
-            <header className="h-16 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-6 flex items-center justify-between gap-4 sticky top-10 z-30">
+            <header className="h-16 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-6 flex items-center justify-between gap-4 sticky top-0 z-30">
               <div className="flex items-center gap-4 flex-1 max-w-2xl">
                 {/* Location / Business Selector */}
                 <div className="relative">
@@ -667,7 +627,18 @@ export function MerchantPortal({ onSwitchToCitizen }: MerchantPortalProps) {
               </div>
 
               {/* Right Pills */}
-              <div className="flex items-center gap-3 shrink-0">
+              <div className="flex items-center gap-2.5 shrink-0">
+                {/* Switch to Citizen Portal Pill */}
+                <button
+                  type="button"
+                  onClick={onSwitchToCitizen}
+                  className="px-3.5 py-1.5 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm shadow-blue-500/20 transition cursor-pointer"
+                  title="Switch to Resident / Citizen View"
+                >
+                  <Globe className="w-3.5 h-3.5 text-blue-200" />
+                  <span>Switch to Citizen View</span>
+                </button>
+
                 <span className="px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-xs font-bold text-amber-800 flex items-center gap-1.5">
                   <Sun className="w-3.5 h-3.5 text-amber-500 fill-amber-400" />
                   <span>28°C</span>
@@ -813,18 +784,11 @@ export function MerchantPortal({ onSwitchToCitizen }: MerchantPortalProps) {
             {/* DESKTOP MAIN BODY */}
             <main className="flex-1 p-6 pb-12 overflow-y-auto">
               <div className="max-w-[1360px] mx-auto">
-                {viewMode === 'comparison' ? (
-                  <MerchantVisualGuideComparison activeDashboard={activeDashboard}>
-                    {renderActiveDashboardContent()}
-                  </MerchantVisualGuideComparison>
-                ) : (
-                  renderActiveDashboardContent()
-                )}
+                {renderActiveDashboardContent()}
               </div>
             </main>
           </div>
         </div>
-      )}
 
       {/* =========================================================================
           INTERACTIVE ACTION MODALS MANAGER

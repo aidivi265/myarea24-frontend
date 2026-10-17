@@ -1364,7 +1364,7 @@ export const MobileAppView: React.FC<MobileAppViewProps> = ({
       </div>
 
       {/* Main Mobile Screen Body */}
-      <div className="flex-1">{renderMobileScreenBody()}</div>
+      <div className="flex-1 pb-20">{renderMobileScreenBody()}</div>
 
       {/* =====================================================================
           FIXED 5-BUTTON BOTTOM NAVIGATION BAR
