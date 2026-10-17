@@ -75,6 +75,7 @@ interface MobileAppViewProps {
   onOpenLocationPicker: () => void;
   onOpenNotifications: () => void;
   onOpenProfile: () => void;
+  onSwitchToMerchant?: () => void;
 }
 
 export const MobileAppView: React.FC<MobileAppViewProps> = ({
@@ -88,6 +89,7 @@ export const MobileAppView: React.FC<MobileAppViewProps> = ({
   onOpenLocationPicker,
   onOpenNotifications,
   onOpenProfile,
+  onSwitchToMerchant,
 }) => {
   const [moreDrawerOpen, setMoreDrawerOpen] = useState(false);
   const [mobileSearch, setMobileSearch] = useState('');
@@ -1537,6 +1539,32 @@ export const MobileAppView: React.FC<MobileAppViewProps> = ({
                 Change ›
               </span>
             </div>
+
+            {/* Merchant Portal Banner for Business Owners */}
+            {onSwitchToMerchant && (
+              <div
+                onClick={() => {
+                  setMoreDrawerOpen(false);
+                  onSwitchToMerchant();
+                }}
+                className="mb-4 p-3 rounded-2xl bg-gradient-to-r from-[#0B1739] via-[#1E1B4B] to-[#312E81] text-white flex items-center justify-between shadow-sm border border-indigo-900/60 cursor-pointer active:scale-98 transition"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300 shrink-0">
+                    <Store className="w-5 h-5 text-indigo-300" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-extrabold text-white flex items-center gap-1.5">
+                      Merchant Portal <span className="px-1.5 py-0.2 rounded-full bg-amber-400/20 text-amber-300 text-[9px] font-bold">Business</span>
+                    </h4>
+                    <p className="text-[10px] text-indigo-200">Manage storefront, catalog, ads & leads</p>
+                  </div>
+                </div>
+                <span className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-extrabold shrink-0 shadow-xs">
+                  Switch ›
+                </span>
+              </div>
+            )}
 
             <div className="space-y-4">
               {/* Explore & Local Commerce */}

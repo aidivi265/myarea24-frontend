@@ -14,6 +14,7 @@ import {
   syncSavedBookmarkToBackend,
   getStoredAuthUser,
 } from './services/communityMarketplaceService';
+import { MerchantPortal } from './merchant/MerchantPortal';
 import {
   HomeDashboard,
   BusinessesDashboard,
@@ -102,6 +103,27 @@ const ICON_MAP: Record<DashboardId, React.ElementType> = {
 const SAVED_STORAGE_KEY = 'myarea24_saved_items_v1';
 
 export function App() {
+  // Portal Mode: 'merchant' (Merchant Portal for business owners) or 'citizen' (General Resident/Citizen view)
+  const [portalMode, setPortalMode] = useState<'citizen' | 'merchant'>(() => {
+    const hash = window.location.hash.toLowerCase();
+    const search = window.location.search.toLowerCase();
+    if (hash.includes('citizen') || search.includes('portal=citizen')) {
+      return 'citizen';
+    }
+    // Default to merchant portal as requested by user
+    return 'merchant';
+  });
+
+  useEffect(() => {
+    const handleHash = () => {
+      const h = window.location.hash.toLowerCase();
+      if (h.includes('citizen')) setPortalMode('citizen');
+      else if (h.includes('merchant')) setPortalMode('merchant');
+    };
+    window.addEventListener('hashchange', handleHash);
+    return () => window.removeEventListener('hashchange', handleHash);
+  }, []);
+
   const [activeDashboard, setActiveDashboard] = useState<DashboardId>('home');
 
   // Real-World Blinkit / Uber Style Location State
@@ -280,6 +302,17 @@ export function App() {
     }
   };
 
+  if (portalMode === 'merchant') {
+    return (
+      <MerchantPortal
+        onSwitchToCitizen={() => {
+          setPortalMode('citizen');
+          window.location.hash = '#citizen';
+        }}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#F3F5FB] text-slate-900 flex flex-col">
       {/* =====================================================================
@@ -307,6 +340,10 @@ export function App() {
           onOpenProfile={() => {
             setProfileMenuOpen((v) => !v);
             setNotificationsOpen(false);
+          }}
+          onSwitchToMerchant={() => {
+            setPortalMode('merchant');
+            window.location.hash = '#merchant';
           }}
         />
       </div>
@@ -523,6 +560,20 @@ export function App() {
 
             {/* Right Header Pills */}
             <div className="flex items-center gap-2.5 shrink-0">
+              {/* Merchant Portal Switcher Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  setPortalMode('merchant');
+                  window.location.hash = '#merchant';
+                }}
+                className="px-3.5 py-1.5 rounded-full bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-700 hover:from-indigo-700 hover:to-violet-800 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-sm shadow-indigo-500/20 transition cursor-pointer active:scale-98"
+                title="Switch to Merchant Portal (Business Owners)"
+              >
+                <Store className="w-3.5 h-3.5 text-amber-300" />
+                <span>Merchant Portal</span>
+              </button>
+
               {/* Live Weather + AQI Pill */}
               <button
                 type="button"
@@ -745,6 +796,22 @@ export function App() {
                 </span>
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
+              <div className="pt-1 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProfileMenuOpen(false);
+                    setPortalMode('merchant');
+                    window.location.hash = '#merchant';
+                  }}
+                  className="w-full px-3 py-2 rounded-xl bg-gradient-to-r from-indigo-50 to-violet-50 hover:from-indigo-100 hover:to-violet-100 flex items-center justify-between font-bold text-indigo-900 border border-indigo-200/60"
+                >
+                  <span className="flex items-center gap-2">
+                    <Store className="w-4 h-4 text-indigo-600" /> Merchant Portal (Business Owners)
+                  </span>
+                  <ChevronRight className="w-3.5 h-3.5 text-indigo-500" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
