@@ -1,5 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
 import { LiveAreaIntelligence } from './liveIntelligence';
+import { SavedEntry } from '../types';
+import {
+  AuthUserProfile,
+  getStoredAuthUser,
+  requestOtp,
+  verifyOtp,
+  refreshAccessToken,
+  logoutUser,
+  AUTH_CHANGE_EVENT,
+  AUTH_UNAUTHORIZED_EVENT,
+} from './authService';
+export type { AuthUserProfile };
+export { getStoredAuthUser, logoutUser, AUTH_CHANGE_EVENT, AUTH_UNAUTHORIZED_EVENT };
 
 /* ============================================================================
    TYPES FOR LIVE MARKETPLACE, EVENTS, AUTH & VOICE (SARVAM AI)
@@ -158,16 +171,6 @@ export interface LiveEmergencyFacility {
   lng: number;
 }
 
-export interface AuthUserProfile {
-  id: number;
-  email: string;
-  fullName: string;
-  phone: string;
-  role: 'resident' | 'merchant' | 'admin';
-  isVerified: boolean;
-  token: string;
-}
-
 /* ============================================================================
    HELPER UTILITIES & BACKEND FETCHERS
    ============================================================================ */
@@ -192,11 +195,25 @@ async function requestBackend<T>(
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await fetch(url, {
+      let res = await fetch(url, {
         ...options,
         headers,
         signal: controller.signal,
       });
+
+      // Handle 401 Unauthorized with token refresh rotation
+      if (res.status === 401) {
+        const refreshed = await refreshAccessToken();
+        if (refreshed) {
+          headers.Authorization = `Bearer ${refreshed}`;
+          res = await fetch(url, {
+            ...options,
+            headers,
+            signal: controller.signal,
+          });
+        }
+      }
+
       clearTimeout(timer);
       if (res.ok) {
         return (await res.json()) as T;
@@ -246,16 +263,6 @@ function pickBizImage(cat: string, idx: number): string {
 const AUTH_USER_KEY = 'myarea24_auth_user_v1';
 const PENDING_OTP_KEY = 'myarea24_pending_otp_v1';
 
-export function getStoredAuthUser(): AuthUserProfile | null {
-  try {
-    const raw = localStorage.getItem(AUTH_USER_KEY);
-    if (raw) return JSON.parse(raw) as AuthUserProfile;
-  } catch {
-    // ignore
-  }
-  return null;
-}
-
 export async function sendEmailOtp(
   email: string,
   purpose: 'login' | 'signup' | 'merchant_onboarding' = 'login'
@@ -265,44 +272,12 @@ export async function sendEmailOtp(
   devOtp?: string;
   backendHandled: boolean;
 }> {
-  const cleanEmail = email.trim().toLowerCase();
-  const res = await requestBackend<{
-    success: boolean;
-    message: string;
-    email: string;
-    expires_in_minutes: number;
-    dev_otp?: string;
-  }>('/api/v1/auth/send-otp', {
-    method: 'POST',
-    body: JSON.stringify({ email: cleanEmail, purpose }),
-  });
-
-  if (res && res.success) {
-    if (res.dev_otp) {
-      localStorage.setItem(
-        PENDING_OTP_KEY,
-        JSON.stringify({ email: cleanEmail, code: res.dev_otp, exp: Date.now() + 600_000 })
-      );
-    }
-    return {
-      success: true,
-      message: res.message,
-      devOtp: res.dev_otp,
-      backendHandled: true,
-    };
-  }
-
-  // Fallback instant OTP generation when running on static GitHub Pages
-  const generatedOtp = String(Math.floor(100000 + Math.random() * 900000));
-  localStorage.setItem(
-    PENDING_OTP_KEY,
-    JSON.stringify({ email: cleanEmail, code: generatedOtp, exp: Date.now() + 600_000 })
-  );
+  const res = await requestOtp(email, purpose);
   return {
-    success: true,
-    message: `Verification OTP sent to ${cleanEmail} (Valid for 10 mins).`,
-    devOtp: generatedOtp,
-    backendHandled: false,
+    success: res.success,
+    message: res.message,
+    devOtp: res.devOtp,
+    backendHandled: true,
   };
 }
 
@@ -317,87 +292,36 @@ export async function verifyEmailOtp(params: {
   user?: AuthUserProfile;
   error?: string;
 }> {
-  const cleanEmail = params.email.trim().toLowerCase();
-  const code = params.otpCode.trim();
-
-  const res = await requestBackend<{
-    access_token: string;
-    token_type: string;
-    user: {
-      id: number;
-      email: string;
-      phone?: string;
-      full_name?: string;
-      role: string;
-      is_verified: boolean;
-    };
-  }>('/api/v1/auth/verify-otp', {
-    method: 'POST',
-    body: JSON.stringify({
-      email: cleanEmail,
-      otp_code: code,
-      full_name: params.fullName,
-      phone: params.phone,
-      role: params.role || 'resident',
-    }),
-  });
-
-  if (res && res.access_token) {
-    const profile: AuthUserProfile = {
-      id: res.user.id,
-      email: res.user.email,
-      fullName: res.user.full_name || cleanEmail.split('@')[0],
-      phone: res.user.phone || params.phone || '+91 98765 43210',
-      role: (res.user.role as 'resident' | 'merchant' | 'admin') || 'resident',
-      isVerified: true,
-      token: res.access_token,
-    };
-    localStorage.setItem('myarea24_auth_token', res.access_token);
-    localStorage.setItem(AUTH_USER_KEY, JSON.stringify(profile));
-    localStorage.removeItem(PENDING_OTP_KEY);
-    return { success: true, user: profile };
-  }
-
-  // Check local pending OTP fallback
-  try {
-    const rawPending = localStorage.getItem(PENDING_OTP_KEY);
-    if (rawPending) {
-      const pending = JSON.parse(rawPending);
-      if (pending.email === cleanEmail && pending.code === code && Date.now() <= pending.exp) {
-        const profile: AuthUserProfile = {
-          id: Date.now(),
-          email: cleanEmail,
-          fullName: params.fullName?.trim() || cleanEmail.split('@')[0].replace(/[._]/g, ' '),
-          phone: params.phone?.trim() || '+91 98765 43210',
-          role: params.role || 'resident',
-          isVerified: true,
-          token: `jwt-local-${Date.now()}`,
-        };
-        localStorage.setItem('myarea24_auth_token', profile.token);
-        localStorage.setItem(AUTH_USER_KEY, JSON.stringify(profile));
-        localStorage.removeItem(PENDING_OTP_KEY);
-        return { success: true, user: profile };
-      }
-    }
-  } catch {
-    // ignore
-  }
-
-  return {
-    success: false,
-    error: 'Invalid or expired 6-digit OTP code. Please check the code and try again.',
-  };
+  return verifyOtp(params);
 }
 
 export function logoutAuthUser(): void {
-  localStorage.removeItem('myarea24_auth_token');
-  localStorage.removeItem(AUTH_USER_KEY);
+  logoutUser();
 }
 
 export async function syncSavedBookmarkToBackend(
-  itemType: 'business' | 'product' | 'service' | 'offer' | 'bulletin' | 'event',
-  itemId: number
+  entryOrType: SavedEntry | 'business' | 'product' | 'service' | 'offer' | 'bulletin' | 'event',
+  actionOrId?: 'add' | 'remove' | number
 ): Promise<void> {
+  let itemType: 'business' | 'product' | 'service' | 'offer' | 'bulletin' | 'event' = 'business';
+  let itemId = 1;
+
+  if (typeof entryOrType === 'string') {
+    itemType = entryOrType;
+    itemId = typeof actionOrId === 'number' ? actionOrId : 1;
+  } else if (entryOrType && typeof entryOrType === 'object') {
+    const cat = (entryOrType.category || '').toLowerCase();
+    if (cat.includes('product') || cat.includes('market')) itemType = 'product';
+    else if (cat.includes('service')) itemType = 'service';
+    else if (cat.includes('offer')) itemType = 'offer';
+    else if (cat.includes('event')) itemType = 'event';
+    else if (cat.includes('bulletin') || cat.includes('alert')) itemType = 'bulletin';
+    else itemType = 'business';
+
+    const numMatch = (entryOrType.id || '').match(/\d+/);
+    itemId = numMatch ? parseInt(numMatch[0], 10) : 1;
+  }
+
   await requestBackend('/api/v1/saved', {
     method: 'POST',
     body: JSON.stringify({ item_type: itemType, item_id: itemId }),
@@ -567,8 +491,11 @@ export const CUSTOM_SVC_KEY = 'myarea24_custom_services_v1';
 export const CUSTOM_OFFER_KEY = 'myarea24_custom_offers_v1';
 export const CUSTOM_EVENT_KEY = 'myarea24_custom_events_v1';
 export const MERCHANT_REGISTRATION_KEY = 'myarea24_merchant_registered_v1';
+export const MERCHANT_ACCOUNTS_KEY = 'myarea24_merchant_accounts_v1';
+export const MERCHANT_SESSION_KEY = 'myarea24_merchant_session_v1';
 
 export interface MerchantRegistrationProfile {
+  id?: string;
   businessName: string;
   category: string;
   ownerName: string;
@@ -583,11 +510,56 @@ export interface MerchantRegistrationProfile {
   docNumber: string;
   openingTime: string;
   closingTime: string;
+  storePin?: string; // 4-6 digit Security PIN or Password
+  tagline?: string;
   isVerified: boolean;
   registeredAt: string;
 }
 
+export function getStoredMerchantAccounts(): MerchantRegistrationProfile[] {
+  try {
+    const raw = localStorage.getItem(MERCHANT_ACCOUNTS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {}
+  return [];
+}
+
+export function getStoredMerchantSession(): MerchantRegistrationProfile | null {
+  try {
+    const raw = localStorage.getItem(MERCHANT_SESSION_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.businessName && parsed.isVerified) {
+        return parsed;
+      }
+    }
+  } catch {}
+  return null;
+}
+
+export function saveMerchantSession(profile: MerchantRegistrationProfile): void {
+  try {
+    localStorage.setItem(MERCHANT_SESSION_KEY, JSON.stringify(profile));
+    localStorage.setItem(MERCHANT_REGISTRATION_KEY, JSON.stringify(profile));
+    window.dispatchEvent(new CustomEvent('myarea24_merchant_session_changed', { detail: profile }));
+  } catch {}
+}
+
+export function clearMerchantSession(): void {
+  try {
+    localStorage.removeItem(MERCHANT_SESSION_KEY);
+    window.dispatchEvent(new CustomEvent('myarea24_merchant_session_changed', { detail: null }));
+  } catch {}
+}
+
 export function getStoredMerchantProfile(): MerchantRegistrationProfile | null {
+  // First check active authenticated session
+  const session = getStoredMerchantSession();
+  if (session) return session;
+
   try {
     const raw = localStorage.getItem(MERCHANT_REGISTRATION_KEY);
     if (raw) {
@@ -602,10 +574,83 @@ export function getStoredMerchantProfile(): MerchantRegistrationProfile | null {
 
 export function saveMerchantRegistration(profile: MerchantRegistrationProfile): void {
   try {
-    localStorage.setItem(MERCHANT_REGISTRATION_KEY, JSON.stringify(profile));
-    window.dispatchEvent(new CustomEvent('myarea24_merchant_registered', { detail: profile }));
+    const profileWithId: MerchantRegistrationProfile = {
+      ...profile,
+      id: profile.id || `biz_${profile.businessName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}_${Date.now().toString(36)}`,
+    };
+
+    // 1. Update legacy single registration pointer
+    localStorage.setItem(MERCHANT_REGISTRATION_KEY, JSON.stringify(profileWithId));
+
+    // 2. Add or update in multi-store accounts list
+    const accounts = getStoredMerchantAccounts();
+    const existingIndex = accounts.findIndex(
+      (a) =>
+        (a.id && a.id === profileWithId.id) ||
+        a.businessName.toLowerCase() === profileWithId.businessName.toLowerCase() ||
+        (a.phone && a.phone === profileWithId.phone)
+    );
+    let updatedAccounts: MerchantRegistrationProfile[];
+    if (existingIndex >= 0) {
+      updatedAccounts = [...accounts];
+      updatedAccounts[existingIndex] = profileWithId;
+    } else {
+      updatedAccounts = [profileWithId, ...accounts];
+    }
+    localStorage.setItem(MERCHANT_ACCOUNTS_KEY, JSON.stringify(updatedAccounts));
+
+    // 3. Set active authenticated session
+    saveMerchantSession(profileWithId);
+
+    window.dispatchEvent(new CustomEvent('myarea24_merchant_registered', { detail: profileWithId }));
     window.dispatchEvent(new CustomEvent('myarea24_marketplace_sync'));
   } catch {}
+}
+
+export function verifyMerchantCredentials(
+  identifier: string,
+  storePin: string
+): { success: boolean; profile?: MerchantRegistrationProfile; error?: string } {
+  const cleanId = identifier.trim().toLowerCase().replace(/\s+/g, '');
+  const cleanPin = storePin.trim();
+  const accounts = getStoredMerchantAccounts();
+
+  // Also check single legacy profile
+  const legacy = getStoredMerchantProfile();
+  const allAccounts = [...accounts];
+  if (legacy && !allAccounts.some((a) => a.phone === legacy.phone)) {
+    allAccounts.push(legacy);
+  }
+
+  const match = allAccounts.find((a) => {
+    const phoneClean = (a.phone || '').replace(/\s+/g, '').toLowerCase();
+    const emailClean = (a.email || '').toLowerCase().trim();
+    return (
+      phoneClean === cleanId ||
+      phoneClean.endsWith(cleanId) ||
+      cleanId.endsWith(phoneClean) ||
+      emailClean === cleanId
+    );
+  });
+
+  if (!match) {
+    return {
+      success: false,
+      error: 'No merchant storefront found matching this phone number or email.',
+    };
+  }
+
+  // If storePin was configured, check it. (If default demo account had no PIN, permit or require PIN)
+  if (match.storePin && match.storePin !== cleanPin) {
+    return {
+      success: false,
+      error: 'Incorrect Store Access PIN / Password. Please check and try again.',
+    };
+  }
+
+  // Set active session
+  saveMerchantSession(match);
+  return { success: true, profile: match };
 }
 
 export function loadLocalList<T>(key: string): T[] {
@@ -650,8 +695,8 @@ export function useLiveCommunityMarketplace(
   liveIntel: LiveAreaIntelligence
 ): LiveCommunityMarketplaceState {
   const { lat, lng, areaName, city } = liveIntel.location;
-  const localityShort = areaName.split(',')[0].trim() || 'Sector 10';
-  const cityShort = city || areaName.split(',')[1]?.trim() || 'Delhi';
+  const localityShort = areaName ? areaName.split(',')[0].trim() : 'Local Area';
+  const cityShort = city || (areaName && areaName.includes(',') ? areaName.split(',')[1]?.trim() : 'India') || 'India';
 
   const [loading, setLoading] = useState(false);
   const [businesses, setBusinesses] = useState<LiveBusinessItem[]>([]);
@@ -1307,60 +1352,126 @@ async function fetchOverpassBusinesses(
   city: string
 ): Promise<LiveBusinessItem[]> {
   try {
-    const query = `[out:json][timeout:6];(node["shop"](around:3200,${lat},${lng});node["amenity"~"restaurant|cafe|pharmacy|fast_food|bakery|Charging_station|fitness_centre"](around:3200,${lat},${lng}););out body 18;`;
-    const res = await fetch(
-      `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`
-    );
-    if (!res.ok) return [];
-    const data = await res.json();
-    const elements = Array.isArray(data?.elements) ? data.elements : [];
-    const items: LiveBusinessItem[] = [];
+    const backendData = await requestBackend<{
+      businesses?: Array<{
+        id: string;
+        name: string;
+        category?: string;
+        subcategory?: string;
+        address?: string;
+        locality?: string;
+        city?: string;
+        rating?: string | number;
+        reviews?: string | number;
+        phone?: string;
+        latitude?: number;
+        longitude?: number;
+        distance_km?: number;
+      }>;
+      pois?: Array<{
+        id: string;
+        name: string;
+        category: string;
+        distanceKm: number;
+        latitude: number;
+        longitude: number;
+        phone?: string;
+        sublabel?: string;
+        address?: string;
+      }>;
+    }>(`/api/v1/locations/places-nearby?lat=${lat}&lon=${lng}&radius=3500`, {}, 3500);
 
-    elements.forEach((el: Record<string, unknown>, idx: number) => {
-      const tags = (el.tags as Record<string, string>) || {};
-      const name = tags.name || tags['name:en'];
-      if (!name || name.length < 3) return;
-      const elLat = Number(el.lat || lat);
-      const elLng = Number(el.lon || lng);
-      const dKm = Number(haversineKm(lat, lng, elLat, elLng).toFixed(2));
-      const rawType = tags.shop || tags.amenity || 'store';
-      const cat = mapOsmTagToCategory(rawType);
-      const street = tags['addr:street'] || tags['addr:suburb'] || locality;
-      const phone = tags.phone || tags['contact:phone'] || '+91 98110 24024';
+    if (backendData?.businesses && backendData.businesses.length > 0) {
+      return backendData.businesses.map((b, idx) => {
+        const cat = mapToFrontendBizCategory(b.category || 'Services');
+        const dKm = Number(
+          (b.distance_km ?? haversineKm(lat, lng, b.latitude || lat, b.longitude || lng)).toFixed(2)
+        );
+        const street = b.locality || locality;
+        const phone = b.phone || '+91 98110 24024';
 
-      items.push({
-        id: `osm-biz-${el.id || idx}`,
-        slug: `osm-biz-${el.id || idx}`,
-        name,
-        cat,
-        sub: `${cat} • ${street}`,
-        description: `Live OpenStreetMap verified ${cat.toLowerCase()} located in ${street}, ${city}.`,
-        address: `${street}, ${locality}, ${city}`,
-        locality,
-        city,
-        rating: (4.3 + ((idx * 3) % 7) * 0.1).toFixed(1),
-        reviews: `(${85 + idx * 34})`,
-        dist: formatDist(dKm),
-        distanceKm: dKm,
-        status: 'Open',
-        closes: 'Closes 10:00 PM',
-        openingTime: '09:00',
-        closingTime: '22:00',
-        phone,
-        whatsapp: phone,
-        img: pickBizImage(cat, idx),
-        verified: true,
-        trending: idx < 2,
-        popular: true,
-        lat: elLat,
-        lng: elLng,
-        activeProductsCount: 5,
-        activeOffersCount: 1,
-        source: 'OpenStreetMap Live POI',
+        return {
+          id: `osm-biz-${b.id || idx}`,
+          slug: `osm-biz-${b.id || idx}`,
+          name: b.name,
+          cat,
+          sub: `${cat} • ${street}`,
+          description: `Verified ${cat.toLowerCase()} located in ${street}, ${city}.`,
+          address: b.address || `${street}, ${locality}, ${city}`,
+          locality: b.locality || locality,
+          city: b.city || city,
+          rating: String(b.rating || (4.3 + ((idx * 3) % 7) * 0.1).toFixed(1)),
+          reviews: String(b.reviews || `(${85 + idx * 34})`),
+          dist: formatDist(dKm),
+          distanceKm: dKm,
+          status: 'Open' as const,
+          closes: 'Closes 10:00 PM',
+          openingTime: '09:00',
+          closingTime: '22:00',
+          phone,
+          whatsapp: phone,
+          img: pickBizImage(cat, idx),
+          verified: true,
+          trending: idx < 2,
+          popular: true,
+          lat: b.latitude || lat,
+          lng: b.longitude || lng,
+          activeProductsCount: 5,
+          activeOffersCount: 1,
+          source: 'FastAPI /api/v1/locations/places-nearby',
+        };
       });
-    });
+    }
 
-    return items;
+    if (backendData?.pois && backendData.pois.length > 0) {
+      const bizPois = backendData.pois.filter((p) =>
+        ['food', 'shop', 'pharmacy'].includes(p.category)
+      );
+      if (bizPois.length > 0) {
+        return bizPois.map((p, idx) => {
+          const cat =
+            p.category === 'food'
+              ? 'Restaurants'
+              : p.category === 'pharmacy'
+              ? 'Pharmacies'
+              : 'Groceries';
+          const dKm = Number(p.distanceKm.toFixed(2));
+          const phone = p.phone || '+91 98110 24024';
+          return {
+            id: `osm-poi-${p.id || idx}`,
+            slug: `osm-poi-${p.id || idx}`,
+            name: p.name,
+            cat,
+            sub: `${cat} • ${locality}`,
+            description: `Verified ${cat.toLowerCase()} in ${locality}, ${city}.`,
+            address: p.address || `${locality}, ${city}`,
+            locality,
+            city,
+            rating: (4.3 + ((idx * 3) % 7) * 0.1).toFixed(1),
+            reviews: `(${85 + idx * 34})`,
+            dist: formatDist(dKm),
+            distanceKm: dKm,
+            status: 'Open' as const,
+            closes: 'Closes 10:00 PM',
+            openingTime: '09:00',
+            closingTime: '22:00',
+            phone,
+            whatsapp: phone,
+            img: pickBizImage(cat, idx),
+            verified: true,
+            trending: idx < 2,
+            popular: true,
+            lat: p.latitude,
+            lng: p.longitude,
+            activeProductsCount: 5,
+            activeOffersCount: 1,
+            source: 'FastAPI /api/v1/locations/places-nearby',
+          };
+        });
+      }
+    }
+
+    return [];
   } catch {
     return [];
   }
@@ -1504,691 +1615,50 @@ function pickEventImage(cat: string, idx: number): string {
 }
 
 function buildLocalizedBusinesses(
-  lat: number,
-  lng: number,
-  locality: string,
-  city: string
+  _lat: number,
+  _lng: number,
+  _locality: string,
+  _city: string
 ): LiveBusinessItem[] {
-  return [
-    {
-      id: `loc-biz-1-${locality}`,
-      slug: `urban-chai-${locality.toLowerCase()}`,
-      name: `The Urban Chai & Kitchen (${locality})`,
-      cat: 'Cafés',
-      sub: `Café & Quick Bites • ${locality}`,
-      description: `Popular neighborhood café in ${locality}, ${city} serving fresh kulhad chai, snacks & workspace Wi-Fi.`,
-      address: `Main Market Block, ${locality}, ${city}`,
-      locality,
-      city,
-      rating: '4.6',
-      reviews: '(1.2K)',
-      dist: '0.6 km',
-      distanceKm: 0.6,
-      status: 'Open',
-      closes: 'Closes 11:00 PM',
-      openingTime: '08:00',
-      closingTime: '23:00',
-      phone: '+91 98110 24101',
-      whatsapp: '+91 98110 24101',
-      img: './assets/crops/biz-card-chai.webp',
-      verified: true,
-      trending: true,
-      popular: true,
-      lat: lat + 0.0022,
-      lng: lng + 0.0018,
-      activeProductsCount: 6,
-      activeOffersCount: 2,
-      source: 'Verified Local Storefront',
-    },
-    {
-      id: `loc-biz-2-${locality}`,
-      slug: `apna-fresh-mart-${locality.toLowerCase()}`,
-      name: `Apna Super Mart (${locality})`,
-      cat: 'Groceries',
-      sub: `Supermarket & Dairy • ${locality}`,
-      description: `Daily farm-fresh vegetables, Amul dairy, organic staples, and household essentials in ${locality}.`,
-      address: `Central Commercial Complex, ${locality}, ${city}`,
-      locality,
-      city,
-      rating: '4.5',
-      reviews: '(940)',
-      dist: '0.7 km',
-      distanceKm: 0.7,
-      status: 'Open',
-      closes: 'Closes 10:30 PM',
-      openingTime: '07:00',
-      closingTime: '22:30',
-      phone: '+91 98110 24102',
-      whatsapp: '+91 98110 24102',
-      img: './assets/crops/store-apna-mart.webp',
-      verified: true,
-      trending: true,
-      popular: true,
-      lat: lat - 0.0019,
-      lng: lng + 0.0025,
-      activeProductsCount: 12,
-      activeOffersCount: 2,
-      source: 'Verified Local Storefront',
-    },
-    {
-      id: `loc-biz-3-${locality}`,
-      slug: `medplus-pharmacy-${locality.toLowerCase()}`,
-      name: `MedPlus 24×7 Pharmacy (${locality})`,
-      cat: 'Pharmacies',
-      sub: `24×7 Chemist & Wellness • ${locality}`,
-      description: `24-hour prescription medicines, N95 masks, nebulizers, and home delivery in ${locality}, ${city}.`,
-      address: `Near Main Crossing, ${locality}, ${city}`,
-      locality,
-      city,
-      rating: '4.7',
-      reviews: '(1.5K)',
-      dist: '0.5 km',
-      distanceKm: 0.5,
-      status: 'Open',
-      closes: 'Open 24 Hours',
-      openingTime: '00:00',
-      closingTime: '23:59',
-      phone: '+91 98110 24103',
-      whatsapp: '+91 98110 24103',
-      img: './assets/crops/store-medplus.webp',
-      verified: true,
-      trending: false,
-      popular: true,
-      lat: lat + 0.0014,
-      lng: lng - 0.0021,
-      activeProductsCount: 8,
-      activeOffersCount: 1,
-      source: 'Verified Local Storefront',
-    },
-    {
-      id: `loc-biz-4-${locality}`,
-      slug: `bikaner-sweets-${locality.toLowerCase()}`,
-      name: `${locality} Bikanervala & Rasoi`,
-      cat: 'Restaurants',
-      sub: `Family Restaurant & Sweets • ${locality}`,
-      description: `Pure vegetarian North & South Indian dining, fresh mithai, and evening chaat counter in ${locality}.`,
-      address: `Sector Promenade, ${locality}, ${city}`,
-      locality,
-      city,
-      rating: '4.4',
-      reviews: '(2.1K)',
-      dist: '1.1 km',
-      distanceKm: 1.1,
-      status: 'Open',
-      closes: 'Closes 11:00 PM',
-      openingTime: '08:30',
-      closingTime: '23:00',
-      phone: '+91 98110 24104',
-      whatsapp: '+91 98110 24104',
-      img: './assets/crops/biz-card-bikanervala.webp',
-      verified: true,
-      trending: true,
-      popular: true,
-      lat: lat - 0.0028,
-      lng: lng - 0.0019,
-      activeProductsCount: 5,
-      activeOffersCount: 1,
-      source: 'Verified Local Storefront',
-    },
-    {
-      id: `loc-biz-5-${locality}`,
-      slug: `gupta-electronics-${locality.toLowerCase()}`,
-      name: `Gupta Digital & Electronics (${locality})`,
-      cat: 'Electronics',
-      sub: `Smartphones, Appliances & Repair • ${locality}`,
-      description: `Authorized accessories, smartphones, surge protectors, and instant laptop/mobile repair in ${locality}.`,
-      address: `Shop 14, Arcade Plaza, ${locality}, ${city}`,
-      locality,
-      city,
-      rating: '4.6',
-      reviews: '(610)',
-      dist: '0.9 km',
-      distanceKm: 0.9,
-      status: 'Open',
-      closes: 'Closes 09:30 PM',
-      openingTime: '10:00',
-      closingTime: '21:30',
-      phone: '+91 98110 24105',
-      whatsapp: '+91 98110 24105',
-      img: './assets/crops/store-gupta-elec.webp',
-      verified: true,
-      trending: false,
-      popular: false,
-      lat: lat + 0.0031,
-      lng: lng - 0.0012,
-      activeProductsCount: 9,
-      activeOffersCount: 1,
-      source: 'Verified Local Storefront',
-    },
-    {
-      id: `loc-biz-6-${locality}`,
-      slug: `cultfit-arena-${locality.toLowerCase()}`,
-      name: `Cult Fit & Sports Arena (${locality})`,
-      cat: 'Fitness',
-      sub: `Gym, Badminton & Yoga • ${locality}`,
-      description: `Air-purified indoor fitness studio, strength training, and coaching in ${locality}, ${city}.`,
-      address: `Sports Complex Road, ${locality}, ${city}`,
-      locality,
-      city,
-      rating: '4.7',
-      reviews: '(780)',
-      dist: '1.3 km',
-      distanceKm: 1.3,
-      status: 'Open',
-      closes: 'Closes 10:00 PM',
-      openingTime: '05:30',
-      closingTime: '22:00',
-      phone: '+91 98110 24106',
-      whatsapp: '+91 98110 24106',
-      img: './assets/crops/biz-card-cultfit.webp',
-      verified: true,
-      trending: false,
-      popular: true,
-      lat: lat - 0.0035,
-      lng: lng + 0.0032,
-      activeProductsCount: 3,
-      activeOffersCount: 1,
-      source: 'Verified Local Storefront',
-    },
-  ];
+  return [];
 }
 
 function buildLocalizedProducts(
-  lat: number,
-  lng: number,
-  locality: string,
-  city: string,
-  bizList: LiveBusinessItem[],
-  mandiRates: LiveAreaIntelligence['mandiRates']
+  _lat: number,
+  _lng: number,
+  _locality: string,
+  _city: string,
+  _bizList: LiveBusinessItem[],
+  _mandiRates: LiveAreaIntelligence['mandiRates']
 ): LiveProductItem[] {
-  const groceryStore =
-    bizList.find((b) => b.cat === 'Groceries')?.name || `Apna Super Mart (${locality})`;
-  const pharmStore =
-    bizList.find((b) => b.cat === 'Pharmacies')?.name || `MedPlus Pharmacy (${locality})`;
-  const elecStore =
-    bizList.find((b) => b.cat === 'Electronics')?.name || `Gupta Electronics (${locality})`;
-
-  const tomatoRate = mandiRates.find((m) => m.commodity.toLowerCase().includes('tomato'))?.pricePerKg || 36;
-
-  return [
-    {
-      id: `loc-prod-1-${locality}`,
-      name: 'Arhar / Toor Dal Unpolished (1 kg)',
-      brand: 'Tata Sampann',
-      cat: 'Groceries',
-      price: '₹120',
-      localPriceNum: 120,
-      oldPrice: '₹145',
-      onlinePriceNum: 145,
-      onlineProvider: 'Blinkit / Instamart',
-      savingsAmount: 25,
-      savingsPercent: 17,
-      betterOffline: true,
-      unit: '1 kg • 5 stores nearby',
-      store: groceryStore,
-      storeAddress: `${locality}, ${city}`,
-      phone: '+91 98110 24102',
-      dist: '0.6 km',
-      distanceKm: 0.6,
-      rating: '4.8',
-      reviews: '(420)',
-      inStock: true,
-      freshnessLabel: 'Fresh batch verified',
-      discount: 'Save ₹25',
-      img: './assets/crops/prod-arhar-dal.webp',
-      lat: lat - 0.0019,
-      lng: lng + 0.0025,
-    },
-    {
-      id: `loc-prod-2-${locality}`,
-      name: 'Amul Fresh Taaza Milk (1 L)',
-      brand: 'Amul',
-      cat: 'Bakery & Dairy',
-      price: '₹58',
-      localPriceNum: 58,
-      oldPrice: '₹64',
-      onlinePriceNum: 64,
-      onlineProvider: 'Quick-Commerce (incl. fee)',
-      savingsAmount: 6,
-      savingsPercent: 9,
-      betterOffline: true,
-      unit: '1 L • 5 stores nearby',
-      store: groceryStore,
-      storeAddress: `${locality}, ${city}`,
-      phone: '+91 98110 24102',
-      dist: '0.6 km',
-      distanceKm: 0.6,
-      rating: '4.9',
-      reviews: '(610)',
-      inStock: true,
-      freshnessLabel: 'Morning 6 AM stock',
-      discount: 'Save ₹6',
-      img: './assets/crops/prod-amul-milk.webp',
-      lat: lat - 0.0019,
-      lng: lng + 0.0025,
-    },
-    {
-      id: `loc-prod-3-${locality}`,
-      name: 'Aashirvaad Shudh Chakki Atta (5 kg)',
-      brand: 'Aashirvaad',
-      cat: 'Groceries',
-      price: '₹265',
-      localPriceNum: 265,
-      oldPrice: '₹295',
-      onlinePriceNum: 295,
-      onlineProvider: 'Amazon Fresh',
-      savingsAmount: 30,
-      savingsPercent: 10,
-      betterOffline: true,
-      unit: '5 kg • 4 stores nearby',
-      store: groceryStore,
-      storeAddress: `${locality}, ${city}`,
-      phone: '+91 98110 24102',
-      dist: '0.7 km',
-      distanceKm: 0.7,
-      rating: '4.8',
-      reviews: '(512)',
-      inStock: true,
-      freshnessLabel: 'In stock',
-      discount: 'Save ₹30',
-      img: './assets/crops/prod-atta.webp',
-      lat: lat + 0.0014,
-      lng: lng - 0.0021,
-    },
-    {
-      id: `loc-prod-4-${locality}`,
-      name: `Fresh Banana & Mandi Produce (${city} APMC)`,
-      brand: 'APMC Direct',
-      cat: 'Groceries',
-      price: `₹${tomatoRate + 4}`,
-      localPriceNum: tomatoRate + 4,
-      oldPrice: `₹${tomatoRate + 18}`,
-      onlinePriceNum: tomatoRate + 18,
-      onlineProvider: 'Zepto / Blinkit',
-      savingsAmount: 14,
-      savingsPercent: 25,
-      betterOffline: true,
-      unit: '1 kg • 6 stores nearby',
-      store: groceryStore,
-      storeAddress: `${locality}, ${city}`,
-      phone: '+91 98110 24105',
-      dist: '0.6 km',
-      distanceKm: 0.6,
-      rating: '4.6',
-      reviews: '(390)',
-      inStock: true,
-      freshnessLabel: 'Synced with APMC Mandi',
-      discount: 'Save ₹14',
-      img: './assets/crops/prod-banana.webp',
-      lat: lat + 0.0031,
-      lng: lng - 0.0012,
-    },
-    {
-      id: `loc-prod-5-${locality}`,
-      name: 'Dettol Skincare Handwash & Hygiene Pack',
-      brand: 'Dettol',
-      cat: 'Medicines',
-      price: '₹99',
-      localPriceNum: 99,
-      oldPrice: '₹115',
-      onlinePriceNum: 115,
-      onlineProvider: '1mg / Pharmeasy',
-      savingsAmount: 16,
-      savingsPercent: 14,
-      betterOffline: true,
-      unit: '200 ml • 3 stores nearby',
-      store: pharmStore,
-      storeAddress: `${locality}, ${city}`,
-      phone: '+91 98110 24103',
-      dist: '0.5 km',
-      distanceKm: 0.5,
-      rating: '4.7',
-      reviews: '(245)',
-      inStock: true,
-      freshnessLabel: 'In stock at pharmacy',
-      discount: 'Save ₹16',
-      img: './assets/crops/prod-dettol.webp',
-      lat: lat + 0.0022,
-      lng: lng + 0.0018,
-    },
-    {
-      id: `loc-prod-6-${locality}`,
-      name: 'Smart Fast Charger & Surge Protector',
-      brand: 'Philips / boAt',
-      cat: 'Electronics',
-      price: '₹449',
-      localPriceNum: 449,
-      oldPrice: '₹599',
-      onlinePriceNum: 599,
-      onlineProvider: 'Amazon India',
-      savingsAmount: 150,
-      savingsPercent: 25,
-      betterOffline: true,
-      unit: '1 Unit • 1-Yr Local Warranty',
-      store: elecStore,
-      storeAddress: `${locality}, ${city}`,
-      phone: '+91 98110 24105',
-      dist: '0.9 km',
-      distanceKm: 0.9,
-      rating: '4.7',
-      reviews: '(380)',
-      inStock: true,
-      freshnessLabel: 'In stock',
-      discount: 'Save ₹150',
-      img: './assets/crops/store-gupta-elec.webp',
-      lat: lat + 0.0031,
-      lng: lng - 0.0012,
-    },
-  ];
+  return [];
 }
 
 function buildLocalizedServices(
-  lat: number,
-  lng: number,
-  locality: string,
-  city: string
+  _lat: number,
+  _lng: number,
+  _locality: string,
+  _city: string
 ): LiveServiceItem[] {
-  return [
-    {
-      id: `loc-svc-1-${locality}`,
-      name: `Amit AC Service & Repair (${locality})`,
-      cat: 'Home Repair',
-      role: `AC Repair • Foam-Jet Service & Gas Refill • ${locality}`,
-      description: `Split & Window AC foam-jet servicing, gas charging, and PCB repair in ${locality}, ${city}.`,
-      exp: '8 yrs exp',
-      rating: '4.6',
-      reviews: '(1.2K)',
-      dist: '0.6 km',
-      distanceKm: 0.6,
-      price: '₹499 onwards',
-      priceNum: 499,
-      priceUnit: 'per service',
-      avail: '500+ bookings',
-      timing: '08:00 AM - 09:00 PM',
-      phone: '+91 98112 44101',
-      whatsapp: '+91 98112 44101',
-      verified: true,
-      img: './assets/crops/srv-ac-repair.webp',
-      locality,
-      city,
-      lat: lat + 0.0018,
-      lng: lng + 0.0012,
-    },
-    {
-      id: `loc-svc-2-${locality}`,
-      name: `Sharma Home Deep Cleaning (${locality})`,
-      cat: 'Cleaning',
-      role: `Full Home, Kitchen, Sofa & Bathroom Cleaning • ${locality}`,
-      description: `Machine-assisted home deep cleaning, sofa shampooing, and herbal pest control across ${locality}.`,
-      exp: '7 yrs exp',
-      rating: '4.5',
-      reviews: '(980)',
-      dist: '0.8 km',
-      distanceKm: 0.8,
-      price: '₹1,499 onwards',
-      priceNum: 1499,
-      priceUnit: 'per session',
-      avail: '300+ bookings',
-      timing: '08:00 AM - 07:00 PM',
-      phone: '+91 98112 44103',
-      whatsapp: '+91 98112 44103',
-      verified: true,
-      img: './assets/crops/srv-cleaning.webp',
-      locality,
-      city,
-      lat: lat - 0.0021,
-      lng: lng + 0.0019,
-    },
-    {
-      id: `loc-svc-3-${locality}`,
-      name: `${city} Rapid Electric Solutions (${locality})`,
-      cat: 'Home Repair',
-      role: `MCB Fault, Inverter Wiring & Appliance Repair • ${locality}`,
-      description: `30-minute doorstep electrician for wiring, MCB tripping, fans, and inverter setup in ${locality}.`,
-      exp: '10 yrs exp',
-      rating: '4.7',
-      reviews: '(870)',
-      dist: '0.9 km',
-      distanceKm: 0.9,
-      price: '₹299 onwards',
-      priceNum: 299,
-      priceUnit: 'per visit',
-      avail: '400+ bookings',
-      timing: '24/7 Emergency & Regular',
-      phone: '+91 98112 44102',
-      whatsapp: '+91 98112 44102',
-      verified: true,
-      img: './assets/crops/srv-electrician.webp',
-      locality,
-      city,
-      lat: lat + 0.0025,
-      lng: lng - 0.0017,
-    },
-    {
-      id: `loc-svc-4-${locality}`,
-      name: `Suresh Plumbing & Water Motor Works (${locality})`,
-      cat: 'Home Repair',
-      role: `Leakage, Pressure Pump & Bathroom Fittings • ${locality}`,
-      description: `Fast leakage repair, water tank overflow alarm, motor winding, and drain unblocking in ${locality}.`,
-      exp: '9 yrs exp',
-      rating: '4.6',
-      reviews: '(620)',
-      dist: '1.1 km',
-      distanceKm: 1.1,
-      price: '₹349 onwards',
-      priceNum: 349,
-      priceUnit: 'per visit',
-      avail: '250+ bookings',
-      timing: '07:30 AM - 09:00 PM',
-      phone: '+91 98112 44106',
-      whatsapp: '+91 98112 44106',
-      verified: true,
-      img: './assets/crops/srv-plumbing.webp',
-      locality,
-      city,
-      lat: lat - 0.0029,
-      lng: lng - 0.0022,
-    },
-  ];
+  return [];
 }
 
 function buildLocalizedOffers(
-  locality: string,
-  city: string,
-  bizList: LiveBusinessItem[]
+  _locality: string,
+  _city: string,
+  _businesses: LiveBusinessItem[] = []
 ): LiveOfferItem[] {
-  const b0 = bizList[0]?.name || `La Pino'z Pizza (${locality})`;
-  const b1 = bizList[1]?.name || `Apna Super Mart (${locality})`;
-  return [
-    {
-      id: `loc-off-1-${locality}`,
-      title: `50% OFF on Medium Pizzas & Evening Combos`,
-      sub: `Dine-in & Takeaway in ${locality}`,
-      description: `Present coupon code at ${b0} counter or apply on direct store takeaway order.`,
-      store: b0,
-      storeAddress: `${locality}, ${city}`,
-      phone: '+91 98110 24101',
-      cat: 'Food & Dining',
-      badge: '50% OFF',
-      badgeColor: 'bg-rose-600 text-white',
-      code: 'PIZZA50',
-      valid: 'Ends this Sunday',
-      daysLeft: 4,
-      dist: '0.8 km',
-      distanceKm: 0.8,
-      img: './assets/crops/offer-lapinoz.webp',
-    },
-    {
-      id: `loc-off-2-${locality}`,
-      title: `30% OFF on All Hair & Grooming Services`,
-      sub: `Valid at Looks Salon (${locality})`,
-      description: `Includes haircut, keratin spa, and styling packages with prior slot booking.`,
-      store: `Looks Salon (${locality})`,
-      storeAddress: `${locality}, ${city}`,
-      phone: '+91 98110 24102',
-      cat: 'Salon & Spa',
-      badge: '30% OFF',
-      badgeColor: 'bg-purple-600 text-white',
-      code: 'GLAM30',
-      valid: '6 days left',
-      daysLeft: 6,
-      dist: '1.1 km',
-      distanceKm: 1.1,
-      img: './assets/crops/offer-looks.webp',
-    },
-    {
-      id: `loc-off-3-${locality}`,
-      title: `1 Month Free + 50% OFF on Annual Fitness Plan`,
-      sub: `Limited Period at Cult.fit (${locality})`,
-      description: `Includes unlimited group workouts, strength arena, and yoga sessions in ${locality}.`,
-      store: `Cult.fit (${locality})`,
-      storeAddress: `${locality}, ${city}`,
-      phone: '+91 98112 44103',
-      cat: 'Fitness & Health',
-      badge: '1 MONTH FREE',
-      badgeColor: 'bg-indigo-600 text-white',
-      code: 'CULTFIT50',
-      valid: '5 days left',
-      daysLeft: 5,
-      dist: '1.3 km',
-      distanceKm: 1.3,
-      img: './assets/crops/offer-cultfit.webp',
-    },
-    {
-      id: `loc-off-4-${locality}`,
-      title: `Up to 40% OFF on Monthly Groceries & Staples`,
-      sub: `In-store & Doorstep Delivery at ${b1}`,
-      description: `Save on 5kg Atta, Arhar Dal, cooking oil, and APMC Mandi fresh produce.`,
-      store: b1,
-      storeAddress: `${locality}, ${city}`,
-      phone: '+91 98110 24102',
-      cat: 'Groceries',
-      badge: 'UP TO 40% OFF',
-      badgeColor: 'bg-emerald-600 text-white',
-      code: 'FRESH40',
-      valid: 'Valid all week',
-      daysLeft: 7,
-      dist: '0.7 km',
-      distanceKm: 0.7,
-      img: './assets/crops/offer-dmart.webp',
-    },
-  ];
+  return [];
 }
 
 function buildLocalizedEvents(
-  lat: number,
-  lng: number,
-  locality: string,
-  city: string,
-  liveIntel: LiveAreaIntelligence
+  _lat: number,
+  _lng: number,
+  _locality: string,
+  _city: string,
+  _liveIntel: LiveAreaIntelligence
 ): LiveEventItem[] {
-  const mainCorridor = liveIntel.traffic.corridors[0]?.roadName || `${locality} Main Arterial`;
-  return [
-    {
-      id: `loc-ev-1-${locality}`,
-      title: `${locality} Live Music & Cultural Fest`,
-      cat: 'Music & Arts',
-      organizer: `${city} Live Arts Collective`,
-      date: 'SAT, 16',
-      time: '6:00 PM – 10:30 PM',
-      loc: `Central District Park, ${locality}`,
-      address: `Gate 2 Amphitheatre, ${locality}, ${city}`,
-      locality,
-      city,
-      dist: '0.8 km',
-      distanceKm: 0.8,
-      price: 'Free / Open RSVP',
-      free: true,
-      rsvp: '480+ going',
-      expectedAttendance: 1200,
-      parkingPressure: 'ELEVATED',
-      trafficImpact: 'MODERATE',
-      exitWeatherAdvisory: `Evening ${liveIntel.weather.temperatureC - 1}°C (${liveIntel.weather.conditionText}); metro feeder & E-rickshaws available at Gate 2.`,
-      commuteCorridor: mainCorridor,
-      source: 'AllEvents.in Verified Feed',
-      img: './assets/crops/evt-music-fest.webp',
-      lat: lat - 0.0038,
-      lng: lng - 0.0031,
-    },
-    {
-      id: `loc-ev-2-${locality}`,
-      title: `${locality} Weekend Food Carnival & Millet Mela`,
-      cat: 'Food & Markets',
-      organizer: `${city} Culinary & Market Forum`,
-      date: 'SUN, 17',
-      time: '12:00 PM – 10:00 PM',
-      loc: `DDA / Community Ground, ${locality}`,
-      address: `Community Ground, ${locality}, ${city}`,
-      locality,
-      city,
-      dist: '0.9 km',
-      distanceKm: 0.9,
-      price: 'Free Entry',
-      free: true,
-      rsvp: '350+ going',
-      expectedAttendance: 850,
-      parkingPressure: 'ELEVATED',
-      trafficImpact: 'MODERATE',
-      exitWeatherAdvisory: `${liveIntel.weather.conditionText}, ${liveIntel.weather.temperatureC}°C. Arrive via ${mainCorridor} to avoid market lane congestion.`,
-      commuteCorridor: mainCorridor,
-      source: 'AllEvents.in / Municipal Market Board',
-      img: './assets/crops/evt-food-carnival.webp',
-      lat: lat - 0.0031,
-      lng: lng + 0.0022,
-    },
-    {
-      id: `loc-ev-3-${locality}`,
-      title: `Morning Yoga, Pranayama & Clean Air Walk`,
-      cat: 'Sports & Fitness',
-      organizer: `${locality} Resident Welfare Association`,
-      date: 'SAT, 23',
-      time: '7:00 AM – 9:00 AM',
-      loc: `Central Park, ${locality}`,
-      address: `Gate 1, Central Park, ${locality}, ${city}`,
-      locality,
-      city,
-      dist: '0.5 km',
-      distanceKm: 0.5,
-      price: 'Free Entry',
-      free: true,
-      rsvp: '160+ going',
-      expectedAttendance: 220,
-      parkingPressure: 'LOW',
-      trafficImpact: 'LOW',
-      exitWeatherAdvisory: `Morning temp ~${liveIntel.weather.minTempC}°C with AQI ${liveIntel.airQuality.aqiValue} (${liveIntel.airQuality.aqiCategory}).`,
-      commuteCorridor: mainCorridor,
-      source: 'Verified RWA Community Calendar',
-      img: './assets/crops/evt-yoga.webp',
-      lat: lat + 0.0025,
-      lng: lng + 0.0019,
-    },
-    {
-      id: `loc-ev-4-${locality}`,
-      title: `${locality} Art, Craft & Startup Showcase`,
-      cat: 'Workshops',
-      organizer: `${city} Creators & Citizens Hub`,
-      date: 'SUN, 24',
-      time: '10:00 AM – 7:00 PM',
-      loc: `Community Art Center, ${locality}`,
-      address: `Pocket B Community Hall, ${locality}, ${city}`,
-      locality,
-      city,
-      dist: '0.7 km',
-      distanceKm: 0.7,
-      price: 'Free Entry',
-      free: true,
-      rsvp: '210+ registered',
-      expectedAttendance: 400,
-      parkingPressure: 'MODERATE',
-      trafficImpact: 'LOW',
-      exitWeatherAdvisory: `Indoors air-conditioned hall; smooth approach via ${mainCorridor}.`,
-      commuteCorridor: mainCorridor,
-      source: 'Civic Cultural Directory',
-      img: './assets/crops/evt-art-exhib.webp',
-      lat: lat + 0.0016,
-      lng: lng - 0.0028,
-    },
-  ];
+  return [];
 }
 
 /* ============================================================================
@@ -2213,6 +1683,7 @@ export function syncMerchantProductToGlobal(
     phone: string;
     locality?: string;
     city?: string;
+    locationArea?: string;
   }
 ): LiveProductItem | null {
   // 1. Enforce Startup Business Conditions & Validation Rules
@@ -2222,8 +1693,8 @@ export function syncMerchantProductToGlobal(
     return null;
   }
 
-  const locality = business.locality || 'Sector 10';
-  const city = business.city || 'Delhi';
+  const locality = business.locality || (business.locationArea ? business.locationArea.split(',')[0].trim() : 'Local Area');
+  const city = business.city || (business.locationArea && business.locationArea.includes(',') ? business.locationArea.split(',')[1]?.trim() : 'India') || 'India';
   const onlinePrice = Math.round(cleanPrice * 1.18); // 18% offline local savings benchmark
   const savings = Math.max(0, onlinePrice - cleanPrice);
 

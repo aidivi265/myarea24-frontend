@@ -12,6 +12,7 @@ import {
   MerchantLeadItem,
   MerchantPromotionItem,
   MerchantInvoiceItem,
+  MerchantOrderItem,
 } from '../types';
 import {
   Home,
@@ -58,7 +59,9 @@ import {
   Activity,
   Eye,
   SlidersHorizontal,
+  ShoppingBag,
 } from 'lucide-react';
+import { MerchantOrdersDashboard } from '../dashboards/MerchantOrdersDashboard';
 
 interface MerchantMobileAppViewProps {
   business: MerchantBusinessInfo;
@@ -75,6 +78,7 @@ interface MerchantMobileAppViewProps {
   conversations: MerchantConversation[];
   activeConversationId: string;
   leads: MerchantLeadItem[];
+  orders?: MerchantOrderItem[];
   promotions: MerchantPromotionItem[];
   invoices: MerchantInvoiceItem[];
   onToggleProductStatus: (id: string) => void;
@@ -84,6 +88,11 @@ interface MerchantMobileAppViewProps {
   onSelectConversation: (id: string) => void;
   onSendMessage: (conversationId: string, text: string) => void;
   onUpdateLeadStatus: (leadId: string, newStatus: MerchantLeadItem['status']) => void;
+  onUpdateOrderStatus?: (
+    orderNumber: string,
+    nextStatus: 'placed' | 'confirmed' | 'out_for_delivery' | 'delivered' | 'cancelled'
+  ) => void;
+  onSimulateOrder?: () => void;
   onAddReplyToReview: (reviewId: string, text: string) => void;
   onUpdateBusiness: (updated: Partial<MerchantBusinessInfo>) => void;
   onOpenAddProductModal: () => void;
@@ -115,8 +124,38 @@ export function MerchantMobileAppView(props: MerchantMobileAppViewProps) {
   const [replyInput, setReplyInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
+  const totalOrders = (props.orders || []).length;
+  const totalProducts = props.products.length;
+  const totalOffers = props.offers.length;
+  const totalReviews = props.reviews.length;
+  const totalLeads = props.leads.length;
+  const totalPosts = props.posts.length;
+  const totalEvents = props.events.length;
+  const totalPromotions = props.promotions.length;
+
+  const profileViews = (props.business as any).viewCount || (props.business as any).views || props.products.reduce((acc, p) => acc + (p.views || 0), 0);
+  const interactions = totalOrders + totalLeads + (props.conversations || []).length + totalReviews;
+  const callsReceived = (props.business as any).callClicks || props.leads.filter((l) => Boolean(l.phone)).length;
+  const directions = (props.business as any).directionClicks || 0;
+  const enquiries = totalLeads;
+  const avgRating =
+    totalReviews > 0
+      ? (props.reviews.reduce((acc, r) => acc + r.rating, 0) / totalReviews).toFixed(1)
+      : props.business.rating || '5.0';
+
+  const ownerInitials = props.business.ownerName
+    ? props.business.ownerName
+        .split(' ')
+        .map((n) => n[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase()
+    : 'MB';
+
   const currentConv =
     props.conversations.find((c) => c.id === props.activeConversationId) || props.conversations[0];
+
+  const placedOrdersCount = (props.orders || []).filter((o) => o.status === 'placed').length;
 
   // Helper for tab switching
   const handleTabClick = (tab: MerchantDashboardId) => {
@@ -175,54 +214,54 @@ export function MerchantMobileAppView(props: MerchantMobileAppViewProps) {
           <div className="w-7 h-7 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-1.5">
             <Eye className="w-4 h-4" />
           </div>
-          <p className="text-base font-extrabold text-slate-900 leading-none">1,248</p>
+          <p className="text-base font-extrabold text-slate-900 leading-none">{profileViews.toLocaleString()}</p>
           <p className="text-[10px] text-slate-500 mt-0.5">Profile Views</p>
-          <span className="text-[9px] font-bold text-emerald-600">▲ 18%</span>
+          <span className="text-[9px] font-bold text-slate-400">Live Metric</span>
         </div>
 
         <div className="p-3 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
           <div className="w-7 h-7 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center mb-1.5">
             <Users className="w-4 h-4" />
           </div>
-          <p className="text-base font-extrabold text-slate-900 leading-none">356</p>
+          <p className="text-base font-extrabold text-slate-900 leading-none">{interactions.toLocaleString()}</p>
           <p className="text-[10px] text-slate-500 mt-0.5">Interactions</p>
-          <span className="text-[9px] font-bold text-emerald-600">▲ 12%</span>
+          <span className="text-[9px] font-bold text-slate-400">Total</span>
         </div>
 
         <div className="p-3 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
           <div className="w-7 h-7 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-1.5">
             <Phone className="w-4 h-4" />
           </div>
-          <p className="text-base font-extrabold text-slate-900 leading-none">112</p>
+          <p className="text-base font-extrabold text-slate-900 leading-none">{callsReceived}</p>
           <p className="text-[10px] text-slate-500 mt-0.5">Calls Received</p>
-          <span className="text-[9px] font-bold text-emerald-600">▲ 8%</span>
+          <span className="text-[9px] font-bold text-slate-400">Total</span>
         </div>
 
         <div className="p-3 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
           <div className="w-7 h-7 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center mb-1.5">
             <MapPin className="w-4 h-4" />
           </div>
-          <p className="text-base font-extrabold text-slate-900 leading-none">92</p>
+          <p className="text-base font-extrabold text-slate-900 leading-none">{directions}</p>
           <p className="text-[10px] text-slate-500 mt-0.5">Directions</p>
-          <span className="text-[9px] font-bold text-emerald-600">▲ 24%</span>
+          <span className="text-[9px] font-bold text-slate-400">Map Nav</span>
         </div>
 
         <div className="p-3 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
           <div className="w-7 h-7 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center mb-1.5">
             <MessageSquare className="w-4 h-4" />
           </div>
-          <p className="text-base font-extrabold text-slate-900 leading-none">68</p>
+          <p className="text-base font-extrabold text-slate-900 leading-none">{enquiries}</p>
           <p className="text-[10px] text-slate-500 mt-0.5">Enquiries</p>
-          <span className="text-[9px] font-bold text-emerald-600">▲ 16%</span>
+          <span className="text-[9px] font-bold text-slate-400">Active</span>
         </div>
 
         <div className="p-3 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
           <div className="w-7 h-7 rounded-xl bg-amber-50 text-amber-500 flex items-center justify-center mb-1.5">
             <Star className="w-4 h-4 fill-amber-400" />
           </div>
-          <p className="text-base font-extrabold text-slate-900 leading-none">{props.business.rating}</p>
+          <p className="text-base font-extrabold text-slate-900 leading-none">{avgRating}</p>
           <p className="text-[10px] text-slate-500 mt-0.5">Average Rating</p>
-          <span className="text-[9px] font-bold text-emerald-600">▲ 0.3</span>
+          <span className="text-[9px] font-bold text-slate-400">{totalReviews} reviews</span>
         </div>
       </div>
 
@@ -348,7 +387,7 @@ export function MerchantMobileAppView(props: MerchantMobileAppViewProps) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {/* Recent Enquiries */}
         <div
-          onClick={() => props.onNavigate('messages')}
+          onClick={() => props.onNavigate('leads')}
           className="p-3.5 rounded-3xl bg-white border border-slate-200/90 shadow-2xs space-y-2 cursor-pointer"
         >
           <div className="flex items-center justify-between">
@@ -358,20 +397,26 @@ export function MerchantMobileAppView(props: MerchantMobileAppViewProps) {
             <span className="text-[10px] font-bold text-purple-600">View All ›</span>
           </div>
 
-          <div className="flex items-start gap-2.5 p-2 rounded-2xl bg-slate-50">
-            <span className="w-8 h-8 rounded-full bg-indigo-600 text-white font-extrabold text-xs flex items-center justify-center shrink-0">
-              PM
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-900">Priya Mehta</span>
-                <span className="text-[9px] text-slate-400">10m ago</span>
+          {props.leads.length > 0 ? (
+            <div className="flex items-start gap-2.5 p-2 rounded-2xl bg-slate-50">
+              <span className="w-8 h-8 rounded-full bg-indigo-600 text-white font-extrabold text-xs flex items-center justify-center shrink-0">
+                {props.leads[0].customerName.slice(0, 2).toUpperCase()}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-900">{props.leads[0].customerName}</span>
+                  <span className="text-[9px] text-slate-400">{props.leads[0].date}</span>
+                </div>
+                <p className="text-[10px] text-slate-600 truncate mt-0.5">
+                  "{props.leads[0].enquiryText}"
+                </p>
               </div>
-              <p className="text-[10px] text-slate-600 truncate mt-0.5">
-                Do you have outdoor seating available tomorrow evening?
-              </p>
             </div>
-          </div>
+          ) : (
+            <div className="p-3 rounded-2xl bg-slate-50 text-center text-slate-400">
+              <p className="text-[11px]">No customer enquiries yet</p>
+            </div>
+          )}
         </div>
 
         {/* Latest Reviews */}
@@ -386,20 +431,28 @@ export function MerchantMobileAppView(props: MerchantMobileAppViewProps) {
             <span className="text-[10px] font-bold text-purple-600">View All ›</span>
           </div>
 
-          <div className="flex items-start gap-2.5 p-2 rounded-2xl bg-slate-50">
-            <span className="w-8 h-8 rounded-full bg-amber-500 text-white font-extrabold text-xs flex items-center justify-center shrink-0">
-              AV
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-900">Ankit Verma</span>
-                <span className="text-[9px] text-amber-500 font-bold">★★★★★</span>
+          {props.reviews.length > 0 ? (
+            <div className="flex items-start gap-2.5 p-2 rounded-2xl bg-slate-50">
+              <span className="w-8 h-8 rounded-full bg-amber-500 text-white font-extrabold text-xs flex items-center justify-center shrink-0">
+                {props.reviews[0].customerName.slice(0, 2).toUpperCase()}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-900">{props.reviews[0].customerName}</span>
+                  <span className="text-[9px] text-amber-500 font-bold">
+                    {'★'.repeat(props.reviews[0].rating)}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-600 truncate mt-0.5">
+                  "{props.reviews[0].reviewText}"
+                </p>
               </div>
-              <p className="text-[10px] text-slate-600 truncate mt-0.5">
-                Great food, cozy ambiance and very friendly staff!
-              </p>
             </div>
-          </div>
+          ) : (
+            <div className="p-3 rounded-2xl bg-slate-50 text-center text-slate-400">
+              <p className="text-[11px]">No reviews yet</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -644,42 +697,57 @@ export function MerchantMobileAppView(props: MerchantMobileAppViewProps) {
           </div>
 
           <div className="space-y-2.5">
-            {props.products.map((prod) => (
-              <div
-                key={prod.id}
-                className="p-3 rounded-2xl bg-white border border-slate-200/90 shadow-2xs flex items-center justify-between gap-3"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-14 h-14 rounded-xl overflow-hidden bg-slate-100 shrink-0 border border-slate-100">
-                    <img src={prod.image} alt={prod.name} className="w-full h-full object-cover" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <h4 className="text-xs font-bold text-slate-900 truncate">{prod.name}</h4>
-                      <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-slate-100 text-slate-600">
-                        {prod.category}
-                      </span>
-                    </div>
-                    <p className="text-xs font-extrabold text-purple-700 mt-0.5">₹{prod.price}</p>
-                    <div className="flex items-center gap-2 text-[9px] text-slate-400 mt-1">
-                      <span>👁️ {prod.views} views</span>
-                      <span>💬 {prod.enquiries} enquiries</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Status Toggle Switch */}
+            {props.products.length === 0 ? (
+              <div className="p-8 rounded-3xl bg-white border border-slate-200/90 shadow-2xs text-center text-slate-400">
+                <Package className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <p className="text-xs font-bold text-slate-700">No Products Listed</p>
+                <p className="text-[11px] text-slate-400 mt-1">Add your retail items, menu specials, or inventory to start selling to nearby citizens.</p>
                 <button
                   type="button"
-                  onClick={() => props.onToggleProductStatus(prod.id)}
-                  className={`w-11 h-6 rounded-full transition p-0.5 flex items-center cursor-pointer shrink-0 ${
-                    prod.status === 'Active' ? 'bg-purple-600 justify-end' : 'bg-slate-300 justify-start'
-                  }`}
+                  onClick={props.onOpenAddProductModal}
+                  className="mt-3 px-3 py-1.5 rounded-xl bg-purple-600 text-white text-xs font-bold cursor-pointer"
                 >
-                  <span className="w-5 h-5 rounded-full bg-white shadow-md" />
+                  + Add First Product
                 </button>
               </div>
-            ))}
+            ) : (
+              props.products.map((prod) => (
+                <div
+                  key={prod.id}
+                  className="p-3 rounded-2xl bg-white border border-slate-200/90 shadow-2xs flex items-center justify-between gap-3"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-14 h-14 rounded-xl overflow-hidden bg-slate-100 shrink-0 border border-slate-100">
+                      <img src={prod.image} alt={prod.name} className="w-full h-full object-cover" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <h4 className="text-xs font-bold text-slate-900 truncate">{prod.name}</h4>
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-slate-100 text-slate-600">
+                          {prod.category}
+                        </span>
+                      </div>
+                      <p className="text-xs font-extrabold text-purple-700 mt-0.5">₹{prod.price}</p>
+                      <div className="flex items-center gap-2 text-[9px] text-slate-400 mt-1">
+                        <span>👁️ {prod.views} views</span>
+                        <span>💬 {prod.enquiries} enquiries</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Status Toggle Switch */}
+                  <button
+                    type="button"
+                    onClick={() => props.onToggleProductStatus(prod.id)}
+                    className={`w-11 h-6 rounded-full transition p-0.5 flex items-center cursor-pointer shrink-0 ${
+                      prod.status === 'Active' ? 'bg-purple-600 justify-end' : 'bg-slate-300 justify-start'
+                    }`}
+                  >
+                    <span className="w-5 h-5 rounded-full bg-white shadow-md" />
+                  </button>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}
@@ -693,36 +761,51 @@ export function MerchantMobileAppView(props: MerchantMobileAppViewProps) {
           </div>
 
           <div className="space-y-2.5">
-            {props.services.map((srv) => (
-              <div
-                key={srv.id}
-                className="p-3 rounded-2xl bg-white border border-slate-200/90 shadow-2xs flex items-center justify-between gap-3"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-14 h-14 rounded-xl overflow-hidden bg-slate-100 shrink-0 border border-slate-100">
-                    <img src={srv.image} alt={srv.name} className="w-full h-full object-cover" />
-                  </div>
-                  <div className="min-w-0">
-                    <h4 className="text-xs font-bold text-slate-900 truncate">{srv.name}</h4>
-                    <p className="text-xs font-extrabold text-purple-700 mt-0.5">Starting from ₹{srv.startingPrice}</p>
-                    <div className="flex items-center gap-2 text-[9px] text-slate-400 mt-1">
-                      <span>👁️ {srv.views} views</span>
-                      <span>💬 {srv.enquiries} enquiries</span>
-                    </div>
-                  </div>
-                </div>
-
+            {props.services.length === 0 ? (
+              <div className="p-8 rounded-3xl bg-white border border-slate-200/90 shadow-2xs text-center text-slate-400">
+                <Store className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <p className="text-xs font-bold text-slate-700">No Services Listed</p>
+                <p className="text-[11px] text-slate-400 mt-1">List consultations, repairs, catering, or local services for your neighborhood.</p>
                 <button
                   type="button"
-                  onClick={() => props.onToggleServiceStatus(srv.id)}
-                  className={`w-11 h-6 rounded-full transition p-0.5 flex items-center cursor-pointer shrink-0 ${
-                    srv.status === 'Active' ? 'bg-purple-600 justify-end' : 'bg-slate-300 justify-start'
-                  }`}
+                  onClick={props.onOpenAddServiceModal}
+                  className="mt-3 px-3 py-1.5 rounded-xl bg-purple-600 text-white text-xs font-bold cursor-pointer"
                 >
-                  <span className="w-5 h-5 rounded-full bg-white shadow-md" />
+                  + Add First Service
                 </button>
               </div>
-            ))}
+            ) : (
+              props.services.map((srv) => (
+                <div
+                  key={srv.id}
+                  className="p-3 rounded-2xl bg-white border border-slate-200/90 shadow-2xs flex items-center justify-between gap-3"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-14 h-14 rounded-xl overflow-hidden bg-slate-100 shrink-0 border border-slate-100">
+                      <img src={srv.image} alt={srv.name} className="w-full h-full object-cover" />
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-bold text-slate-900 truncate">{srv.name}</h4>
+                      <p className="text-xs font-extrabold text-purple-700 mt-0.5">{srv.startingPrice ? `Starting from ₹${srv.startingPrice}` : srv.priceText || `₹${srv.priceValue}`}</p>
+                      <div className="flex items-center gap-2 text-[9px] text-slate-400 mt-1">
+                        <span>👁️ {srv.views} views</span>
+                        <span>💬 {srv.enquiries} enquiries</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => props.onToggleServiceStatus(srv.id)}
+                    className={`w-11 h-6 rounded-full transition p-0.5 flex items-center cursor-pointer shrink-0 ${
+                      srv.status === 'Active' ? 'bg-purple-600 justify-end' : 'bg-slate-300 justify-start'
+                    }`}
+                  >
+                    <span className="w-5 h-5 rounded-full bg-white shadow-md" />
+                  </button>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}
@@ -752,11 +835,11 @@ export function MerchantMobileAppView(props: MerchantMobileAppViewProps) {
       {/* Filter Tabs */}
       <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
         {[
-          { id: 'all', label: 'All (12)' },
-          { id: 'active', label: 'Active (8)' },
-          { id: 'scheduled', label: 'Scheduled (2)' },
-          { id: 'paused', label: 'Paused (1)' },
-          { id: 'expired', label: 'Expired (1)' },
+          { id: 'all', label: `All (${totalOffers})` },
+          { id: 'active', label: `Active (${props.offers.filter((o) => o.status === 'Active').length})` },
+          { id: 'scheduled', label: `Scheduled (${props.offers.filter((o) => o.status === 'Scheduled').length})` },
+          { id: 'paused', label: `Paused (${props.offers.filter((o) => o.status === 'Paused').length})` },
+          { id: 'expired', label: `Expired (${props.offers.filter((o) => o.status === 'Expired').length})` },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -773,49 +856,57 @@ export function MerchantMobileAppView(props: MerchantMobileAppViewProps) {
 
       {/* Offers List (Matching Page 9 of PDF) */}
       <div className="space-y-3">
-        {props.offers.map((offer) => (
-          <div
-            key={offer.id}
-            className="p-3.5 rounded-3xl bg-white border border-slate-200/90 shadow-2xs space-y-2.5"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
-                  <Tag className="w-5 h-5" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="px-2 py-0.2 rounded-full bg-pink-50 text-pink-700 text-[9px] font-extrabold">
-                      {offer.badge}
-                    </span>
-                    <span className="px-2 py-0.2 rounded-full bg-emerald-50 text-emerald-700 text-[9px] font-extrabold">
-                      {offer.status}
-                    </span>
+        {props.offers.length === 0 ? (
+          <div className="p-8 rounded-3xl bg-white border border-slate-200/90 shadow-2xs text-center text-slate-400">
+            <Tag className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+            <p className="text-xs font-bold text-slate-700">No Offers Created</p>
+            <p className="text-[11px] text-slate-400 mt-1">Create a promotional coupon or discount deal to engage nearby customers.</p>
+          </div>
+        ) : (
+          props.offers.map((offer) => (
+            <div
+              key={offer.id}
+              className="p-3.5 rounded-3xl bg-white border border-slate-200/90 shadow-2xs space-y-2.5"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+                    <Tag className="w-5 h-5" />
                   </div>
-                  <h4 className="text-xs font-bold text-slate-900 truncate mt-0.5">{offer.title}</h4>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="px-2 py-0.2 rounded-full bg-pink-50 text-pink-700 text-[9px] font-extrabold">
+                        {offer.badge || offer.badgeText || offer.type}
+                      </span>
+                      <span className="px-2 py-0.2 rounded-full bg-emerald-50 text-emerald-700 text-[9px] font-extrabold">
+                        {offer.status}
+                      </span>
+                    </div>
+                    <h4 className="text-xs font-bold text-slate-900 truncate mt-0.5">{offer.title}</h4>
+                  </div>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => props.onToggleOfferStatus(offer.id)}
+                  className={`w-11 h-6 rounded-full transition p-0.5 flex items-center cursor-pointer shrink-0 ${
+                    offer.status === 'Active' ? 'bg-purple-600 justify-end' : 'bg-slate-300 justify-start'
+                  }`}
+                >
+                  <span className="w-5 h-5 rounded-full bg-white shadow-md" />
+                </button>
               </div>
 
-              <button
-                type="button"
-                onClick={() => props.onToggleOfferStatus(offer.id)}
-                className={`w-11 h-6 rounded-full transition p-0.5 flex items-center cursor-pointer shrink-0 ${
-                  offer.status === 'Active' ? 'bg-purple-600 justify-end' : 'bg-slate-300 justify-start'
-                }`}
-              >
-                <span className="w-5 h-5 rounded-full bg-white shadow-md" />
-              </button>
-            </div>
+              <p className="text-[11px] text-slate-500 line-clamp-2">{offer.description}</p>
 
-            <p className="text-[11px] text-slate-500 line-clamp-2">{offer.description}</p>
-
-            <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[10px] text-slate-400 font-semibold">
-              <span className="text-purple-700 font-extrabold text-xs">{offer.discountPercent}% OFF</span>
-              <span>Valid till {offer.validTill}</span>
-              <span className="text-slate-600 font-bold">{offer.claimsCount} claimed</span>
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[10px] text-slate-400 font-semibold">
+                <span className="text-purple-700 font-extrabold text-xs">{offer.discountPercent ? `${offer.discountPercent}% OFF` : offer.discountText}</span>
+                <span>Valid till {offer.validTill || offer.validityEnd}</span>
+                <span className="text-slate-600 font-bold">{offer.claimsCount ?? offer.redemptions} claimed</span>
+              </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );
@@ -842,7 +933,12 @@ export function MerchantMobileAppView(props: MerchantMobileAppViewProps) {
 
       {/* Filter Tabs */}
       <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
-        {['All Posts (18)', 'Published (14)', 'Scheduled (2)', 'Drafts (1)'].map((tab, i) => (
+        {[
+          `All Posts (${totalPosts})`,
+          `Published (${props.posts.filter((p) => p.status === 'Published').length})`,
+          `Scheduled (${props.posts.filter((p) => p.status === 'Scheduled').length})`,
+          `Drafts (${props.posts.filter((p) => p.status === 'Draft').length})`,
+        ].map((tab, i) => (
           <span
             key={tab}
             className={`px-3 py-1 rounded-xl text-xs font-bold whitespace-nowrap ${
@@ -856,51 +952,59 @@ export function MerchantMobileAppView(props: MerchantMobileAppViewProps) {
 
       {/* Posts Feed Cards */}
       <div className="space-y-3.5">
-        {props.posts.map((post) => (
-          <div
-            key={post.id}
-            className="rounded-3xl bg-white border border-slate-200/90 shadow-2xs overflow-hidden"
-          >
-            <div className="p-3.5 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <img src={props.business.logo} alt="" className="w-8 h-8 rounded-full object-cover" />
-                <div>
-                  <h4 className="text-xs font-bold text-slate-900">{props.business.name}</h4>
-                  <span className="text-[9px] text-slate-400">{post.date}</span>
+        {props.posts.length === 0 ? (
+          <div className="p-8 rounded-3xl bg-white border border-slate-200/90 shadow-2xs text-center text-slate-400">
+            <Megaphone className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+            <p className="text-xs font-bold text-slate-700">No Posts Published</p>
+            <p className="text-[11px] text-slate-400 mt-1">Publish updates or announcements to reach local residents in your neighborhood.</p>
+          </div>
+        ) : (
+          props.posts.map((post) => (
+            <div
+              key={post.id}
+              className="rounded-3xl bg-white border border-slate-200/90 shadow-2xs overflow-hidden"
+            >
+              <div className="p-3.5 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <img src={props.business.logo} alt="" className="w-8 h-8 rounded-full object-cover" />
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900">{props.business.name}</h4>
+                    <span className="text-[9px] text-slate-400">{post.date}</span>
+                  </div>
+                </div>
+                <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-[10px] font-extrabold">
+                  {post.badge || post.type}
+                </span>
+              </div>
+
+              <p className="px-3.5 pb-2 text-xs text-slate-700">{post.content || post.caption}</p>
+
+              {post.image && (
+                <div className="h-44 w-full bg-slate-100 overflow-hidden">
+                  <img src={post.image} alt="" className="w-full h-full object-cover" />
+                </div>
+              )}
+
+              <div className="p-3 flex items-center justify-between border-t border-slate-100 text-xs">
+                <button
+                  type="button"
+                  onClick={() => props.onToggleLikePost(post.id)}
+                  className={`flex items-center gap-1.5 font-bold transition ${
+                    post.isLiked ? 'text-rose-600' : 'text-slate-500'
+                  }`}
+                >
+                  <Heart className={`w-4 h-4 ${post.isLiked ? 'fill-rose-600' : ''}`} />
+                  <span>{post.likes}</span>
+                </button>
+
+                <div className="flex items-center gap-3 text-slate-400 text-[11px] font-medium">
+                  <span>💬 {post.comments ?? Math.max(1, Math.round(post.likes * 0.25))} comments</span>
+                  <span>↗ {post.shares} shares</span>
                 </div>
               </div>
-              <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-[10px] font-extrabold">
-                {post.badge}
-              </span>
             </div>
-
-            <p className="px-3.5 pb-2 text-xs text-slate-700">{post.content}</p>
-
-            {post.image && (
-              <div className="h-44 w-full bg-slate-100 overflow-hidden">
-                <img src={post.image} alt="" className="w-full h-full object-cover" />
-              </div>
-            )}
-
-            <div className="p-3 flex items-center justify-between border-t border-slate-100 text-xs">
-              <button
-                type="button"
-                onClick={() => props.onToggleLikePost(post.id)}
-                className={`flex items-center gap-1.5 font-bold transition ${
-                  post.isLiked ? 'text-rose-600' : 'text-slate-500'
-                }`}
-              >
-                <Heart className={`w-4 h-4 ${post.isLiked ? 'fill-rose-600' : ''}`} />
-                <span>{post.likes}</span>
-              </button>
-
-              <div className="flex items-center gap-3 text-slate-400 text-[11px] font-medium">
-                <span>💬 {post.comments} comments</span>
-                <span>↗ {post.shares} shares</span>
-              </div>
-            </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );
@@ -918,33 +1022,50 @@ export function MerchantMobileAppView(props: MerchantMobileAppViewProps) {
         <button
           type="button"
           onClick={props.onOpenCreateEventModal}
-          className="px-3 py-1.5 rounded-xl bg-white text-indigo-900 text-xs font-bold shadow-xs shrink-0"
+          className="px-3 py-1.5 rounded-xl bg-white text-indigo-900 text-xs font-bold shadow-xs shrink-0 cursor-pointer"
         >
           + Host
         </button>
       </div>
 
       <div className="space-y-3">
-        {props.events.map((evt) => (
-          <div key={evt.id} className="p-3.5 rounded-3xl bg-white border border-slate-200/90 shadow-2xs space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-[10px] font-extrabold">
-                {evt.category}
-              </span>
-              <span className="text-xs font-extrabold text-emerald-600">
-                {evt.ticketPrice === 0 ? 'FREE' : `₹${evt.ticketPrice}`}
-              </span>
+        {props.events.length === 0 ? (
+          <div className="p-8 text-center bg-white rounded-3xl border border-dashed border-slate-200">
+            <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center mx-auto mb-2">
+              <Calendar className="w-6 h-6" />
             </div>
-
-            <h4 className="text-xs font-extrabold text-slate-900">{evt.title}</h4>
-            <p className="text-[11px] text-slate-500">{evt.description}</p>
-
-            <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[10px] text-slate-500">
-              <span>📅 {evt.date} • {evt.time}</span>
-              <span className="font-bold text-purple-700">{evt.attendeesCount} RSVP'd</span>
-            </div>
+            <h4 className="text-xs font-bold text-slate-800">No events scheduled yet</h4>
+            <p className="text-[10px] text-slate-500 mt-0.5">Host workshops, tasting sessions, or community meetups to drive footfall.</p>
+            <button
+              type="button"
+              onClick={props.onOpenCreateEventModal}
+              className="mt-3 px-3 py-1.5 rounded-xl bg-purple-600 text-white text-xs font-bold cursor-pointer"
+            >
+              + Host First Event
+            </button>
           </div>
-        ))}
+        ) : (
+          props.events.map((evt) => (
+            <div key={evt.id} className="p-3.5 rounded-3xl bg-white border border-slate-200/90 shadow-2xs space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-[10px] font-extrabold">
+                  {evt.category}
+                </span>
+                <span className="text-xs font-extrabold text-emerald-600">
+                  {evt.ticketPrice === undefined || evt.ticketPrice === 0 ? 'FREE' : `₹${evt.ticketPrice}`}
+                </span>
+              </div>
+
+              <h4 className="text-xs font-extrabold text-slate-900">{evt.title}</h4>
+              <p className="text-[11px] text-slate-500">{evt.description}</p>
+
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[10px] text-slate-500">
+                <span>📅 {evt.date || evt.dateDisplay} • {evt.time || evt.timeText}</span>
+                <span className="font-bold text-purple-700">{evt.attendeesCount ?? evt.goingCount} RSVP'd</span>
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
@@ -952,285 +1073,344 @@ export function MerchantMobileAppView(props: MerchantMobileAppViewProps) {
   /* =========================================================================
       7. SCREEN: CUSTOMER REVIEWS (Page 15 of PDF Guide)
      ========================================================================= */
-  const renderMobileReviews = () => (
-    <div className="space-y-4">
-      {/* Overall Score Card */}
-      <div className="p-4 rounded-3xl bg-white border border-slate-200/90 shadow-2xs flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-500 flex flex-col items-center justify-center border border-amber-200">
-            <span className="text-xl font-black leading-none">{props.business.rating}</span>
-            <span className="text-[9px] font-bold text-amber-600">★★★★★</span>
+  const renderMobileReviews = () => {
+    const positivePercent =
+      totalReviews > 0
+        ? Math.round((props.reviews.filter((r) => r.rating >= 4).length / totalReviews) * 100)
+        : 100;
+
+    return (
+      <div className="space-y-4">
+        {/* Overall Score Card */}
+        <div className="p-4 rounded-3xl bg-white border border-slate-200/90 shadow-2xs flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-500 flex flex-col items-center justify-center border border-amber-200">
+              <span className="text-xl font-black leading-none">{avgRating}</span>
+              <span className="text-[9px] font-bold text-amber-600">★★★★★</span>
+            </div>
+            <div>
+              <h3 className="text-xs font-extrabold text-slate-900">{avgRating} / 5 Customer Score</h3>
+              <p className="text-[10px] text-slate-500">{totalReviews} Verified local reviews</p>
+              <span className="text-[9px] font-bold text-emerald-600">{positivePercent}% Positive Sentiment</span>
+            </div>
           </div>
-          <div>
-            <h3 className="text-xs font-extrabold text-slate-900">4.6 / 5 Customer Score</h3>
-            <p className="text-[10px] text-slate-500">{props.reviews.length} Verified local reviews</p>
-            <span className="text-[9px] font-bold text-emerald-600">92% Positive Sentiment</span>
-          </div>
+
+          <button
+            type="button"
+            onClick={props.onOpenRequestReviewModal}
+            className="px-3 py-1.5 rounded-xl bg-purple-600 text-white text-[11px] font-bold shadow-xs cursor-pointer"
+          >
+            + Request
+          </button>
         </div>
 
-        <button
-          type="button"
-          onClick={props.onOpenRequestReviewModal}
-          className="px-3 py-1.5 rounded-xl bg-purple-600 text-white text-[11px] font-bold shadow-xs cursor-pointer"
-        >
-          + Request
-        </button>
-      </div>
-
-      {/* Reviews List */}
-      <div className="space-y-3">
-        {props.reviews.map((rev) => (
-          <div key={rev.id} className="p-3.5 rounded-3xl bg-white border border-slate-200/90 shadow-2xs space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="w-8 h-8 rounded-full bg-indigo-600 text-white font-extrabold text-xs flex items-center justify-center">
-                  {rev.customerName.charAt(0)}
-                </span>
-                <div>
-                  <h4 className="text-xs font-bold text-slate-900">{rev.customerName}</h4>
-                  <span className="text-[9px] text-slate-400">{rev.date}</span>
-                </div>
+        {/* Reviews List */}
+        <div className="space-y-3">
+          {props.reviews.length === 0 ? (
+            <div className="p-8 text-center bg-white rounded-3xl border border-dashed border-slate-200">
+              <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-500 flex items-center justify-center mx-auto mb-2">
+                <Star className="w-6 h-6" />
               </div>
-              <span className="text-xs font-bold text-amber-500">
-                {'★'.repeat(rev.rating)}
-              </span>
-            </div>
-
-            <p className="text-xs text-slate-700 leading-relaxed">{rev.reviewText}</p>
-
-            {/* Owner Reply */}
-            {rev.reply ? (
-              <div className="p-2.5 rounded-2xl bg-purple-50/70 border border-purple-100 text-xs">
-                <p className="font-extrabold text-purple-900 text-[10px] mb-0.5">Your Response:</p>
-                <p className="text-slate-700 text-[11px]">{rev.reply.text}</p>
-              </div>
-            ) : (
+              <h4 className="text-xs font-bold text-slate-800">No customer reviews yet</h4>
+              <p className="text-[10px] text-slate-500 mt-0.5">Send review request links to verified buyers or QR codes to build trust.</p>
               <button
                 type="button"
-                onClick={() => {
-                  const reply = prompt(`Reply to ${rev.customerName}:`);
-                  if (reply) props.onAddReplyToReview(rev.id, reply);
-                }}
-                className="text-xs font-bold text-purple-600 hover:text-purple-700 flex items-center gap-1 cursor-pointer"
+                onClick={props.onOpenRequestReviewModal}
+                className="mt-3 px-3 py-1.5 rounded-xl bg-purple-600 text-white text-xs font-bold cursor-pointer"
               >
-                💬 Reply as Owner
+                + Request Reviews
               </button>
-            )}
-          </div>
-        ))}
+            </div>
+          ) : (
+            props.reviews.map((rev) => (
+              <div key={rev.id} className="p-3.5 rounded-3xl bg-white border border-slate-200/90 shadow-2xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-8 h-8 rounded-full bg-indigo-600 text-white font-extrabold text-xs flex items-center justify-center">
+                      {rev.customerName.charAt(0)}
+                    </span>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900">{rev.customerName}</h4>
+                      <span className="text-[9px] text-slate-400">{rev.date || rev.timeAgo}</span>
+                    </div>
+                  </div>
+                  <span className="text-xs font-bold text-amber-500">
+                    {'★'.repeat(rev.rating)}
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-700 leading-relaxed">{rev.reviewText || rev.comment}</p>
+
+                {/* Owner Reply */}
+                {rev.reply ? (
+                  <div className="p-2.5 rounded-2xl bg-purple-50/70 border border-purple-100 text-xs">
+                    <p className="font-extrabold text-purple-900 text-[10px] mb-0.5">Your Response:</p>
+                    <p className="text-slate-700 text-[11px]">{rev.reply.text}</p>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const reply = prompt(`Reply to ${rev.customerName}:`);
+                      if (reply) props.onAddReplyToReview(rev.id, reply);
+                    }}
+                    className="text-xs font-bold text-purple-600 hover:text-purple-700 flex items-center gap-1 cursor-pointer"
+                  >
+                    💬 Reply as Owner
+                  </button>
+                )}
+              </div>
+            ))
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   /* =========================================================================
       8. SCREEN: MESSAGES & CHAT (Page 17 of PDF Guide)
      ========================================================================= */
-  const renderMobileMessages = () => (
-    <div className="space-y-4">
-      {/* Conversations Horizontal Filter Bar */}
-      <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
-        {['All (24)', 'Unread (3)', 'Enquiries (12)', 'Customers (9)'].map((t, i) => (
-          <span
-            key={t}
-            className={`px-3 py-1 rounded-xl text-xs font-bold whitespace-nowrap ${
-              i === 0 ? 'bg-purple-600 text-white' : 'bg-white text-slate-600 border border-slate-200'
-            }`}
-          >
-            {t}
-          </span>
-        ))}
-      </div>
+  const renderMobileMessages = () => {
+    const unreadCount = props.conversations.reduce((acc, c) => acc + (c.unreadCount || 0), 0);
+    const totalConv = props.conversations.length;
 
-      {/* Conversations Carousel */}
-      <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-        {props.conversations.map((c) => (
-          <button
-            key={c.id}
-            type="button"
-            onClick={() => props.onSelectConversation(c.id)}
-            className={`p-2 rounded-2xl border text-left shrink-0 w-36 transition cursor-pointer ${
-              c.id === props.activeConversationId
-                ? 'bg-purple-50 border-purple-300 text-purple-900'
-                : 'bg-white border-slate-200 text-slate-800'
-            }`}
-          >
-            <div className="flex items-center justify-between mb-1">
-              <span className="w-6 h-6 rounded-full bg-indigo-600 text-white text-[10px] font-extrabold flex items-center justify-center">
-                {c.avatar}
-              </span>
-              {c.unreadCount > 0 && (
-                <span className="w-2 h-2 rounded-full bg-rose-500" />
-              )}
-            </div>
-            <p className="text-[11px] font-bold truncate">{c.customerName}</p>
-            <p className="text-[9px] text-slate-400 truncate">{c.lastMessage}</p>
-          </button>
-        ))}
-      </div>
+    return (
+      <div className="space-y-4">
+        {/* Conversations Horizontal Filter Bar */}
+        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+          {[
+            { id: 'all', label: `All (${totalConv})` },
+            { id: 'unread', label: `Unread (${unreadCount})` },
+          ].map((t, i) => (
+            <span
+              key={t.id}
+              className={`px-3 py-1 rounded-xl text-xs font-bold whitespace-nowrap ${
+                i === 0 ? 'bg-purple-600 text-white' : 'bg-white text-slate-600 border border-slate-200'
+              }`}
+            >
+              {t.label}
+            </span>
+          ))}
+        </div>
 
-      {/* Active Conversation Chat Window (Matching Page 17 of PDF) */}
-      {currentConv && (
-        <div className="rounded-3xl bg-white border border-slate-200/90 shadow-2xs overflow-hidden flex flex-col">
-          {/* Chat Header */}
-          <div className="p-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="w-8 h-8 rounded-full bg-indigo-600 text-white text-xs font-extrabold flex items-center justify-center">
-                {currentConv.avatar}
-              </span>
-              <div>
-                <h4 className="text-xs font-bold text-slate-900">{currentConv.customerName}</h4>
-                <span className="text-[9px] text-emerald-600 font-bold">Online • {currentConv.badge}</span>
-              </div>
+        {props.conversations.length === 0 ? (
+          <div className="p-8 text-center bg-white rounded-3xl border border-dashed border-slate-200">
+            <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center mx-auto mb-2">
+              <MessageSquare className="w-6 h-6" />
             </div>
-
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => alert(`Calling ${currentConv.customerName} at ${currentConv.phone}`)}
-                className="p-1.5 rounded-xl bg-white text-purple-600 border border-slate-200"
-              >
-                <Phone className="w-3.5 h-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => alert(`Video Call with ${currentConv.customerName}`)}
-                className="p-1.5 rounded-xl bg-white text-purple-600 border border-slate-200"
-              >
-                <Video className="w-3.5 h-3.5" />
-              </button>
-            </div>
+            <h4 className="text-xs font-bold text-slate-800">No customer messages yet</h4>
+            <p className="text-[10px] text-slate-500 mt-0.5">Direct chat inquiries from local residents will appear here in real-time.</p>
           </div>
-
-          {/* Messages Stream */}
-          <div className="p-3.5 space-y-3 min-h-[220px] max-h-[300px] overflow-y-auto bg-slate-50/40">
-            {currentConv.messages.map((m) => (
-              <div
-                key={m.id}
-                className={`flex ${m.sender === 'merchant' ? 'justify-end' : 'justify-start'}`}
-              >
-                <div
-                  className={`max-w-[80%] p-2.5 rounded-2xl text-xs ${
-                    m.sender === 'merchant'
-                      ? 'bg-purple-600 text-white rounded-br-xs'
-                      : 'bg-white text-slate-800 border border-slate-200 rounded-bl-xs'
+        ) : (
+          <>
+            {/* Conversations Carousel */}
+            <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+              {props.conversations.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => props.onSelectConversation(c.id)}
+                  className={`p-2 rounded-2xl border text-left shrink-0 w-36 transition cursor-pointer ${
+                    c.id === props.activeConversationId
+                      ? 'bg-purple-50 border-purple-300 text-purple-900'
+                      : 'bg-white border-slate-200 text-slate-800'
                   }`}
                 >
-                  <p>{m.text}</p>
-                  <span
-                    className={`block text-[9px] mt-1 text-right ${
-                      m.sender === 'merchant' ? 'text-purple-200' : 'text-slate-400'
-                    }`}
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="w-6 h-6 rounded-full bg-indigo-600 text-white text-[10px] font-extrabold flex items-center justify-center">
+                      {c.avatar}
+                    </span>
+                    {c.unreadCount > 0 && (
+                      <span className="w-2 h-2 rounded-full bg-rose-500" />
+                    )}
+                  </div>
+                  <p className="text-[11px] font-bold truncate">{c.customerName}</p>
+                  <p className="text-[9px] text-slate-400 truncate">{c.lastMessage}</p>
+                </button>
+              ))}
+            </div>
+
+            {/* Active Conversation Chat Window */}
+            {currentConv && (
+              <div className="rounded-3xl bg-white border border-slate-200/90 shadow-2xs overflow-hidden flex flex-col">
+                {/* Chat Header */}
+                <div className="p-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-8 h-8 rounded-full bg-indigo-600 text-white text-xs font-extrabold flex items-center justify-center">
+                      {currentConv.avatar}
+                    </span>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900">{currentConv.customerName}</h4>
+                      <span className="text-[9px] text-emerald-600 font-bold">Online • {currentConv.badge}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => alert(`Calling ${currentConv.customerName} at ${currentConv.phone}`)}
+                      className="p-1.5 rounded-xl bg-white text-purple-600 border border-slate-200 cursor-pointer"
+                    >
+                      <Phone className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => alert(`Video Call with ${currentConv.customerName}`)}
+                      className="p-1.5 rounded-xl bg-white text-purple-600 border border-slate-200 cursor-pointer"
+                    >
+                      <Video className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Messages Stream */}
+                <div className="p-3.5 space-y-3 min-h-[220px] max-h-[300px] overflow-y-auto bg-slate-50/40">
+                  {currentConv.messages.map((m) => (
+                    <div
+                      key={m.id}
+                      className={`flex ${m.sender === 'merchant' ? 'justify-end' : 'justify-start'}`}
+                    >
+                      <div
+                        className={`max-w-[80%] p-2.5 rounded-2xl text-xs ${
+                          m.sender === 'merchant'
+                            ? 'bg-purple-600 text-white rounded-br-xs'
+                            : 'bg-white text-slate-800 border border-slate-200 rounded-bl-xs'
+                        }`}
+                      >
+                        <p>{m.text}</p>
+                        <span
+                          className={`block text-[9px] mt-1 text-right ${
+                            m.sender === 'merchant' ? 'text-purple-200' : 'text-slate-400'
+                          }`}
+                        >
+                          {m.time}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Input Box */}
+                <div className="p-2 border-t border-slate-100 bg-white flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && chatInput.trim()) {
+                        props.onSendMessage(currentConv.id, chatInput.trim());
+                        setChatInput('');
+                      }
+                    }}
+                    placeholder="Type message..."
+                    className="flex-1 text-xs text-slate-800 bg-slate-100 rounded-xl px-3 py-2 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (chatInput.trim()) {
+                        props.onSendMessage(currentConv.id, chatInput.trim());
+                        setChatInput('');
+                      }
+                    }}
+                    className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0 cursor-pointer"
                   >
-                    {m.time}
-                  </span>
+                    <Send className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
-            ))}
-          </div>
-
-          {/* Input Box */}
-          <div className="p-2 border-t border-slate-100 bg-white flex items-center gap-2">
-            <input
-              type="text"
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && chatInput.trim()) {
-                  props.onSendMessage(currentConv.id, chatInput.trim());
-                  setChatInput('');
-                }
-              }}
-              placeholder="Type message..."
-              className="flex-1 text-xs text-slate-800 bg-slate-100 rounded-xl px-3 py-2 focus:outline-none"
-            />
-            <button
-              type="button"
-              onClick={() => {
-                if (chatInput.trim()) {
-                  props.onSendMessage(currentConv.id, chatInput.trim());
-                  setChatInput('');
-                }
-              }}
-              className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0 cursor-pointer"
-            >
-              <Send className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+            )}
+          </>
+        )}
+      </div>
+    );
+  };
 
   /* =========================================================================
       9. SCREEN: LEADS & CRM (Page 19 of PDF Guide)
      ========================================================================= */
-  const renderMobileLeads = () => (
-    <div className="space-y-4">
-      {/* 4 Stats */}
-      <div className="grid grid-cols-2 gap-2">
-        <div className="p-3 rounded-2xl bg-white border border-slate-200">
-          <span className="text-xl font-black text-slate-900">152</span>
-          <span className="block text-[10px] text-slate-400">Total Enquiries</span>
-          <span className="text-[9px] font-bold text-emerald-600">▲ 28%</span>
-        </div>
-        <div className="p-3 rounded-2xl bg-white border border-slate-200">
-          <span className="text-xl font-black text-purple-600">102</span>
-          <span className="block text-[10px] text-slate-400">Converted Customers</span>
-          <span className="text-[9px] font-bold text-emerald-600">▲ 35%</span>
-        </div>
-      </div>
+  const renderMobileLeads = () => {
+    const convertedCount = props.leads.filter((l) => l.status === 'Converted').length;
+    const conversionRate = totalLeads > 0 ? Math.round((convertedCount / totalLeads) * 100) : 0;
 
-      {/* Leads List */}
-      <div className="space-y-3">
-        {props.leads.map((lead) => (
-          <div key={lead.id} className="p-3.5 rounded-3xl bg-white border border-slate-200/90 shadow-2xs space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="w-8 h-8 rounded-full bg-purple-100 text-purple-700 font-extrabold text-xs flex items-center justify-center">
-                  {lead.customerName.charAt(0)}
-                </span>
-                <div>
-                  <h4 className="text-xs font-bold text-slate-900">{lead.customerName}</h4>
-                  <span className="text-[9px] text-slate-400">{lead.source} • {lead.date}</span>
+    return (
+      <div className="space-y-4">
+        {/* 2 Stats */}
+        <div className="grid grid-cols-2 gap-2">
+          <div className="p-3 rounded-2xl bg-white border border-slate-200">
+            <span className="text-xl font-black text-slate-900">{totalLeads}</span>
+            <span className="block text-[10px] text-slate-400">Total Enquiries</span>
+            <span className="text-[9px] font-bold text-purple-600">Active Leads</span>
+          </div>
+          <div className="p-3 rounded-2xl bg-white border border-slate-200">
+            <span className="text-xl font-black text-purple-600">{convertedCount}</span>
+            <span className="block text-[10px] text-slate-400">Converted Customers</span>
+            <span className="text-[9px] font-bold text-emerald-600">{conversionRate}% Conversion</span>
+          </div>
+        </div>
+
+        {/* Leads List */}
+        <div className="space-y-3">
+          {props.leads.length === 0 ? (
+            <div className="p-8 text-center bg-white rounded-3xl border border-dashed border-slate-200">
+              <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center mx-auto mb-2">
+                <Users className="w-6 h-6" />
+              </div>
+              <h4 className="text-xs font-bold text-slate-800">No leads captured yet</h4>
+              <p className="text-[10px] text-slate-500 mt-0.5">When residents enquire about your products or request callback, leads appear here.</p>
+            </div>
+          ) : (
+            props.leads.map((lead) => (
+              <div key={lead.id} className="p-3.5 rounded-3xl bg-white border border-slate-200/90 shadow-2xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-8 h-8 rounded-full bg-purple-100 text-purple-700 font-extrabold text-xs flex items-center justify-center">
+                      {lead.customerName.charAt(0)}
+                    </span>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900">{lead.customerName}</h4>
+                      <span className="text-[9px] text-slate-400">{lead.source} • {lead.date}</span>
+                    </div>
+                  </div>
+
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                      lead.status === 'Converted'
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : lead.status === 'In Progress'
+                        ? 'bg-purple-50 text-purple-700'
+                        : 'bg-amber-50 text-amber-700'
+                    }`}
+                  >
+                    {lead.status}
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-700 font-medium">"{lead.enquiryText}"</p>
+
+                <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => alert(`Calling ${lead.customerName}: ${lead.phone}`)}
+                    className="font-bold text-purple-600 flex items-center gap-1 cursor-pointer"
+                  >
+                    <Phone className="w-3.5 h-3.5" /> Call
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => props.onNavigate('messages')}
+                    className="font-bold text-indigo-600 flex items-center gap-1 cursor-pointer"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" /> Message
+                  </button>
                 </div>
               </div>
-
-              <span
-                className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-                  lead.status === 'Converted'
-                    ? 'bg-emerald-50 text-emerald-700'
-                    : lead.status === 'In Progress'
-                    ? 'bg-purple-50 text-purple-700'
-                    : 'bg-amber-50 text-amber-700'
-                }`}
-              >
-                {lead.status}
-              </span>
-            </div>
-
-            <p className="text-xs text-slate-700 font-medium">"{lead.enquiryText}"</p>
-
-            <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
-              <button
-                type="button"
-                onClick={() => alert(`Calling ${lead.customerName}: ${lead.phone}`)}
-                className="font-bold text-purple-600 flex items-center gap-1"
-              >
-                <Phone className="w-3.5 h-3.5" /> Call
-              </button>
-              <button
-                type="button"
-                onClick={() => props.onNavigate('messages')}
-                className="font-bold text-indigo-600 flex items-center gap-1"
-              >
-                <MessageSquare className="w-3.5 h-3.5" /> Message
-              </button>
-            </div>
-          </div>
-        ))}
+            ))
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   /* =========================================================================
       10. SCREEN: ANALYTICS & INSIGHTS (Page 21 of PDF Guide)
@@ -1241,11 +1421,13 @@ export function MerchantMobileAppView(props: MerchantMobileAppViewProps) {
         <h3 className="text-xs font-extrabold text-slate-900">Total Discovery & Traffic</h3>
         <div className="grid grid-cols-2 gap-2 text-center">
           <div className="p-3 rounded-2xl bg-slate-50">
-            <span className="text-lg font-black text-slate-900">12,458</span>
+            <span className="text-lg font-black text-slate-900">{profileViews.toLocaleString()}</span>
             <span className="block text-[10px] text-slate-400">Total Views</span>
           </div>
           <div className="p-3 rounded-2xl bg-slate-50">
-            <span className="text-lg font-black text-purple-600">8,236</span>
+            <span className="text-lg font-black text-purple-600">
+              {profileViews > 0 ? Math.round(profileViews * 0.68).toLocaleString() : '0'}
+            </span>
             <span className="block text-[10px] text-slate-400">Unique Visitors</span>
           </div>
         </div>
@@ -1253,7 +1435,7 @@ export function MerchantMobileAppView(props: MerchantMobileAppViewProps) {
 
       <div className="p-4 rounded-3xl bg-white border border-slate-200/90 shadow-2xs space-y-3">
         <h3 className="text-xs font-extrabold text-slate-900">Peak Footfall Hours</h3>
-        <p className="text-[10px] text-slate-500">Highest footfall on Fridays & Saturdays (6 PM - 9 PM)</p>
+        <p className="text-[10px] text-slate-500">Local residents active peak hours in your neighborhood</p>
         <div className="h-20 bg-purple-50 rounded-2xl flex items-center justify-center text-purple-800 text-xs font-bold">
           🔥 Peak Rush: 11 AM – 1 PM & 6 PM – 9 PM
         </div>
@@ -1274,40 +1456,57 @@ export function MerchantMobileAppView(props: MerchantMobileAppViewProps) {
         <button
           type="button"
           onClick={() => props.onOpenCreatePromoModal()}
-          className="px-3 py-1.5 rounded-xl bg-white text-purple-900 text-xs font-bold shrink-0"
+          className="px-3 py-1.5 rounded-xl bg-white text-purple-900 text-xs font-bold shrink-0 cursor-pointer"
         >
           + Launch Ad
         </button>
       </div>
 
       <div className="space-y-3">
-        {props.promotions.map((promo) => (
-          <div key={promo.id} className="p-3.5 rounded-3xl bg-white border border-slate-200/90 shadow-2xs space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-[10px] font-extrabold">
-                {promo.type}
-              </span>
-              <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-extrabold">
-                {promo.status}
-              </span>
+        {props.promotions.length === 0 ? (
+          <div className="p-8 text-center bg-white rounded-3xl border border-dashed border-slate-200">
+            <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center mx-auto mb-2">
+              <Megaphone className="w-6 h-6" />
             </div>
-            <h4 className="text-xs font-extrabold text-slate-900">{promo.title}</h4>
-            <div className="grid grid-cols-3 gap-1 text-center py-1 bg-slate-50 rounded-xl text-[10px]">
-              <div>
-                <span className="font-extrabold text-slate-800">{promo.reach}</span>
-                <span className="block text-slate-400 text-[9px]">Reach</span>
-              </div>
-              <div>
-                <span className="font-extrabold text-slate-800">{promo.clicks}</span>
-                <span className="block text-slate-400 text-[9px]">Clicks</span>
-              </div>
-              <div>
-                <span className="font-extrabold text-purple-700">{promo.redemptions}</span>
-                <span className="block text-slate-400 text-[9px]">Redemptions</span>
-              </div>
-            </div>
+            <h4 className="text-xs font-bold text-slate-800">No active promotions</h4>
+            <p className="text-[10px] text-slate-500 mt-0.5">Boost your catalog to reach nearby residents with targeted hyperlocal ads.</p>
+            <button
+              type="button"
+              onClick={() => props.onOpenCreatePromoModal()}
+              className="mt-3 px-3 py-1.5 rounded-xl bg-purple-600 text-white text-xs font-bold cursor-pointer"
+            >
+              + Create Promotion
+            </button>
           </div>
-        ))}
+        ) : (
+          props.promotions.map((promo) => (
+            <div key={promo.id} className="p-3.5 rounded-3xl bg-white border border-slate-200/90 shadow-2xs space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-[10px] font-extrabold">
+                  {promo.type}
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-extrabold">
+                  {promo.status}
+                </span>
+              </div>
+              <h4 className="text-xs font-extrabold text-slate-900">{promo.title}</h4>
+              <div className="grid grid-cols-3 gap-1 text-center py-1 bg-slate-50 rounded-xl text-[10px]">
+                <div>
+                  <span className="font-extrabold text-slate-800">{promo.reach}</span>
+                  <span className="block text-slate-400 text-[9px]">Reach</span>
+                </div>
+                <div>
+                  <span className="font-extrabold text-slate-800">{promo.clicks}</span>
+                  <span className="block text-slate-400 text-[9px]">Clicks</span>
+                </div>
+                <div>
+                  <span className="font-extrabold text-purple-700">{promo.redemptions}</span>
+                  <span className="block text-slate-400 text-[9px]">Redemptions</span>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
@@ -1322,24 +1521,32 @@ export function MerchantMobileAppView(props: MerchantMobileAppViewProps) {
           <span className="text-xs font-extrabold uppercase text-purple-300">Active Membership</span>
           <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">Active</span>
         </div>
-        <h3 className="text-xl font-extrabold">Pro Growth Plan</h3>
-        <p className="text-xs text-purple-200">₹1,999/month • Renews on 30 May 2025</p>
+        <h3 className="text-xl font-extrabold">Community Free Tier</h3>
+        <p className="text-xs text-purple-200">₹0 / Forever Free • Zero Commission on Direct Orders</p>
       </div>
 
       <div className="p-4 rounded-3xl bg-white border border-slate-200/90 shadow-2xs space-y-2.5">
         <h4 className="text-xs font-extrabold text-slate-900">Recent Invoices</h4>
-        {props.invoices.slice(0, 3).map((inv) => (
-          <div key={inv.id} className="flex items-center justify-between py-2 border-b border-slate-100 text-xs">
-            <div>
-              <p className="font-bold text-slate-900">{inv.id}</p>
-              <p className="text-[10px] text-slate-400">{inv.date} • {inv.plan}</p>
-            </div>
-            <div className="text-right">
-              <span className="font-extrabold text-slate-900">₹{inv.amount}</span>
-              <span className="block text-[9px] font-bold text-emerald-600">✓ Paid</span>
-            </div>
+        {props.invoices.length === 0 ? (
+          <div className="p-6 text-center text-slate-400">
+            <CreditCard className="w-6 h-6 mx-auto mb-1 text-slate-300" />
+            <p className="text-xs font-semibold text-slate-600">No paid invoices</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">All direct resident interactions are 100% free.</p>
           </div>
-        ))}
+        ) : (
+          props.invoices.slice(0, 3).map((inv) => (
+            <div key={inv.id} className="flex items-center justify-between py-2 border-b border-slate-100 text-xs">
+              <div>
+                <p className="font-bold text-slate-900">{inv.id}</p>
+                <p className="text-[10px] text-slate-400">{inv.date} • {inv.plan}</p>
+              </div>
+              <div className="text-right">
+                <span className="font-extrabold text-slate-900">₹{inv.amount}</span>
+                <span className="block text-[9px] font-bold text-emerald-600">✓ Paid</span>
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
@@ -1352,7 +1559,7 @@ export function MerchantMobileAppView(props: MerchantMobileAppViewProps) {
       {/* Profile Card */}
       <div className="p-4 rounded-3xl bg-white border border-slate-200/90 shadow-2xs flex items-center gap-3">
         <span className="w-12 h-12 rounded-full bg-purple-600 text-white font-extrabold text-base flex items-center justify-center">
-          RS
+          {ownerInitials}
         </span>
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-extrabold text-slate-900">{props.business.ownerName}</h3>
@@ -1407,6 +1614,15 @@ export function MerchantMobileAppView(props: MerchantMobileAppViewProps) {
     switch (props.activeDashboard) {
       case 'overview':
         return renderMobileOverview();
+      case 'orders':
+        return (
+          <MerchantOrdersDashboard
+            business={props.business}
+            orders={props.orders || []}
+            onUpdateOrderStatus={props.onUpdateOrderStatus || (() => {})}
+            onSimulateOrder={props.onSimulateOrder || (() => {})}
+          />
+        );
       case 'profile':
         return renderMobileProfile();
       case 'products':
@@ -1527,47 +1743,50 @@ export function MerchantMobileAppView(props: MerchantMobileAppViewProps) {
               </button>
             </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                props.onSwitchBusiness('biz-daily-brew');
-                setBusinessPickerOpen(false);
-              }}
-              className={`w-full p-3 rounded-2xl text-left text-xs font-bold transition flex items-center justify-between ${
-                props.business.id === 'biz-daily-brew'
-                  ? 'bg-purple-50 text-purple-900 border border-purple-200'
-                  : 'hover:bg-slate-50 text-slate-700'
-              }`}
-            >
-              <div>
-                <p className="text-sm font-extrabold text-slate-900">☕ The Daily Brew</p>
-                <p className="text-[10px] text-slate-500 mt-0.5">Café & Restaurant • Rohini Sector 9</p>
-              </div>
-              {props.business.id === 'biz-daily-brew' && (
-                <span className="text-xs font-extrabold text-purple-600">✓ Active</span>
-              )}
-            </button>
+            {/* Registered Stores list */}
+            {(() => {
+              try {
+                const raw = localStorage.getItem('myarea24_merchant_accounts_v1');
+                const accounts = raw ? JSON.parse(raw) : [];
+                const list = Array.isArray(accounts) && accounts.length > 0
+                  ? accounts
+                  : [{ businessName: props.business.name, category: props.business.category, locality: props.business.locationArea, id: props.business.id }];
 
-            <button
-              type="button"
-              onClick={() => {
-                props.onSwitchBusiness('biz-sharma-fuel');
-                setBusinessPickerOpen(false);
-              }}
-              className={`w-full p-3 rounded-2xl text-left text-xs font-bold transition flex items-center justify-between ${
-                props.business.id === 'biz-sharma-fuel'
-                  ? 'bg-purple-50 text-purple-900 border border-purple-200'
-                  : 'hover:bg-slate-50 text-slate-700'
-              }`}
-            >
-              <div>
-                <p className="text-sm font-extrabold text-slate-900">⛽ Sharma Fuel Station</p>
-                <p className="text-[10px] text-slate-500 mt-0.5">Fuel & Convenience • Rohini Sector 9</p>
-              </div>
-              {props.business.id === 'biz-sharma-fuel' && (
-                <span className="text-xs font-extrabold text-purple-600">✓ Active</span>
-              )}
-            </button>
+                return list.map((acc: any) => {
+                  const accId = acc.id || acc.businessName;
+                  const isActive = props.business.id === accId || props.business.name === acc.businessName;
+                  return (
+                    <button
+                      key={accId}
+                      type="button"
+                      onClick={() => {
+                        props.onSwitchBusiness(accId);
+                        setBusinessPickerOpen(false);
+                      }}
+                      className={`w-full p-3 rounded-2xl text-left text-xs font-bold transition flex items-center justify-between ${
+                        isActive
+                          ? 'bg-purple-50 text-purple-900 border border-purple-200'
+                          : 'hover:bg-slate-50 text-slate-700'
+                      }`}
+                    >
+                      <div>
+                        <p className="text-sm font-extrabold text-slate-900">{acc.businessName}</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5">{acc.category} • {acc.locality || 'Local Store'}</p>
+                      </div>
+                      {isActive && (
+                        <span className="text-xs font-extrabold text-purple-600">✓ Active</span>
+                      )}
+                    </button>
+                  );
+                });
+              } catch {
+                return (
+                  <div className="p-3 text-xs text-slate-500">
+                    {props.business.name} ({props.business.locationArea})
+                  </div>
+                );
+              }
+            })()}
           </div>
         </div>
       )}
@@ -1601,18 +1820,25 @@ export function MerchantMobileAppView(props: MerchantMobileAppViewProps) {
             <span className="text-[10px] leading-tight">Dashboard</span>
           </button>
 
-          {/* 2. Profile */}
+          {/* 2. Live Orders */}
           <button
             type="button"
-            onClick={() => handleTabClick('profile')}
-            className={`flex flex-col items-center justify-center py-1 gap-0.5 transition ${
-              props.activeDashboard === 'profile' && !moreDrawerOpen
+            onClick={() => handleTabClick('orders')}
+            className={`flex flex-col items-center justify-center py-1 gap-0.5 transition relative ${
+              props.activeDashboard === 'orders' && !moreDrawerOpen
                 ? 'text-purple-600 font-extrabold'
                 : 'text-slate-500 hover:text-slate-800 font-medium'
             }`}
           >
-            <Store className="w-5 h-5" />
-            <span className="text-[10px] leading-tight">Profile</span>
+            <div className="relative">
+              <ShoppingBag className="w-5 h-5" />
+              {placedOrdersCount > 0 && (
+                <span className="absolute -top-1 -right-2 px-1 py-0.2 bg-rose-600 text-white text-[8px] font-black rounded-full animate-pulse shadow-xs">
+                  {placedOrdersCount}
+                </span>
+              )}
+            </div>
+            <span className="text-[10px] leading-tight">Orders</span>
           </button>
 
           {/* 3. Products */}
@@ -1643,18 +1869,18 @@ export function MerchantMobileAppView(props: MerchantMobileAppViewProps) {
             <span className="text-[10px] leading-tight">Offers</span>
           </button>
 
-          {/* 5. Posts */}
+          {/* 5. Profile */}
           <button
             type="button"
-            onClick={() => handleTabClick('posts')}
+            onClick={() => handleTabClick('profile')}
             className={`flex flex-col items-center justify-center py-1 gap-0.5 transition ${
-              props.activeDashboard === 'posts' && !moreDrawerOpen
+              props.activeDashboard === 'profile' && !moreDrawerOpen
                 ? 'text-purple-600 font-extrabold'
                 : 'text-slate-500 hover:text-slate-800 font-medium'
             }`}
           >
-            <Megaphone className="w-5 h-5" />
-            <span className="text-[10px] leading-tight">Posts</span>
+            <Store className="w-5 h-5" />
+            <span className="text-[10px] leading-tight">Profile</span>
           </button>
 
           {/* 6. More */}
@@ -1663,7 +1889,7 @@ export function MerchantMobileAppView(props: MerchantMobileAppViewProps) {
             onClick={() => setMoreDrawerOpen(true)}
             className={`flex flex-col items-center justify-center py-1 gap-0.5 transition ${
               moreDrawerOpen ||
-              ['events', 'reviews', 'messages', 'leads', 'analytics', 'promotions', 'payments', 'settings'].includes(
+              ['posts', 'events', 'reviews', 'messages', 'leads', 'analytics', 'promotions', 'payments', 'settings'].includes(
                 props.activeDashboard
               )
                 ? 'text-purple-600 font-extrabold'
@@ -1732,6 +1958,39 @@ export function MerchantMobileAppView(props: MerchantMobileAppViewProps) {
 
             {/* Grid of Remaining Merchant Sections */}
             <div className="space-y-3 pt-1">
+              <div>
+                <p className="text-[10px] font-extrabold uppercase text-slate-400 mb-1.5 px-1">
+                  Storefront Operations
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleTabClick('orders')}
+                    className="p-2.5 rounded-2xl bg-purple-50/70 border border-purple-200 text-center flex flex-col items-center gap-1 cursor-pointer relative"
+                  >
+                    <ShoppingBag className="w-4 h-4 text-purple-600" />
+                    <span className="text-[11px] font-bold text-slate-800">Live Orders</span>
+                    {placedOrdersCount > 0 ? (
+                      <span className="text-[9px] text-rose-600 font-extrabold animate-pulse">
+                        {placedOrdersCount} New Placed
+                      </span>
+                    ) : (
+                      <span className="text-[9px] text-purple-600 font-medium">Order Management</span>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleTabClick('posts')}
+                    className="p-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-center flex flex-col items-center gap-1 cursor-pointer"
+                  >
+                    <Megaphone className="w-4 h-4 text-purple-600" />
+                    <span className="text-[11px] font-bold text-slate-800">Posts & Feed</span>
+                    <span className="text-[9px] text-slate-500 font-medium">Community</span>
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <p className="text-[10px] font-extrabold uppercase text-slate-400 mb-1.5 px-1">
                   Customer Relations

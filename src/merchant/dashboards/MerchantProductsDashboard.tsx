@@ -59,6 +59,12 @@ export function MerchantProductsDashboard({
     return matchesSearch && matchesStatus;
   });
 
+  const totalProductsCount = products.length;
+  const totalServicesCount = services.length;
+  const activeListings = products.filter((p) => p.status === 'Active').length + services.filter((s) => s.status === 'Active').length;
+  const inReviewCount = products.filter((p) => p.status === 'In Review').length + services.filter((s) => s.status === 'In Review').length;
+  const pausedCount = products.filter((p) => p.status === 'Paused').length + services.filter((s) => s.status === 'Paused').length;
+
   return (
     <div className="space-y-6">
       {/* =========================================================================
@@ -87,11 +93,11 @@ export function MerchantProductsDashboard({
               <p className="text-xs font-bold text-white">{business.name}</p>
               <div className="flex items-center gap-3 text-xs text-purple-200 mt-1">
                 <span>
-                  <strong className="text-white font-extrabold">24</strong> Products
+                  <strong className="text-white font-extrabold">{products.length}</strong> Products
                 </span>
                 <span>•</span>
                 <span>
-                  <strong className="text-white font-extrabold">8</strong> Services
+                  <strong className="text-white font-extrabold">{services.length}</strong> Services
                 </span>
               </div>
             </div>
@@ -199,9 +205,9 @@ export function MerchantProductsDashboard({
             <span className="text-[11px] font-medium text-slate-500">Total Products</span>
             <Package className="w-3.5 h-3.5 text-blue-600" />
           </div>
-          <p className="text-xl font-extrabold text-slate-900">24</p>
+          <p className="text-xl font-extrabold text-slate-900">{totalProductsCount}</p>
           <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-0.5">
-            ▲ 12% from last month
+            Active in catalog
           </span>
         </div>
 
@@ -210,9 +216,9 @@ export function MerchantProductsDashboard({
             <span className="text-[11px] font-medium text-slate-500">Total Services</span>
             <Wrench className="w-3.5 h-3.5 text-indigo-600" />
           </div>
-          <p className="text-xl font-extrabold text-slate-900">8</p>
-          <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-0.5">
-            ▲ 8% from last month
+          <p className="text-xl font-extrabold text-slate-900">{totalServicesCount}</p>
+          <span className="text-[10px] text-indigo-600 font-bold flex items-center gap-0.5">
+            Registered offerings
           </span>
         </div>
 
@@ -221,9 +227,9 @@ export function MerchantProductsDashboard({
             <span className="text-[11px] font-medium text-slate-500">Active Listings</span>
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
           </div>
-          <p className="text-xl font-extrabold text-emerald-700">28</p>
+          <p className="text-xl font-extrabold text-emerald-700">{activeListings}</p>
           <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-0.5">
-            ▲ 16% from last month
+            Live for neighborhood
           </span>
         </div>
 
@@ -232,7 +238,7 @@ export function MerchantProductsDashboard({
             <span className="text-[11px] font-medium text-slate-500">In Review</span>
             <Clock className="w-3.5 h-3.5 text-amber-500" />
           </div>
-          <p className="text-xl font-extrabold text-amber-600">3</p>
+          <p className="text-xl font-extrabold text-amber-600">{inReviewCount}</p>
           <span className="text-[10px] text-slate-400">Approval pending</span>
         </div>
 
@@ -241,10 +247,8 @@ export function MerchantProductsDashboard({
             <span className="text-[11px] font-medium text-slate-500">Paused</span>
             <PauseCircle className="w-3.5 h-3.5 text-rose-500" />
           </div>
-          <p className="text-xl font-extrabold text-rose-600">1</p>
-          <span className="text-[10px] text-rose-600 font-bold flex items-center gap-0.5">
-            ▼ 50% from last month
-          </span>
+          <p className="text-xl font-extrabold text-rose-600">{pausedCount}</p>
+          <span className="text-[10px] text-slate-400">Temporarily hidden</span>
         </div>
 
         <div className="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs">
@@ -357,6 +361,26 @@ export function MerchantProductsDashboard({
               </div>
             ))}
 
+            {filteredProducts.length === 0 && (
+              <div className="col-span-full py-8 px-4 rounded-2xl bg-purple-50/60 border border-purple-200/80 text-center">
+                <div className="w-12 h-12 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center mx-auto mb-3">
+                  <Package className="w-6 h-6" />
+                </div>
+                <h4 className="text-sm font-extrabold text-slate-900">Your Storefront Catalog is Ready</h4>
+                <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 mb-4">
+                  Welcome to {business.name}! No products added yet. Click "+ Add New Product" below to list inventory and broadcast items to nearby residents.
+                </p>
+                <button
+                  type="button"
+                  onClick={onOpenAddProductModal}
+                  className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow-sm inline-flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add First Product</span>
+                </button>
+              </div>
+            )}
+
             {/* + Add New Product Dashed Card */}
             <div
               onClick={onOpenAddProductModal}
@@ -367,7 +391,7 @@ export function MerchantProductsDashboard({
               </div>
               <h5 className="text-xs font-bold text-purple-900">Add New Product</h5>
               <p className="text-[10px] text-purple-600 mt-1">
-                Add food, beverages or other products to your listing
+                Add food, beverages, groceries or goods to your listing
               </p>
             </div>
           </div>

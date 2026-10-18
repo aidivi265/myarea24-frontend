@@ -279,6 +279,28 @@ class IngestionWorker:
 
             db.commit()
 
+            # Push live NDMA SACHET alerts immediately over WebSockets
+            if persisted_count > 0:
+                try:
+                    from backend.app.core.websocket_manager import ws_manager
+                    for rec in records:
+                        asyncio.create_task(
+                            ws_manager.broadcast_civic_alert(
+                                {
+                                    "id": f"sachet-{rec.alert_identifier}",
+                                    "title": rec.headline or rec.event_type or "Official Advisory",
+                                    "description": rec.description or rec.area_description,
+                                    "severity": rec.severity or "Critical",
+                                    "category": "Weather",
+                                    "sender": rec.sender or "NDMA SACHET",
+                                    "instruction": rec.instruction or "Follow civic instructions",
+                                    "timeAgo": "Just now",
+                                }
+                            )
+                        )
+                except Exception as ws_err:
+                    logger.warning(f"[worker] Realtime alert broadcast notice: {ws_err}")
+
         except Exception as e:
             status = "FAILED"
             error_msg = str(e)

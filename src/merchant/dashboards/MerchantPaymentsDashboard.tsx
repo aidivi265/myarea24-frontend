@@ -25,6 +25,7 @@ export function MerchantPaymentsDashboard({
   onOpenUpgradePlanModal,
 }: MerchantPaymentsDashboardProps) {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
+  const totalPaid = invoices.reduce((acc, inv) => acc + (inv.amount || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -44,9 +45,9 @@ export function MerchantPaymentsDashboard({
 
           <div className="hidden sm:flex flex-col items-end bg-white/10 backdrop-blur-md px-5 py-3 rounded-2xl border border-white/20">
             <span className="text-[10px] font-extrabold tracking-widest uppercase text-purple-200">
-              Choose the Right Plan
+              Community First Model
             </span>
-            <span className="text-base font-extrabold text-white mt-0.5">Grow Your Business</span>
+            <span className="text-base font-extrabold text-white mt-0.5">Zero Commission Tier</span>
           </div>
         </div>
       </div>
@@ -62,42 +63,38 @@ export function MerchantPaymentsDashboard({
               Active
             </span>
           </div>
-          <p className="text-2xl font-extrabold text-slate-900">Pro Plan</p>
-          <span className="text-[10px] text-slate-400">Valid till 30 May 2025</span>
+          <p className="text-xl font-extrabold text-slate-900">Community Free</p>
+          <span className="text-[10px] text-emerald-600 font-bold">Lifetime zero commission</span>
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
           <div className="flex items-center justify-between mb-1">
             <span className="text-xs font-medium text-slate-500">Next Payment</span>
-            <button
-              type="button"
-              onClick={() => alert('Pay Now: Redirecting to Razorpay secure checkout...')}
-              className="px-2 py-0.5 rounded-full bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold cursor-pointer transition"
-            >
-              Pay Now
-            </button>
+            <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-bold">
+              ₹0 Due
+            </span>
           </div>
-          <p className="text-2xl font-extrabold text-slate-900">₹1,999</p>
-          <span className="text-[10px] text-slate-400">Due on 30 May 2025</span>
+          <p className="text-2xl font-extrabold text-slate-900">₹0</p>
+          <span className="text-[10px] text-slate-400">No upcoming charges</span>
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-medium text-slate-500">Total Payments</span>
+            <span className="text-xs font-medium text-slate-500">Total Invoiced</span>
             <CreditCard className="w-4 h-4 text-purple-600" />
           </div>
-          <p className="text-2xl font-extrabold text-slate-900">₹11,994</p>
-          <span className="text-[10px] text-slate-400">Last 6 months</span>
+          <p className="text-2xl font-extrabold text-slate-900">₹{totalPaid.toLocaleString()}</p>
+          <span className="text-[10px] text-slate-400">{invoices.length} invoices recorded</span>
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-medium text-slate-500">Plan Benefits Used</span>
-            <span className="text-xs font-bold text-amber-600">67%</span>
+            <span className="text-xs font-medium text-slate-500">Tier Features</span>
+            <span className="text-xs font-bold text-emerald-600">Active</span>
           </div>
-          <p className="text-2xl font-extrabold text-slate-900">8 / 12</p>
+          <p className="text-2xl font-extrabold text-slate-900">100%</p>
           <div className="w-full h-1.5 rounded-full bg-slate-100 overflow-hidden mt-1.5">
-            <div className="h-full bg-amber-500 rounded-full" style={{ width: '67%' }} />
+            <div className="h-full bg-emerald-500 rounded-full" style={{ width: '100%' }} />
           </div>
         </div>
       </div>
@@ -331,28 +328,38 @@ export function MerchantPaymentsDashboard({
           </div>
 
           <div className="divide-y divide-slate-100 text-xs">
-            {invoices.map((inv) => (
-              <div key={inv.id} className="py-2.5 flex items-center justify-between">
-                <div>
-                  <span className="font-bold text-slate-900">{inv.id}</span>
-                  <span className="text-[11px] text-slate-400 block">{inv.date} • {inv.plan}</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="font-extrabold text-slate-900">₹{inv.amount}</span>
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold">
-                    {inv.status}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => alert(`Downloading invoice receipt: ${inv.id}`)}
-                    className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600"
-                    title="Download Invoice PDF"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+            {invoices.length === 0 ? (
+              <div className="py-8 text-center text-slate-400">
+                <CreditCard className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <p className="text-xs font-semibold text-slate-600">No Invoices Yet</p>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  You are currently on the Community Free Tier with zero billing or transaction fees.
+                </p>
               </div>
-            ))}
+            ) : (
+              invoices.map((inv) => (
+                <div key={inv.id} className="py-2.5 flex items-center justify-between">
+                  <div>
+                    <span className="font-bold text-slate-900">{inv.id}</span>
+                    <span className="text-[11px] text-slate-400 block">{inv.date} • {inv.plan}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="font-extrabold text-slate-900">₹{inv.amount}</span>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold">
+                      {inv.status}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => alert(`Downloading invoice receipt: ${inv.id}`)}
+                      className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600"
+                      title="Download Invoice PDF"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
@@ -366,12 +373,12 @@ export function MerchantPaymentsDashboard({
 
             <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-1 mb-3">
               <div className="flex items-center justify-between">
-                <span className="font-extrabold text-slate-900">VISA •••• 4242</span>
+                <span className="font-extrabold text-slate-900">UPI / Net Banking</span>
                 <span className="px-1.5 py-0.2 rounded bg-purple-50 text-purple-700 text-[10px] font-extrabold">
-                  Default
+                  Verified
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500">Expiry 12/27</p>
+              <p className="text-[11px] text-slate-500">Auto-settlements enabled</p>
             </div>
 
             <button
@@ -380,13 +387,13 @@ export function MerchantPaymentsDashboard({
               className="w-full py-2 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
-              <span>+ Add New Payment Method</span>
+              <span>+ Add Payment Method</span>
             </button>
           </div>
 
           <div className="pt-3 border-t border-slate-100 flex items-center gap-2 text-[10px] text-slate-500">
             <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>All payments secured with 256-bit encryption powered by Razorpay.</span>
+            <span>All transactions secured with 256-bit encryption.</span>
           </div>
         </div>
 
@@ -415,7 +422,7 @@ export function MerchantPaymentsDashboard({
               </div>
               <div>
                 <span className="text-slate-400 text-[10px]">GST Number</span>
-                <p className="font-bold text-indigo-700">07ABCDE1234F1Z5</p>
+                <p className="font-bold text-indigo-700">{business.gstin || 'Not Required / Unregistered'}</p>
               </div>
             </div>
           </div>

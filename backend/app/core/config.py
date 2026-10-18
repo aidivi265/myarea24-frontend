@@ -81,6 +81,16 @@ class Settings(BaseSettings):
     # Resend Transactional Email API (Alternative to SMTP)
     RESEND_API_KEY: Optional[str] = None
 
+    # Razorpay Gateway & Webhook Signature Verification
+    RAZORPAY_KEY_ID: Optional[str] = None
+    RAZORPAY_KEY_SECRET: Optional[str] = None
+
+    # SMS Gateway Configuration (Fast2SMS / Twilio)
+    FAST2SMS_API_KEY: Optional[str] = None
+    TWILIO_ACCOUNT_SID: Optional[str] = None
+    TWILIO_AUTH_TOKEN: Optional[str] = None
+    TWILIO_FROM_PHONE: Optional[str] = None
+
     # Google Gemini AI Assistant Configuration
     GEMINI_API_KEY: Optional[str] = None
     GEMINI_MODEL: str = "gemini-3.5-flash"

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { DashboardId, ActionModalData, SavedEntry } from '../types';
 import { HeroBanner } from '../components/HeroBanner';
 import { InteractiveMap } from '../components/InteractiveMap';
@@ -47,6 +48,7 @@ import {
   TrendingUp,
   Phone,
   Copy,
+  Store,
   X,
 } from 'lucide-react';
 
@@ -61,7 +63,9 @@ export interface DashboardCommonProps {
   currentLocation: UserLocation;
   liveIntel: LiveAreaIntelligence;
   marketplace?: LiveCommunityMarketplaceState;
-  onAddToCart?: (item: { name: string; price: number }) => void;
+  onAddToCart?: (item: any) => void;
+  onBookService?: (service: any) => void;
+  onOpenCart?: () => void;
   onOpenLocationPicker?: () => void;
   onOpenMerchantRegistration?: () => void;
 }
@@ -486,13 +490,15 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
-          {/* 3 Fuel Pills */}
+          {/* 4 Fuel Pills */}
           <div
             onClick={() => onNavigate('fuel-rates')}
             className="cursor-pointer p-2.5 rounded-xl bg-rose-50/60 border border-rose-100 hover:border-rose-300 transition"
           >
             <p className="text-[10px] font-bold text-rose-700 flex items-center gap-1">⛽ Petrol</p>
-            <p className="text-sm font-extrabold text-slate-900 mt-0.5">₹{fuelRates.petrol.toFixed(2)}/L</p>
+            <p className="text-sm font-extrabold text-slate-900 mt-0.5">
+              {fuelRates.petrol > 0 ? `₹${fuelRates.petrol.toFixed(2)}/L` : 'Awaiting API'}
+            </p>
             <p className="text-[9px] text-slate-500 truncate">{fuelRates.city} OMC</p>
           </div>
           <div
@@ -500,7 +506,9 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
             className="cursor-pointer p-2.5 rounded-xl bg-blue-50/60 border border-blue-100 hover:border-blue-300 transition"
           >
             <p className="text-[10px] font-bold text-blue-700 flex items-center gap-1">🛢️ Diesel</p>
-            <p className="text-sm font-extrabold text-slate-900 mt-0.5">₹{fuelRates.diesel.toFixed(2)}/L</p>
+            <p className="text-sm font-extrabold text-slate-900 mt-0.5">
+              {fuelRates.diesel > 0 ? `₹${fuelRates.diesel.toFixed(2)}/L` : 'Awaiting API'}
+            </p>
             <p className="text-[9px] text-slate-500 truncate">{fuelRates.city} OMC</p>
           </div>
           <div
@@ -508,7 +516,9 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
             className="cursor-pointer p-2.5 rounded-xl bg-emerald-50/60 border border-emerald-100 hover:border-emerald-300 transition"
           >
             <p className="text-[10px] font-bold text-emerald-700 flex items-center gap-1">🟢 CNG</p>
-            <p className="text-sm font-extrabold text-slate-900 mt-0.5">₹{fuelRates.cng.toFixed(2)}/kg</p>
+            <p className="text-sm font-extrabold text-slate-900 mt-0.5">
+              {fuelRates.cng > 0 ? `₹${fuelRates.cng.toFixed(2)}/kg` : 'Awaiting API'}
+            </p>
             <p className="text-[9px] text-slate-500 truncate">City Gas Retail</p>
           </div>
           <div
@@ -516,29 +526,41 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
             className="cursor-pointer p-2.5 rounded-xl bg-orange-50/60 border border-orange-100 hover:border-orange-300 transition"
           >
             <p className="text-[10px] font-bold text-orange-700 flex items-center gap-1">🔥 LPG (14.2kg)</p>
-            <p className="text-sm font-extrabold text-slate-900 mt-0.5">₹{fuelRates.lpg.toFixed(0)}</p>
-            <p className="text-[9px] text-slate-500 truncate">Domestic Cylinder</p>
+            <p className="text-sm font-extrabold text-slate-900 mt-0.5">
+              {fuelRates.lpg > 0 ? `₹${fuelRates.lpg.toFixed(0)}` : 'Awaiting API'}
+            </p>
+            <p className="text-[9px] text-slate-500 truncate">Domestic Refill</p>
           </div>
 
-          {/* 4 Live Mandi Vegetable Pills */}
-          {mandiRates.slice(0, 4).map((m) => (
-            <div
-              key={m.commodity}
-              onClick={() => onNavigate('market-rates')}
-              className="cursor-pointer p-2.5 rounded-xl bg-slate-50 border border-slate-200/70 hover:border-indigo-300 transition"
-            >
-              <p className="text-[10px] font-bold text-slate-700 truncate">
-                {m.icon} {m.commodity}
-              </p>
-              <div className="flex items-baseline justify-between mt-0.5">
-                <p className="text-sm font-extrabold text-slate-900">
-                  ₹{m.pricePerKg}/{m.unit}
+          {/* 4 Live Mandi Vegetable Pills or Empty Slot */}
+          {mandiRates.length > 0 ? (
+            mandiRates.slice(0, 4).map((m) => (
+              <div
+                key={m.commodity}
+                onClick={() => onNavigate('market-rates')}
+                className="cursor-pointer p-2.5 rounded-xl bg-slate-50 border border-slate-200/70 hover:border-indigo-300 transition"
+              >
+                <p className="text-[10px] font-bold text-slate-700 truncate">
+                  {m.icon} {m.commodity}
                 </p>
-                <span className="text-[9px] font-bold text-emerald-600">{m.trend}</span>
+                <div className="flex items-baseline justify-between mt-0.5">
+                  <p className="text-sm font-extrabold text-slate-900">
+                    ₹{m.pricePerKg}/{m.unit}
+                  </p>
+                  <span className="text-[9px] font-bold text-emerald-600">{m.trend}</span>
+                </div>
+                <p className="text-[9px] text-slate-400 truncate">{m.mandiName}</p>
               </div>
-              <p className="text-[9px] text-slate-400 truncate">{m.mandiName}</p>
+            ))
+          ) : (
+            <div
+              onClick={() => onNavigate('market-rates')}
+              className="col-span-2 sm:col-span-4 cursor-pointer p-2.5 rounded-xl bg-slate-50 border border-dashed border-slate-200 flex items-center justify-between text-xs text-slate-500 hover:bg-slate-100/70 transition"
+            >
+              <span className="font-medium text-[11px] truncate">🥦 Mandi Rates: Awaiting Agmarknet / APMC API Key</span>
+              <span className="text-[10px] text-indigo-600 font-bold shrink-0 ml-2">Connect Feed ›</span>
             </div>
-          ))}
+          )}
         </div>
       </div>
 
@@ -586,77 +608,86 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {homeEvents.map((ev) => {
-              const isSaved = savedIds.includes(ev.id);
-              return (
-                <div
-                  key={ev.id}
-                  onClick={() =>
-                    onOpenModal({
-                      title: ev.title,
-                      category: `${ev.cat} • ${ev.organizer}`,
-                      badge: ev.date,
-                      location: ev.loc,
-                      price: ev.price,
-                      description: `Happening ${ev.time} at ${ev.loc}. Contextual Event Intelligence: ~${ev.expectedAttendance} attendees expected, Parking Pressure: ${ev.parkingPressure}. ${ev.exitWeatherAdvisory}`,
-                      primaryActionLabel: 'Book / RSVP Now',
-                      image: ev.img,
-                    })
-                  }
-                  className="cursor-pointer rounded-xl border border-slate-200/80 overflow-hidden hover:shadow-md transition flex flex-col justify-between bg-white group"
-                >
-                  <div>
-                    <div className="relative h-24 overflow-hidden">
-                      <img
-                        src={ev.img}
-                        alt={ev.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                      />
-                      <span className="absolute top-2 left-2 px-2 py-0.5 rounded bg-white/95 text-[9px] font-extrabold text-slate-800 shadow-sm">
-                        {ev.date}
+            {homeEvents.length > 0 ? (
+              homeEvents.map((ev) => {
+                const isSaved = savedIds.includes(ev.id);
+                return (
+                  <div
+                    key={ev.id}
+                    onClick={() =>
+                      onOpenModal({
+                        title: ev.title,
+                        category: `${ev.cat} • ${ev.organizer}`,
+                        badge: ev.date,
+                        location: ev.loc,
+                        price: ev.price,
+                        description: `Happening ${ev.time} at ${ev.loc}. Contextual Event Intelligence: ~${ev.expectedAttendance} attendees expected, Parking Pressure: ${ev.parkingPressure}. ${ev.exitWeatherAdvisory}`,
+                        primaryActionLabel: 'Book / RSVP Now',
+                        image: ev.img,
+                      })
+                    }
+                    className="cursor-pointer rounded-xl border border-slate-200/80 overflow-hidden hover:shadow-md transition flex flex-col justify-between bg-white group"
+                  >
+                    <div>
+                      <div className="relative h-24 overflow-hidden">
+                        <img
+                          src={ev.img}
+                          alt={ev.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                        />
+                        <span className="absolute top-2 left-2 px-2 py-0.5 rounded bg-white/95 text-[9px] font-extrabold text-slate-800 shadow-sm">
+                          {ev.date}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleSave({
+                              id: ev.id,
+                              title: ev.title,
+                              subtitle: ev.loc,
+                              category: 'Events',
+                              meta: ev.time,
+                              image: ev.img,
+                              savedAt: 'Just now',
+                            });
+                          }}
+                          className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-rose-500 transition"
+                        >
+                          <Heart className={`w-3.5 h-3.5 ${isSaved ? 'fill-rose-500 text-rose-500' : ''}`} />
+                        </button>
+                      </div>
+                      <div className="p-2.5">
+                        <h4 className="text-xs font-extrabold text-slate-900 line-clamp-1">{ev.title}</h4>
+                        <p className="text-[10px] text-slate-500 flex items-center gap-1 mt-1">
+                          <Clock className="w-3 h-3 text-blue-500 shrink-0" />
+                          <span className="truncate">{ev.time}</span>
+                        </p>
+                        <p className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
+                          <MapPin className="w-3 h-3 text-blue-500 shrink-0" />
+                          <span className="truncate">{ev.loc}</span>
+                        </p>
+                      </div>
+                    </div>
+                    <div className="px-2.5 pb-2.5 flex flex-wrap gap-1">
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-indigo-50 text-indigo-700">
+                        {ev.cat}
                       </span>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onToggleSave({
-                            id: ev.id,
-                            title: ev.title,
-                            subtitle: ev.loc,
-                            category: 'Events',
-                            meta: ev.time,
-                            image: ev.img,
-                            savedAt: 'Just now',
-                          });
-                        }}
-                        className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-rose-500 transition"
-                      >
-                        <Heart className={`w-3.5 h-3.5 ${isSaved ? 'fill-rose-500 text-rose-500' : ''}`} />
-                      </button>
-                    </div>
-                    <div className="p-2.5">
-                      <h4 className="text-xs font-extrabold text-slate-900 line-clamp-1">{ev.title}</h4>
-                      <p className="text-[10px] text-slate-500 flex items-center gap-1 mt-1">
-                        <Clock className="w-3 h-3 text-blue-500 shrink-0" />
-                        <span className="truncate">{ev.time}</span>
-                      </p>
-                      <p className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
-                        <MapPin className="w-3 h-3 text-blue-500 shrink-0" />
-                        <span className="truncate">{ev.loc}</span>
-                      </p>
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-emerald-50 text-emerald-700">
+                        {ev.rsvp}
+                      </span>
                     </div>
                   </div>
-                  <div className="px-2.5 pb-2.5 flex flex-wrap gap-1">
-                    <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-indigo-50 text-indigo-700">
-                      {ev.cat}
-                    </span>
-                    <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-emerald-50 text-emerald-700">
-                      {ev.rsvp}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })
+            ) : (
+              <div className="col-span-3 py-10 text-center text-slate-500 bg-slate-50 rounded-xl border border-dashed border-slate-200 p-4">
+                <p className="font-extrabold text-slate-700 text-xs">No Upcoming Events in {shortArea}</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Local organizers and registered merchants can post events via the merchant portal.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -678,37 +709,46 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
           </div>
 
           <div className="space-y-2.5">
-            {alerts.slice(0, 3).map((c, idx) => {
-              const thumbs = [
-                './assets/crops/civic-water.webp',
-                './assets/crops/civic-road.webp',
-                './assets/crops/civic-gov.webp',
-              ];
-              return (
-                <div
-                  key={c.id}
-                  onClick={() => onNavigate('alerts')}
-                  className="cursor-pointer flex items-center gap-3 p-2 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-200/70 transition"
-                >
-                  <img
-                    src={thumbs[idx % thumbs.length]}
-                    alt={c.category}
-                    className="w-14 h-14 rounded-xl object-cover shrink-0 border border-slate-100"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold ${c.badgeClass}`}>
-                        {c.category.toUpperCase()}
-                      </span>
-                      <span className="text-[10px] text-slate-400">{c.timeAgo}</span>
+            {alerts.length > 0 ? (
+              alerts.slice(0, 3).map((c, idx) => {
+                const thumbs = [
+                  './assets/crops/civic-water.webp',
+                  './assets/crops/civic-road.webp',
+                  './assets/crops/civic-gov.webp',
+                ];
+                return (
+                  <div
+                    key={c.id}
+                    onClick={() => onNavigate('alerts')}
+                    className="cursor-pointer flex items-center gap-3 p-2 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-200/70 transition"
+                  >
+                    <img
+                      src={thumbs[idx % thumbs.length]}
+                      alt={c.category}
+                      className="w-14 h-14 rounded-xl object-cover shrink-0 border border-slate-100"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold ${c.badgeClass}`}>
+                          {c.category.toUpperCase()}
+                        </span>
+                        <span className="text-[10px] text-slate-400">{c.timeAgo}</span>
+                      </div>
+                      <h4 className="text-xs font-extrabold text-slate-900 truncate mt-1">{c.title}</h4>
+                      <p className="text-[10px] text-slate-500 truncate mt-0.5">📍 {c.areaDescription}</p>
+                      <p className="text-[10px] text-slate-500 truncate">🏛️ {c.sender}</p>
                     </div>
-                    <h4 className="text-xs font-extrabold text-slate-900 truncate mt-1">{c.title}</h4>
-                    <p className="text-[10px] text-slate-500 truncate mt-0.5">📍 {c.areaDescription}</p>
-                    <p className="text-[10px] text-slate-500 truncate">🏛️ {c.sender}</p>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+            ) : (
+              <div className="py-8 text-center text-slate-500 bg-slate-50 rounded-xl border border-dashed border-slate-200 p-4">
+                <p className="font-extrabold text-slate-700 text-xs">All Civic Utilities Normal</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  No NDMA alerts or municipal notices for {shortArea}.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -730,56 +770,65 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
           </div>
 
           <div className="space-y-3">
-            {popularPlaces.map((pl) => {
-              const isSaved = savedIds.includes(pl.id);
-              return (
-                <div
-                  key={pl.id}
-                  onClick={() => onNavigate('businesses')}
-                  className="cursor-pointer flex items-center justify-between gap-2.5 p-2 rounded-xl hover:bg-slate-50 transition"
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <img
-                      src={pl.img}
-                      alt={pl.name}
-                      className="w-16 h-12 rounded-xl object-cover shrink-0 border border-slate-200/60"
-                    />
-                    <div className="min-w-0">
-                      <h4 className="text-xs font-extrabold text-slate-900 truncate">{pl.name}</h4>
-                      <p className="text-[11px] text-slate-600 flex items-center gap-1 mt-0.5">
-                        <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                        <span className="font-bold text-slate-800">{pl.rating}</span>
-                        <span className="text-slate-400">{pl.reviews}</span>
-                      </p>
-                      <p className="text-[10px] text-slate-500 truncate">{pl.sub}</p>
+            {popularPlaces.length > 0 ? (
+              popularPlaces.map((pl) => {
+                const isSaved = savedIds.includes(pl.id);
+                return (
+                  <div
+                    key={pl.id}
+                    onClick={() => onNavigate('businesses')}
+                    className="cursor-pointer flex items-center justify-between gap-2.5 p-2 rounded-xl hover:bg-slate-50 transition"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <img
+                        src={pl.img}
+                        alt={pl.name}
+                        className="w-16 h-12 rounded-xl object-cover shrink-0 border border-slate-200/60"
+                      />
+                      <div className="min-w-0">
+                        <h4 className="text-xs font-extrabold text-slate-900 truncate">{pl.name}</h4>
+                        <p className="text-[11px] text-slate-600 flex items-center gap-1 mt-0.5">
+                          <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                          <span className="font-bold text-slate-800">{pl.rating}</span>
+                          <span className="text-slate-400">{pl.reviews}</span>
+                        </p>
+                        <p className="text-[10px] text-slate-500 truncate">{pl.sub}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-semibold">
+                        {pl.dist}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleSave({
+                            id: pl.id,
+                            title: pl.name,
+                            subtitle: pl.sub,
+                            category: 'Businesses',
+                            meta: pl.dist,
+                            image: pl.img,
+                            savedAt: 'Just now',
+                          });
+                        }}
+                        className="text-slate-400 hover:text-indigo-600 cursor-pointer"
+                      >
+                        <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-indigo-600 text-indigo-600' : ''}`} />
+                      </button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-semibold">
-                      {pl.dist}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onToggleSave({
-                          id: pl.id,
-                          title: pl.name,
-                          subtitle: pl.sub,
-                          category: 'Businesses',
-                          meta: pl.dist,
-                          image: pl.img,
-                          savedAt: 'Just now',
-                        });
-                      }}
-                      className="text-slate-400 hover:text-indigo-600"
-                    >
-                      <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-indigo-600 text-indigo-600' : ''}`} />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })
+            ) : (
+              <div className="py-8 text-center text-slate-500 bg-slate-50 rounded-xl border border-dashed border-slate-200 p-4">
+                <p className="font-extrabold text-slate-700 text-xs">No Places in Active Radius</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  OpenStreetMap places and verified merchants will populate here.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -791,6 +840,8 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
    2. BUSINESSES DASHBOARD (Page 4 Desktop) — WIRED TO /api/v1/businesses + OVERPASS
    ============================================================================ */
 export const BusinessesDashboard: React.FC<DashboardCommonProps> = ({
+  onNavigate,
+  onOpenMerchantRegistration,
   onOpenModal,
   onAskAi,
   savedIds,
@@ -802,7 +853,27 @@ export const BusinessesDashboard: React.FC<DashboardCommonProps> = ({
   const fallbackMarketplace = useLiveCommunityMarketplace(liveIntel);
   const marketplace = propMarketplace || fallbackMarketplace;
 
-  const [selectedCat, setSelectedCat] = useState('All');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlCat = searchParams.get('cat') || 'All';
+  const [selectedCat, setSelectedCat] = useState(urlCat);
+
+  useEffect(() => {
+    if (urlCat !== selectedCat) {
+      setSelectedCat(urlCat);
+    }
+  }, [urlCat]);
+
+  const handleSelectCategory = (cat: string) => {
+    setSelectedCat(cat);
+    const next = new URLSearchParams(searchParams);
+    if (cat === 'All') {
+      next.delete('cat');
+    } else {
+      next.set('cat', cat);
+    }
+    setSearchParams(next, { replace: true });
+  };
+
   const [localSearch, setLocalSearch] = useState('');
   const [openNowOnly, setOpenNowOnly] = useState(false);
   const [sortBy, setSortBy] = useState<'Nearest' | 'Top Rated' | 'Relevance'>('Nearest');
@@ -893,14 +964,6 @@ export const BusinessesDashboard: React.FC<DashboardCommonProps> = ({
                 </div>
               ))}
             </div>
-            <button
-              type="button"
-              onClick={() => (onOpenMerchantRegistration ? onOpenMerchantRegistration() : onNavigate('businesses'))}
-              className="w-full py-2 rounded-xl bg-white text-indigo-950 hover:bg-blue-50 text-xs font-extrabold flex items-center justify-center gap-1.5 shadow cursor-pointer transition"
-            >
-              <Store className="w-4 h-4 text-indigo-600" />
-              <span>Are you a shop owner? Join Merchant Hub</span>
-            </button>
           </div>
         }
       />
@@ -911,7 +974,7 @@ export const BusinessesDashboard: React.FC<DashboardCommonProps> = ({
           <button
             key={cat}
             type="button"
-            onClick={() => setSelectedCat(cat)}
+            onClick={() => handleSelectCategory(cat)}
             className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition shadow-sm border cursor-pointer ${
               selectedCat === cat
                 ? 'bg-blue-600 text-white border-blue-600'
@@ -1205,7 +1268,28 @@ export const ProductsDashboard: React.FC<DashboardCommonProps> = ({
   const fallbackMarketplace = useLiveCommunityMarketplace(liveIntel);
   const marketplace = propMarketplace || fallbackMarketplace;
 
-  const [selectedCat, setSelectedCat] = useState('All');
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlCat = searchParams.get('cat') || 'All';
+  const [selectedCat, setSelectedCat] = useState(urlCat);
+
+  useEffect(() => {
+    if (urlCat !== selectedCat) {
+      setSelectedCat(urlCat);
+    }
+  }, [urlCat]);
+
+  const handleSelectCategory = (cat: string) => {
+    setSelectedCat(cat);
+    const next = new URLSearchParams(searchParams);
+    if (cat === 'All') {
+      next.delete('cat');
+    } else {
+      next.set('cat', cat);
+    }
+    setSearchParams(next, { replace: true });
+  };
+
   const [addedIds, setAddedIds] = useState<string[]>([]);
 
   const shortArea = selectedArea.split(',')[0]?.trim() || selectedArea;
@@ -1226,9 +1310,19 @@ export const ProductsDashboard: React.FC<DashboardCommonProps> = ({
 
   const nearbyStores = marketplace.businesses.slice(0, 4);
 
-  const handleAdd = (p: { id: string; name: string; localPriceNum: number }) => {
+  const handleAdd = (p: any) => {
     setAddedIds((prev) => (prev.includes(p.id) ? prev : [...prev, p.id]));
-    onAddToCart?.({ name: p.name, price: p.localPriceNum });
+    onAddToCart?.({
+      id: p.id,
+      name: p.name,
+      price: p.localPriceNum || 99,
+      oldPrice: p.oldPrice,
+      image: p.img,
+      store: p.store || 'Apna Super Mart',
+      dist: p.dist || '650m',
+      quantity: 1,
+      cat: p.cat,
+    });
   };
 
   return (
@@ -1257,7 +1351,7 @@ export const ProductsDashboard: React.FC<DashboardCommonProps> = ({
         ]}
         primaryCta={{
           label: 'Compare Offline vs Online Savings',
-          onClick: () => setSelectedCat('Groceries'),
+          onClick: () => handleSelectCategory('Groceries'),
         }}
       />
 
@@ -1267,7 +1361,7 @@ export const ProductsDashboard: React.FC<DashboardCommonProps> = ({
           <button
             key={cat}
             type="button"
-            onClick={() => setSelectedCat(cat)}
+            onClick={() => handleSelectCategory(cat)}
             className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap border transition cursor-pointer ${
               selectedCat === cat
                 ? 'bg-blue-600 text-white border-blue-600'
@@ -1298,7 +1392,8 @@ export const ProductsDashboard: React.FC<DashboardCommonProps> = ({
                 return (
                   <div
                     key={p.id}
-                    onClick={() =>
+                    onClick={() => {
+                      navigate(`/products/${p.id}`);
                       onOpenModal({
                         title: p.name,
                         subtitle: `${p.store} • ${p.dist} away`,
@@ -1309,8 +1404,8 @@ export const ProductsDashboard: React.FC<DashboardCommonProps> = ({
                         description: `${p.freshnessLabel}. Buy directly from ${p.store} at ${p.price} instead of ${p.oldPrice || p.price} on ${p.onlineProvider} (Save ₹${p.savingsAmount}).`,
                         primaryActionLabel: 'Reserve for Pickup / Delivery',
                         image: p.img,
-                      })
-                    }
+                      });
+                    }}
                     className="cursor-pointer rounded-xl border border-slate-200/80 p-3 flex flex-col justify-between hover:shadow-md transition bg-white relative"
                   >
                     <div>
@@ -1566,6 +1661,7 @@ export const ServicesDashboard: React.FC<DashboardCommonProps> = ({
   selectedArea,
   liveIntel,
   marketplace: propMarketplace,
+  onBookService,
 }) => {
   const fallbackMarketplace = useLiveCommunityMarketplace(liveIntel);
   const marketplace = propMarketplace || fallbackMarketplace;
@@ -1673,19 +1769,23 @@ export const ServicesDashboard: React.FC<DashboardCommonProps> = ({
                   <div className="px-2.5 pb-2.5">
                     <button
                       type="button"
-                      onClick={() =>
-                        onOpenModal({
-                          title: srv.name,
-                          subtitle: srv.role,
-                          category: `${srv.cat} • Verified Local Pro`,
-                          price: `${srv.price} (${srv.priceUnit})`,
-                          rating: `${srv.rating} ${srv.reviews}`,
-                          location: `${srv.dist} away in ${srv.locality}, ${srv.city}`,
-                          description: `${srv.description}\n\n📞 Phone / WhatsApp: ${srv.phone}\n🕒 Hours: ${srv.timing}`,
-                          primaryActionLabel: `Book / Call ${srv.phone}`,
-                          image: srv.img,
-                        })
-                      }
+                      onClick={() => {
+                        if (onBookService) {
+                          onBookService(srv);
+                        } else {
+                          onOpenModal({
+                            title: srv.name,
+                            subtitle: srv.role,
+                            category: `${srv.cat} • Verified Local Pro`,
+                            price: `${srv.price} (${srv.priceUnit})`,
+                            rating: `${srv.rating} ${srv.reviews}`,
+                            location: `${srv.dist} away in ${srv.locality}, ${srv.city}`,
+                            description: `${srv.description}\n\n📞 Phone / WhatsApp: ${srv.phone}\n🕒 Hours: ${srv.timing}`,
+                            primaryActionLabel: `Book / Call ${srv.phone}`,
+                            image: srv.img,
+                          });
+                        }
+                      }}
                       className="w-full py-1.5 rounded-lg bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white text-xs font-bold transition cursor-pointer"
                     >
                       Book / Call Now
@@ -1803,6 +1903,8 @@ export const ServicesDashboard: React.FC<DashboardCommonProps> = ({
    5. OFFERS DASHBOARD (Page 10 Desktop) — WIRED TO /api/v1/offers
    ============================================================================ */
 export const OffersDashboard: React.FC<DashboardCommonProps> = ({
+  onNavigate,
+  onOpenMerchantRegistration,
   onOpenModal,
   onAskAi,
   savedIds,
@@ -1858,27 +1960,22 @@ export const OffersDashboard: React.FC<DashboardCommonProps> = ({
         ]}
         rightWidget={
           <div className="w-full lg:w-[340px] bg-white/12 backdrop-blur-md border border-white/20 rounded-2xl p-4">
-            <div className="flex items-center gap-3 mb-3">
+            <div className="flex items-center gap-3 mb-2.5">
               <div className="w-10 h-10 rounded-xl bg-pink-500/30 border border-pink-300/40 flex items-center justify-center">
                 <Gift className="w-5 h-5 text-pink-200" />
               </div>
               <div>
-                <p className="text-xs font-extrabold text-white">Are you a merchant in {shortArea}?</p>
+                <p className="text-xs font-extrabold text-white">Local Neighborhood Savings</p>
                 <p className="text-[11px] text-blue-100/85">
-                  Publish flash deals and coupon codes for nearby residents.
+                  Exclusive in-store discounts, BOGO & coupons across {shortArea}.
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => (onOpenMerchantRegistration ? onOpenMerchantRegistration() : onNavigate('offers'))}
-              className="w-full bg-white text-slate-800 hover:bg-blue-50 rounded-full px-3.5 py-2 text-xs font-bold flex items-center justify-between shadow-sm transition cursor-pointer"
-            >
-              <span className="flex items-center gap-1.5">
-                <Store className="w-3.5 h-3.5 text-indigo-600" /> Merchant Deals Hub
-              </span>
-              <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center">→</span>
-            </button>
+            <div className="pt-2.5 border-t border-white/15 flex items-center justify-between text-[11px] font-semibold text-blue-100">
+              <span>🎟️ Verified Promos</span>
+              <span>⚡ Direct Walk-in</span>
+              <span>💰 Zero Convenience Fee</span>
+            </div>
           </div>
         }
       />
@@ -2051,6 +2148,8 @@ export const OffersDashboard: React.FC<DashboardCommonProps> = ({
    6. EVENTS DASHBOARD (Page 12 Desktop) — WIRED TO /api/v1/events + CONTEXTUAL INTEL
    ============================================================================ */
 export const EventsDashboard: React.FC<DashboardCommonProps> = ({
+  onNavigate,
+  onOpenMerchantRegistration,
   onOpenModal,
   onAskAi,
   selectedArea,
@@ -2109,13 +2208,9 @@ export const EventsDashboard: React.FC<DashboardCommonProps> = ({
                   <p className="text-xs text-blue-100 mt-0.5">Live events in {shortArea}</p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => (onOpenMerchantRegistration ? onOpenMerchantRegistration() : onNavigate('events'))}
-                className="px-3 py-1.5 rounded-xl bg-white text-indigo-950 text-xs font-extrabold cursor-pointer hover:bg-blue-50 transition"
-              >
-                Organizer Hub ›
-              </button>
+              <div className="px-3 py-1.5 rounded-xl bg-white/20 text-white text-xs font-extrabold flex items-center gap-1">
+                <span>Neighborhood Calendar</span>
+              </div>
             </div>
             <div className="flex items-center justify-between text-[10px] text-blue-100">
               <span>🎉 Festivals</span>
@@ -2254,26 +2349,36 @@ export const EventsDashboard: React.FC<DashboardCommonProps> = ({
               ))}
             </div>
             <div className="grid grid-cols-7 gap-1 text-center text-xs">
-              {Array.from({ length: 30 }, (_, i) => i + 1).map((day) => {
-                const hasEvent = [12, 16, 17, 18, 20, 22, 23, 24].includes(day);
-                const isSelected = selectedDay === day;
-                return (
-                  <button
-                    key={day}
-                    type="button"
-                    onClick={() => setSelectedDay(day)}
-                    className={`h-7 rounded-full flex flex-col items-center justify-center font-semibold transition cursor-pointer ${
-                      isSelected
-                        ? 'bg-indigo-600 text-white font-bold shadow'
-                        : hasEvent
-                        ? 'bg-indigo-50 text-indigo-700 font-bold'
-                        : 'text-slate-700 hover:bg-slate-100'
-                    }`}
-                  >
-                    <span>{day}</span>
-                  </button>
+              {(() => {
+                const eventDays = new Set(
+                  marketplace.events
+                    .map((e) => {
+                      const match = e.date?.match(/\b(\d{1,2})\b/);
+                      return match ? parseInt(match[1], 10) : null;
+                    })
+                    .filter((d): d is number => d !== null)
                 );
-              })}
+                return Array.from({ length: 30 }, (_, i) => i + 1).map((day) => {
+                  const hasEvent = eventDays.has(day);
+                  const isSelected = selectedDay === day;
+                  return (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => setSelectedDay(day)}
+                      className={`h-7 rounded-full flex flex-col items-center justify-center font-semibold transition cursor-pointer ${
+                        isSelected
+                          ? 'bg-indigo-600 text-white font-bold shadow'
+                          : hasEvent
+                          ? 'bg-indigo-50 text-indigo-700 font-bold'
+                          : 'text-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      <span>{day}</span>
+                    </button>
+                  );
+                });
+              })()}
             </div>
           </div>
 

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { MerchantLeadItem, MerchantBusinessInfo } from '../types';
+import { realtimeService } from '../../services/realtimeService';
 import {
   Users,
   Search,
@@ -31,6 +32,13 @@ export function MerchantLeadsDashboard({
   onUpdateLeadStatus,
   onOpenMessageWithLead,
 }: MerchantLeadsDashboardProps) {
+  const totalEnquiries = leads.length;
+  const newEnquiries = leads.filter((l) => l.status.toLowerCase() === 'new').length;
+  const inProgressEnquiries = leads.filter((l) => l.status.toLowerCase() === 'in progress').length;
+  const convertedEnquiries = leads.filter((l) => l.status.toLowerCase() === 'converted').length;
+  const notInterestedEnquiries = leads.filter((l) => l.status.toLowerCase() === 'not interested').length;
+  const closedEnquiries = leads.filter((l) => l.status.toLowerCase() === 'closed').length;
+
   const [activeTab, setActiveTab] = useState<
     'all' | 'new' | 'in progress' | 'converted' | 'not interested' | 'closed'
   >('all');
@@ -64,17 +72,38 @@ export function MerchantLeadsDashboard({
             </p>
           </div>
 
-          <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-4 flex items-center gap-4 shrink-0 shadow-lg hidden sm:flex">
-            <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 border border-white/30">
-              <img
-                src={business.coverImage}
-                alt={business.name}
-                className="w-full h-full object-cover"
-              />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-white">{business.name}</p>
-              <p className="text-xs text-purple-200">152 Total Enquiries • 98 New</p>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                realtimeService.triggerMerchantLead({
+                  customerName: 'Ananya Deshmukh',
+                  topic: 'Doorstep Tasting & Bulk Hamper Quote',
+                  phone: '+91 98200 45678',
+                  message: 'Need pricing and doorstep sample tasting for 45 corporate coffee gift boxes.',
+                });
+              }}
+              className="px-3.5 py-2 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/20 text-white text-xs font-extrabold flex items-center gap-2 transition cursor-pointer backdrop-blur-md shadow-xs"
+              title="Push an instant simulated lead over WebSocket to test live arrival"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              <span>Simulate Live Influx</span>
+            </button>
+
+            <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-4 flex items-center gap-4 shrink-0 shadow-lg hidden sm:flex">
+              <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 border border-white/30">
+                <img
+                  src={business.coverImage}
+                  alt={business.name}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-white">{business.name}</p>
+                <p className="text-xs text-purple-200">
+                  {totalEnquiries} Active Leads • {newEnquiries} New
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -89,8 +118,8 @@ export function MerchantLeadsDashboard({
             <span className="text-[11px] font-medium text-slate-500">Total Enquiries</span>
             <Users className="w-3.5 h-3.5 text-purple-600" />
           </div>
-          <p className="text-xl font-extrabold text-slate-900">152</p>
-          <span className="text-[10px] text-emerald-600 font-bold">▲ 28% from last month</span>
+          <p className="text-xl font-extrabold text-slate-900">{totalEnquiries}</p>
+          <span className="text-[10px] text-slate-500 font-medium">All customer queries</span>
         </div>
 
         <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
@@ -98,17 +127,17 @@ export function MerchantLeadsDashboard({
             <span className="text-[11px] font-medium text-slate-500">New Enquiries</span>
             <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
           </div>
-          <p className="text-xl font-extrabold text-emerald-700">98</p>
-          <span className="text-[10px] text-emerald-600 font-bold">▲ 18% from last month</span>
+          <p className="text-xl font-extrabold text-emerald-700">{newEnquiries}</p>
+          <span className="text-[10px] text-emerald-600 font-bold">Awaiting response</span>
         </div>
 
         <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[11px] font-medium text-slate-500">Pending Response</span>
+            <span className="text-[11px] font-medium text-slate-500">In Progress</span>
             <Clock className="w-3.5 h-3.5 text-amber-500" />
           </div>
-          <p className="text-xl font-extrabold text-amber-600">36</p>
-          <span className="text-[10px] text-rose-600 font-bold">▼ 12% from last month</span>
+          <p className="text-xl font-extrabold text-amber-600">{inProgressEnquiries}</p>
+          <span className="text-[10px] text-slate-400">Discussion ongoing</span>
         </div>
 
         <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
@@ -116,17 +145,19 @@ export function MerchantLeadsDashboard({
             <span className="text-[11px] font-medium text-slate-500">Converted</span>
             <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
           </div>
-          <p className="text-xl font-extrabold text-slate-900">102</p>
-          <span className="text-[10px] text-emerald-600 font-bold">▲ 35% from last month</span>
+          <p className="text-xl font-extrabold text-slate-900">{convertedEnquiries}</p>
+          <span className="text-[10px] text-emerald-600 font-bold">Successful sales</span>
         </div>
 
         <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[11px] font-medium text-slate-500">Satisfaction</span>
-            <span className="text-xs">⭐</span>
+            <span className="text-[11px] font-medium text-slate-500">Response Rate</span>
+            <span className="text-xs">⚡</span>
           </div>
-          <p className="text-xl font-extrabold text-slate-900">4.6 / 5</p>
-          <span className="text-[10px] text-emerald-600 font-bold">▲ 12% from last month</span>
+          <p className="text-xl font-extrabold text-slate-900">
+            {totalEnquiries > 0 ? `${Math.round(((totalEnquiries - newEnquiries) / totalEnquiries) * 100)}%` : '100%'}
+          </p>
+          <span className="text-[10px] text-slate-500 font-medium">Customer response</span>
         </div>
       </div>
 
@@ -145,7 +176,7 @@ export function MerchantLeadsDashboard({
               <span className="text-xs font-bold text-slate-500">Last 30 Days</span>
             </div>
             <p className="text-[11px] text-purple-700 font-bold">
-              Peak: 28 Enquiries on 2 May 2025
+              {leads.length > 0 ? `${leads.length} Total Enquiries logged` : '0 Enquiries logged • Realtime capture active'}
             </p>
 
             <div className="h-36 w-full pt-3">
@@ -217,22 +248,34 @@ export function MerchantLeadsDashboard({
               />
             </svg>
             <div className="absolute text-center">
-              <span className="text-xs font-extrabold text-slate-900">152</span>
+              <span className="text-xs font-extrabold text-slate-900">{totalEnquiries}</span>
               <span className="block text-[8px] text-slate-400">Total</span>
             </div>
           </div>
           <div className="space-y-1 text-[11px] text-slate-600 pt-2 border-t border-slate-100">
             <div className="flex justify-between">
-              <span>• Website/Profile</span> <span className="font-bold">32% (49)</span>
+              <span>• Website/Profile</span>{' '}
+              <span className="font-bold">
+                {leads.filter((l) => l.source.toLowerCase().includes('website') || l.source.toLowerCase().includes('profile')).length}
+              </span>
             </div>
             <div className="flex justify-between">
-              <span>• Direct Message</span> <span className="font-bold">24% (37)</span>
+              <span>• Direct Message</span>{' '}
+              <span className="font-bold">
+                {leads.filter((l) => l.source.toLowerCase().includes('direct') || l.source.toLowerCase().includes('message')).length}
+              </span>
             </div>
             <div className="flex justify-between">
-              <span>• Search</span> <span className="font-bold">18% (27)</span>
+              <span>• Search</span>{' '}
+              <span className="font-bold">
+                {leads.filter((l) => l.source.toLowerCase().includes('search')).length}
+              </span>
             </div>
             <div className="flex justify-between">
-              <span>• Posts & Updates</span> <span className="font-bold">12% (18)</span>
+              <span>• Posts & Updates</span>{' '}
+              <span className="font-bold">
+                {leads.filter((l) => l.source.toLowerCase().includes('post') || l.source.toLowerCase().includes('update')).length}
+              </span>
             </div>
           </div>
         </div>
@@ -274,22 +317,22 @@ export function MerchantLeadsDashboard({
               />
             </svg>
             <div className="absolute text-center">
-              <span className="text-xs font-extrabold text-slate-900">152</span>
+              <span className="text-xs font-extrabold text-slate-900">{totalEnquiries}</span>
               <span className="block text-[8px] text-slate-400">Total</span>
             </div>
           </div>
           <div className="space-y-1 text-[11px] text-slate-600 pt-2 border-t border-slate-100">
             <div className="flex justify-between">
-              <span>• New</span> <span className="font-bold text-amber-600">36 (24%)</span>
+              <span>• New</span> <span className="font-bold text-amber-600">{newEnquiries}</span>
             </div>
             <div className="flex justify-between">
-              <span>• In Progress</span> <span className="font-bold text-blue-600">58 (38%)</span>
+              <span>• In Progress</span> <span className="font-bold text-blue-600">{inProgressEnquiries}</span>
             </div>
             <div className="flex justify-between">
-              <span>• Converted</span> <span className="font-bold text-emerald-600">38 (25%)</span>
+              <span>• Converted</span> <span className="font-bold text-emerald-600">{convertedEnquiries}</span>
             </div>
             <div className="flex justify-between">
-              <span>• Closed</span> <span className="font-bold text-slate-400">8 (5%)</span>
+              <span>• Closed</span> <span className="font-bold text-slate-400">{closedEnquiries}</span>
             </div>
           </div>
         </div>
@@ -304,12 +347,12 @@ export function MerchantLeadsDashboard({
           <div className="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
             <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
               {[
-                { id: 'all', label: 'All (152)' },
-                { id: 'new', label: 'New (36)' },
-                { id: 'in progress', label: 'In Progress (58)' },
-                { id: 'converted', label: 'Converted (38)' },
-                { id: 'not interested', label: 'Not Interested (12)' },
-                { id: 'closed', label: 'Closed (8)' },
+                { id: 'all', label: `All (${totalEnquiries})` },
+                { id: 'new', label: `New (${newEnquiries})` },
+                { id: 'in progress', label: `In Progress (${inProgressEnquiries})` },
+                { id: 'converted', label: `Converted (${convertedEnquiries})` },
+                { id: 'not interested', label: `Not Interested (${notInterestedEnquiries})` },
+                { id: 'closed', label: `Closed (${closedEnquiries})` },
               ].map((tab) => {
                 const active = activeTab === tab.id;
                 return (
@@ -350,73 +393,102 @@ export function MerchantLeadsDashboard({
             </div>
           </div>
 
-          <div className="bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-xs divide-y divide-slate-100">
-            {filteredLeads.map((lead) => {
-              const isSelected = lead.id === selectedLead?.id;
-              return (
-                <div
-                  key={lead.id}
-                  onClick={() => setSelectedLeadId(lead.id)}
-                  className={`p-4 transition cursor-pointer flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs ${
-                    isSelected ? 'bg-purple-50/70' : 'hover:bg-slate-50'
-                  }`}
+          <div className="bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-xs">
+            {filteredLeads.length === 0 ? (
+              <div className="p-12 text-center">
+                <Users className="w-12 h-12 text-purple-300 mx-auto mb-3" />
+                <h3 className="text-sm font-bold text-slate-800">No Enquiries Found</h3>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-4">
+                  {leads.length === 0
+                    ? 'You do not have any incoming leads or enquiries right now. When local customers enquire about your services, they will show up here.'
+                    : 'No customer enquiries match your selected status tab or search filter.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    realtimeService.triggerMerchantLead({
+                      customerName: 'Ananya Deshmukh',
+                      topic: 'Doorstep Tasting & Bulk Hamper Quote',
+                      phone: '+91 98200 45678',
+                      message: 'Need pricing and doorstep sample tasting for 45 corporate coffee gift boxes.',
+                    });
+                  }}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition shadow-sm cursor-pointer"
                 >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-extrabold text-slate-900 text-xs">
-                        {lead.customerName}
-                      </span>
-                      <span className="text-[11px] text-slate-400 font-normal">
-                        {lead.phone}
-                      </span>
-                      <span className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 text-[10px]">
-                        {lead.source}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-700 font-medium line-clamp-1">
-                      "{lead.enquiryText}"
-                    </p>
-                    <p className="text-[10px] text-slate-400 mt-1">
-                      {lead.date} • {lead.time}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
-                    <span
-                      className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold ${
-                        lead.status === 'New'
-                          ? 'bg-amber-100 text-amber-800'
-                          : lead.status === 'In Progress'
-                          ? 'bg-blue-100 text-blue-800'
-                          : lead.status === 'Converted'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : 'bg-slate-100 text-slate-600'
+                  <Sparkles className="w-4 h-4 text-amber-300" />
+                  <span>Simulate Test Lead</span>
+                </button>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {filteredLeads.map((lead) => {
+                  const isSelected = lead.id === selectedLead?.id;
+                  return (
+                    <div
+                      key={lead.id}
+                      onClick={() => setSelectedLeadId(lead.id)}
+                      className={`p-4 transition cursor-pointer flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs ${
+                        isSelected ? 'bg-purple-50/70' : 'hover:bg-slate-50'
                       }`}
                     >
-                      {lead.status}
-                    </span>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-extrabold text-slate-900 text-xs">
+                            {lead.customerName}
+                          </span>
+                          <span className="text-[11px] text-slate-400 font-normal">
+                            {lead.phone}
+                          </span>
+                          <span className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 text-[10px]">
+                            {lead.source}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-700 font-medium line-clamp-1">
+                          "{lead.enquiryText}"
+                        </p>
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          {lead.date} • {lead.time}
+                        </p>
+                      </div>
 
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onOpenMessageWithLead?.(lead);
-                      }}
-                      className="p-1.5 rounded-lg bg-slate-100 hover:bg-purple-100 text-purple-700 transition"
-                      title="Send Direct Message"
-                    >
-                      <MessageSquare className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+                      <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                        <span
+                          className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold ${
+                            lead.status === 'New'
+                              ? 'bg-amber-100 text-amber-800'
+                              : lead.status === 'In Progress'
+                              ? 'bg-blue-100 text-blue-800'
+                              : lead.status === 'Converted'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-slate-100 text-slate-600'
+                          }`}
+                        >
+                          {lead.status}
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenMessageWithLead?.(lead);
+                          }}
+                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-purple-100 text-purple-700 transition"
+                          title="Send Direct Message"
+                        >
+                          <MessageSquare className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 
         {/* Right Column: Selected Enquiry Details & Quick Actions (4 cols) */}
         <div className="lg:col-span-4 space-y-6">
-          {selectedLead && (
+          {selectedLead ? (
             <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs space-y-4 text-xs">
               <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                 <div>
@@ -535,6 +607,12 @@ export function MerchantLeadsDashboard({
                   <span>Share Menu</span>
                 </button>
               </div>
+            </div>
+          ) : (
+            <div className="bg-white p-8 rounded-3xl border border-slate-200/80 shadow-xs text-center text-slate-400">
+              <Users className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+              <p className="text-xs font-semibold text-slate-600">No Lead Selected</p>
+              <p className="text-[11px] text-slate-400 mt-1">Select an enquiry to view details and customer response actions.</p>
             </div>
           )}
         </div>

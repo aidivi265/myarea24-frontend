@@ -18,6 +18,7 @@ import {
   Share2,
   Check,
   Megaphone,
+  ArrowRight,
 } from 'lucide-react';
 
 interface MerchantActionModalsProps {
@@ -78,7 +79,7 @@ export function MerchantActionModals({
   const [eventForm, setEventForm] = useState({
     title: '',
     category: 'Music' as MerchantEventItem['category'],
-    venue: 'The Daily Brew, Rohini',
+    venue: `${businessName} Store Premises`,
     dateDisplay: '28 May 2025, 07:00 PM',
     description: '',
   });

@@ -3,6 +3,7 @@ import { DashboardCommonProps } from './MainDashboards';
 import { HeroBanner } from '../components/HeroBanner';
 import { InteractiveMap } from '../components/InteractiveMap';
 import { askLiveAiAssistant } from '../services/liveIntelligence';
+import { realtimeService } from '../services/realtimeService';
 import {
   speakTextWithSarvamOrBrowser,
   startVoiceRecognition,
@@ -1246,17 +1247,21 @@ export const TrafficDashboard: React.FC<DashboardCommonProps> = ({
                 <span className="text-[10px] font-semibold text-emerald-600">● {traffic.source}</span>
               </div>
               <div className="space-y-2.5">
-                {traffic.incidents.slice(0, 4).map((al) => (
-                  <div key={al.id} className="flex items-center justify-between gap-2 text-xs">
-                    <div className="min-w-0">
-                      <p className="font-bold text-slate-900 truncate">{al.title}</p>
-                      <p className="text-[10px] text-slate-500 truncate">{al.subtitle}</p>
+                {traffic.incidents.length > 0 ? (
+                  traffic.incidents.slice(0, 4).map((al) => (
+                    <div key={al.id} className="flex items-center justify-between gap-2 text-xs">
+                      <div className="min-w-0">
+                        <p className="font-bold text-slate-900 truncate">{al.title}</p>
+                        <p className="text-[10px] text-slate-500 truncate">{al.subtitle}</p>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded text-[9px] font-bold shrink-0 ${al.badgeClass}`}>
+                        {al.severity}
+                      </span>
                     </div>
-                    <span className={`px-2 py-0.5 rounded text-[9px] font-bold shrink-0 ${al.badgeClass}`}>
-                      {al.severity}
-                    </span>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  <p className="text-xs text-slate-400 py-4 text-center">No active traffic incidents reported in {shortArea}</p>
+                )}
               </div>
             </div>
 
@@ -1265,38 +1270,45 @@ export const TrafficDashboard: React.FC<DashboardCommonProps> = ({
                 <h3 className="text-sm font-extrabold text-slate-900">📹 Corridor Telemetry</h3>
                 <span className="text-[10px] font-semibold text-blue-600">Inspect ›</span>
               </div>
-              <div className="grid grid-cols-3 gap-2">
-                {traffic.corridors.slice(0, 3).map((cor, idx) => {
-                  const img = cctvImages[idx % cctvImages.length];
-                  return (
-                    <div
-                      key={cor.id}
-                      onClick={() =>
-                        onOpenModal({
-                          title: `Corridor Telemetry — ${cor.roadName}`,
-                          category: 'Live Arterial Sensor',
-                          badge: `${cor.speedKmh} km/h (${cor.status})`,
-                          location: `${cor.roadName}, ${selectedArea}`,
-                          description: `${cor.description}. Distance from your pin: ${cor.distanceKm} km. Estimated delay: ${
-                            cor.delayMinutes > 0 ? `+${cor.delayMinutes} mins` : 'On time'
-                          }.`,
-                          primaryActionLabel: 'Ask AI for Alternate Route',
-                          image: img,
-                        })
-                      }
-                      className="cursor-pointer rounded-xl border border-slate-200/80 overflow-hidden bg-slate-50 hover:border-blue-400 transition"
-                    >
-                      <img src={img} alt={cor.roadName} className="w-full h-20 object-cover" />
-                      <div className="p-1.5">
-                        <p className="text-[11px] font-bold text-slate-900 truncate">{cor.roadName}</p>
-                        <p className="text-[9px] font-bold text-emerald-600">
-                          ● {cor.speedKmh} km/h ({cor.status})
-                        </p>
+              {traffic.corridors.length > 0 ? (
+                <div className="grid grid-cols-3 gap-2">
+                  {traffic.corridors.slice(0, 3).map((cor, idx) => {
+                    const img = cctvImages[idx % cctvImages.length];
+                    return (
+                      <div
+                        key={cor.id}
+                        onClick={() =>
+                          onOpenModal({
+                            title: `Corridor Telemetry — ${cor.roadName}`,
+                            category: 'Live Arterial Sensor',
+                            badge: `${cor.speedKmh} km/h (${cor.status})`,
+                            location: `${cor.roadName}, ${selectedArea}`,
+                            description: `${cor.description}. Distance from your pin: ${cor.distanceKm} km. Estimated delay: ${
+                              cor.delayMinutes > 0 ? `+${cor.delayMinutes} mins` : 'On time'
+                            }.`,
+                            primaryActionLabel: 'Ask AI for Alternate Route',
+                            image: img,
+                          })
+                        }
+                        className="cursor-pointer rounded-xl border border-slate-200/80 overflow-hidden bg-slate-50 hover:border-blue-400 transition"
+                      >
+                        <img src={img} alt={cor.roadName} className="w-full h-20 object-cover" />
+                        <div className="p-1.5">
+                          <p className="text-[11px] font-bold text-slate-900 truncate">{cor.roadName}</p>
+                          <p className="text-[9px] font-bold text-emerald-600">
+                            ● {cor.speedKmh} km/h ({cor.status})
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="py-6 px-4 text-center rounded-xl bg-slate-50 border border-slate-100">
+                  <p className="text-xs font-bold text-slate-600">No Active Corridor Bottlenecks in {shortArea}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Local arterial traffic is flowing normally • Awaiting live sensor feeds</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1311,25 +1323,24 @@ export const TrafficDashboard: React.FC<DashboardCommonProps> = ({
               <span className="text-[10px] font-semibold text-emerald-600">● OSM + TomTom</span>
             </div>
             <div className="space-y-2.5">
-              {traffic.corridors.map((k) => (
-                <div
-                  key={k.id}
-                  className="flex items-center justify-between gap-2 py-1.5 border-b border-slate-100 last:border-none text-xs"
-                >
-                  <span className="font-bold text-slate-800 truncate">📍 {k.roadName}</span>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${k.badgeClass}`}>{k.status}</span>
-                    <span className="font-bold text-slate-700 w-14 text-right">{k.speedKmh} km/h</span>
-                    <span
-                      className={`font-bold w-14 text-right ${
-                        k.delayMinutes > 0 ? 'text-rose-600' : 'text-emerald-600'
-                      }`}
-                    >
-                      {k.delayMinutes > 0 ? `↑ ${k.delayMinutes} min` : 'On time'}
-                    </span>
+              {traffic.corridors.length > 0 ? (
+                traffic.corridors.map((k) => (
+                  <div
+                    key={k.id}
+                    className="flex items-center justify-between gap-2 py-1.5 border-b border-slate-100 last:border-none text-xs"
+                  >
+                    <span className="font-bold text-slate-800 truncate">📍 {k.roadName}</span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="font-mono text-slate-600 font-bold">{k.speedKmh} km/h</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${k.badgeClass}`}>
+                        {k.status}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              ) : (
+                <p className="text-xs text-slate-400 py-4 text-center">All major arterial roads in {shortArea} clear</p>
+              )}
             </div>
           </div>
 
@@ -1414,68 +1425,17 @@ export const AlertsDashboard: React.FC<
   const { alerts, communitySignals } = liveIntel;
   const shortArea = selectedArea.split(',')[0]?.trim() || selectedArea;
 
-  // Dynamic Municipal & RWA Civic Bulletins localized to selectedArea
-  const civicBulletins = [
-    {
-      id: 'civ-water',
-      title: `Municipal Water Supply Maintenance Schedule — ${shortArea}`,
-      category: 'Civic',
-      severity: 'Advisory' as const,
-      timeAgo: '2 hours ago',
-      sender: 'Municipal Water Board',
-      areaDescription: selectedArea,
-      description: `Routine pipeline pressure testing and overhead tank cleaning scheduled in ${shortArea}. Morning supply will run at normal pressure; evening supply may see a 20-minute delay.`,
-      instruction: 'Store adequate drinking water in advance.',
-      icon: '🚰',
-      badgeClass: 'bg-blue-50 text-blue-700',
-    },
-    {
-      id: 'civ-power',
-      title: `Preventive Transformer & Feeder Inspection — ${shortArea}`,
-      category: 'Civic',
-      severity: 'Advisory' as const,
-      timeAgo: '4 hours ago',
-      sender: 'Local DISCOM Utility',
-      areaDescription: selectedArea,
-      description: `Pre-monsoon/summer load balancing on local 11kV distribution feeders serving ${shortArea}.`,
-      instruction: 'Keep backup inverters charged during scheduled 30-min maintenance.',
-      icon: '⚡',
-      badgeClass: 'bg-purple-50 text-purple-700',
-    },
-    {
-      id: 'civ-health',
-      title: `Free Citizen Preventive Health & Eye Check-up Camp`,
-      category: 'Health',
-      severity: 'Resolved' as const,
-      timeAgo: 'Today',
-      sender: `${shortArea} RWA & Primary Health Center`,
-      areaDescription: selectedArea,
-      description: `Free blood pressure, blood sugar, dengue awareness, and vision screening camp open for all residents of ${shortArea} this Sunday from 9:00 AM to 2:00 PM.`,
-      instruction: 'Carry your Aadhaar or local resident card for instant registration.',
-      icon: '🏥',
-      badgeClass: 'bg-emerald-50 text-emerald-700',
-    },
-    {
-      id: 'civ-sanitation',
-      title: `Ward Cleanliness & Anti-Waterlogging Desilting Drive`,
-      category: 'Civic',
-      severity: 'Resolved' as const,
-      timeAgo: '1 day ago',
-      sender: 'Municipal Sanitation Wing',
-      areaDescription: selectedArea,
-      description: `Stormwater drain desilting and doorstep e-waste collection drive underway across ${shortArea} main market and residential blocks.`,
-      instruction: 'Hand over segregated dry & electronic waste to collection vans.',
-      icon: '🧹',
-      badgeClass: 'bg-emerald-50 text-emerald-700',
-    },
-  ];
+  // Dynamic Municipal & RWA Civic Bulletins from backend intelligence alerts / community signals
+  const civicBulletins = alerts.filter(
+    (a) => a.category.toLowerCase().includes('civic') || a.category.toLowerCase().includes('municipal')
+  );
 
   const combinedFeed =
     feedTab === 'Official Alerts'
       ? alerts
       : feedTab === 'Civic Bulletins'
       ? civicBulletins
-      : [...alerts, ...civicBulletins];
+      : alerts;
 
   const filteredFeed =
     selectedCat === 'All Categories'
@@ -1544,13 +1504,31 @@ export const AlertsDashboard: React.FC<
             ))}
           </div>
 
-          <div className="flex items-center gap-3 text-xs">
+          <div className="flex items-center gap-2 text-xs flex-wrap">
             <span className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 font-extrabold">
               {criticalCount} High Priority
             </span>
             <span className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 font-extrabold">
               {civicBulletins.length} Civic Updates
             </span>
+            <button
+              type="button"
+              onClick={() => {
+                realtimeService.triggerCivicAlert({
+                  title: '🚨 Flash Flood & Waterlogging Warning — NDMA SACHET',
+                  description: `Submerged underpasses and 15-minute delays reported near ${shortArea}. Municipal suction pumps deployed.`,
+                  severity: 'Critical',
+                  category: 'Weather',
+                  sender: 'NDMA SACHET (CAP v1.2)',
+                  instruction: 'Avoid arterial subway underpasses; follow traffic police diversions.',
+                });
+              }}
+              className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
+              title="Test real-time WebSocket push of NDMA SACHET alert"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              <span>Simulate NDMA Push</span>
+            </button>
           </div>
         </div>
 
@@ -1590,48 +1568,63 @@ export const AlertsDashboard: React.FC<
           </div>
 
           <div className="space-y-3">
-            {filteredFeed.map((ra) => (
-              <div
-                key={ra.id}
-                onClick={() =>
-                  onOpenModal({
-                    title: ra.title,
-                    category: `${ra.category} • ${ra.sender}`,
-                    badge: ra.severity,
-                    location: ra.areaDescription,
-                    description: `${ra.description}${
-                      ra.instruction ? `\n\nRecommended Action: ${ra.instruction}` : ''
-                    }`,
-                    primaryActionLabel: 'Ask AI About This Notice',
-                  })
-                }
-                className="cursor-pointer p-3.5 rounded-2xl border border-slate-200/80 hover:border-blue-400 bg-slate-50/50 hover:bg-white flex items-start justify-between gap-3 transition"
-              >
-                <div className="flex items-start gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-xl bg-white border border-slate-200/60 flex items-center justify-center text-lg shrink-0 shadow-2xs">
-                    {ra.icon}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${ra.badgeClass}`}>
-                        {ra.category}
-                      </span>
-                      <span className="text-[11px] font-bold text-slate-400">
-                        {ra.sender} • {ra.timeAgo}
-                      </span>
+            {filteredFeed.length > 0 ? (
+              filteredFeed.map((ra) => (
+                <div
+                  key={ra.id}
+                  onClick={() =>
+                    onOpenModal({
+                      title: ra.title,
+                      category: `${ra.category} • ${ra.sender}`,
+                      badge: ra.severity,
+                      location: ra.areaDescription,
+                      description: `${ra.description}${
+                        ra.instruction ? `\n\nRecommended Action: ${ra.instruction}` : ''
+                      }`,
+                      primaryActionLabel: 'Ask AI About This Notice',
+                    })
+                  }
+                  className="cursor-pointer p-3.5 rounded-2xl border border-slate-200/80 hover:border-blue-400 bg-slate-50/50 hover:bg-white flex items-start justify-between gap-3 transition"
+                >
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-xl bg-white border border-slate-200/60 flex items-center justify-center text-lg shrink-0 shadow-2xs">
+                      {ra.icon}
                     </div>
-                    <h4 className="text-xs font-extrabold text-slate-900 mt-1">{ra.title}</h4>
-                    <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">{ra.description}</p>
-                    {ra.instruction && (
-                      <p className="text-[11px] font-bold text-indigo-700 mt-1.5">
-                        ✓ Action: {ra.instruction}
-                      </p>
-                    )}
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${ra.badgeClass}`}>
+                          {ra.category}
+                        </span>
+                        <span className="text-[11px] font-bold text-slate-400">
+                          {ra.sender} • {ra.timeAgo}
+                        </span>
+                      </div>
+                      <h4 className="text-xs font-extrabold text-slate-900 mt-1">{ra.title}</h4>
+                      <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">{ra.description}</p>
+                      {ra.instruction && (
+                        <p className="text-[11px] font-bold text-indigo-700 mt-1.5">
+                          ✓ Action: {ra.instruction}
+                        </p>
+                      )}
+                    </div>
                   </div>
+                  <ChevronRight className="w-4 h-4 text-slate-400 shrink-0 mt-2" />
                 </div>
-                <ChevronRight className="w-4 h-4 text-slate-400 shrink-0 mt-2" />
+              ))
+            ) : (
+              <div className="py-12 text-center text-slate-500 bg-slate-50 rounded-2xl border border-slate-100 p-6">
+                <div className="w-12 h-12 mx-auto rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl mb-3 shadow-2xs">
+                  🔔
+                </div>
+                <p className="font-extrabold text-slate-800 text-sm">No Active Alerts or Notices for {shortArea}</p>
+                <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
+                  All municipal services, water supply, and power feeders are operating normally. Real-time official bulletins will stream here via NDMA SACHET when issued.
+                </p>
+                <span className="inline-block mt-3 px-3 py-1 rounded-full bg-white text-[11px] font-semibold text-slate-600 border border-slate-200 shadow-2xs">
+                  Awaiting Live SACHET Feed & Civic Bulletin API
+                </span>
               </div>
-            ))}
+            )}
           </div>
         </div>
 

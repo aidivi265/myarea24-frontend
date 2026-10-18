@@ -27,8 +27,11 @@ from backend.app.api.offers import router as offers_router
 from backend.app.api.events import router as events_router
 from backend.app.api.saved import router as saved_router
 from backend.app.api.market import router as market_router
-from backend.app.api.locations import router as locations_router
+from backend.app.api.locations import router as locations_router, locations_plural_router
 from backend.app.api.emergency import router as emergency_router
+from backend.app.api.orders import router as orders_router
+from backend.app.api.merchant import router as merchant_router
+from backend.app.api.websockets import router as websockets_router
 from backend.app.ingestion.scheduler import scheduler
 
 
@@ -167,7 +170,11 @@ app.include_router(events_router)
 app.include_router(saved_router)
 app.include_router(market_router)
 app.include_router(locations_router)
+app.include_router(locations_plural_router)
 app.include_router(emergency_router)
+app.include_router(orders_router)
+app.include_router(merchant_router)
+app.include_router(websockets_router)
 
 
 if __name__ == "__main__":

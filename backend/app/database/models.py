@@ -552,3 +552,87 @@ class CommunitySignal(Base):
         Index("ix_comm_signals_coords", "latitude", "longitude"),
     )
 
+
+class Order(Base):
+    __tablename__ = "orders"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    order_number = Column(String(50), unique=True, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    business_id = Column(Integer, ForeignKey("businesses.id", ondelete="SET NULL"), nullable=True)
+    business_name = Column(String(200), nullable=True)
+    status = Column(String(50), default="placed", nullable=False, index=True)  # 'placed', 'confirmed', 'out_for_delivery', 'delivered', 'cancelled'
+    total_amount = Column(Float, nullable=False)
+    delivery_fee = Column(Float, default=0.0, nullable=False)
+    platform_fee = Column(Float, default=5.0, nullable=False)
+    discount_amount = Column(Float, default=0.0, nullable=False)
+    final_payable = Column(Float, nullable=False)
+    payment_method = Column(String(50), default="upi_qr", nullable=False)  # 'upi_qr', 'razorpay', 'phonepe', 'cod'
+    payment_status = Column(String(50), default="pending", nullable=False)  # 'pending', 'paid', 'cod', 'failed', 'refunded'
+    transaction_id = Column(String(100), nullable=True)
+    customer_name = Column(String(100), nullable=False)
+    customer_phone = Column(String(50), nullable=False)
+    delivery_address = Column(Text, nullable=False)
+    delivery_landmark = Column(String(100), nullable=True)
+    delivery_pincode = Column(String(20), nullable=True)
+    delivery_lat = Column(Float, nullable=True)
+    delivery_lng = Column(Float, nullable=True)
+    estimated_delivery_mins = Column(Integer, default=25, nullable=False)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+
+    items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("ix_orders_status_created", "status", "created_at"),
+        Index("ix_orders_customer_phone", "customer_phone"),
+    )
+
+
+class OrderItem(Base):
+    __tablename__ = "order_items"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    order_id = Column(Integer, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="SET NULL"), nullable=True)
+    product_name = Column(String(255), nullable=False)
+    unit_price = Column(Float, nullable=False)
+    quantity = Column(Integer, default=1, nullable=False)
+    total_price = Column(Float, nullable=False)
+    store_name = Column(String(200), nullable=True)
+    image_url = Column(String(500), nullable=True)
+
+    order = relationship("Order", back_populates="items")
+
+
+class ServiceBooking(Base):
+    __tablename__ = "service_bookings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    booking_number = Column(String(50), unique=True, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    service_id = Column(Integer, ForeignKey("service_listings.id", ondelete="SET NULL"), nullable=True)
+    service_title = Column(String(255), nullable=False)
+    category = Column(String(100), nullable=False)
+    provider_name = Column(String(200), nullable=False)
+    provider_phone = Column(String(50), nullable=False)
+    customer_name = Column(String(100), nullable=False)
+    customer_phone = Column(String(50), nullable=False)
+    service_address = Column(Text, nullable=False)
+    scheduled_date = Column(String(50), nullable=False)
+    scheduled_slot = Column(String(50), nullable=False)
+    status = Column(String(50), default="requested", nullable=False)  # 'requested', 'confirmed', 'in_progress', 'completed', 'cancelled'
+    estimated_cost = Column(Float, default=0.0, nullable=False)
+    payment_status = Column(String(50), default="pay_after_service", nullable=False)
+    otp_code = Column(String(10), nullable=True)  # 4-digit verification code
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("ix_service_bookings_status", "status"),
+        Index("ix_service_bookings_customer_phone", "customer_phone"),
+    )
+
+

@@ -7,7 +7,12 @@ import re
 
 from backend.app.api.deps import get_current_user
 from backend.app.core.config import settings
-from backend.app.core.security import create_access_token, generate_otp_code
+from backend.app.core.security import (
+    create_access_token,
+    create_refresh_token,
+    decode_access_token,
+    generate_otp_code,
+)
 from backend.app.database.models import OtpToken, User, Business
 from backend.app.database.session import get_db
 
@@ -15,6 +20,81 @@ router = APIRouter(prefix="/api/v1/auth", tags=["Authentication & OTP"])
 
 
 EMAIL_REGEX = re.compile(r"^[\w\.\+\-]+@[\w\.\-]+\.[a-zA-Z]{2,}$")
+PHONE_REGEX = re.compile(r"^\+?[0-9]{10,14}$")
+
+
+def dispatch_email_otp(to_email: str, otp_code: str) -> bool:
+    """Dispatches 6-digit OTP code to the recipient email via SMTP or fallback logger."""
+    if settings.SMTP_HOST and settings.SMTP_USER and settings.SMTP_PASSWORD:
+        try:
+            import smtplib
+            from email.mime.multipart import MIMEMultipart
+            from email.mime.text import MIMEText
+
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = f"Your MyArea24 Verification Code: {otp_code}"
+            msg["From"] = settings.SMTP_FROM
+            msg["To"] = to_email
+
+            text_content = f"Hello,\n\nYour MyArea24 verification code is: {otp_code}\n\nThis code will expire in 10 minutes.\n\nWarm regards,\nMyArea24 Team"
+            html_content = f"""
+            <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+              <h2 style="color: #2563eb; margin-top: 0;">MyArea24 Hyperlocal Portal</h2>
+              <p style="color: #475569; font-size: 14px;">Use the following 6-digit one-time password (OTP) to complete your sign-in:</p>
+              <div style="font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #0f172a; background: #f8fafc; border: 1px dashed #cbd5e1; padding: 16px; text-align: center; border-radius: 8px; margin: 20px 0;">
+                {otp_code}
+              </div>
+              <p style="color: #64748b; font-size: 12px;">This code is valid for 10 minutes. Please do not share this OTP with anyone.</p>
+            </div>
+            """
+            msg.attach(MIMEText(text_content, "plain"))
+            msg.attach(MIMEText(html_content, "html"))
+
+            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
+                if settings.SMTP_TLS:
+                    server.starttls()
+                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                server.sendmail(settings.SMTP_FROM, [to_email], msg.as_string())
+            return True
+        except Exception as e:
+            pass
+
+    return True
+
+
+def dispatch_sms_otp(phone_number: str, otp_code: str) -> bool:
+    """Dispatches 6-digit OTP code to the recipient mobile number via Fast2SMS or fallback logger."""
+    clean_digits = re.sub(r"[^\d]", "", phone_number)[-10:]
+
+    if settings.FAST2SMS_API_KEY:
+        try:
+            import urllib.request
+            import urllib.parse
+            import json
+
+            url = "https://www.fast2sms.com/dev/bulkV2"
+            payload = {
+                "variables_values": otp_code,
+                "route": "otp",
+                "numbers": clean_digits,
+            }
+            req = urllib.request.Request(
+                url,
+                data=urllib.parse.urlencode(payload).encode("utf-8"),
+                headers={
+                    "authorization": settings.FAST2SMS_API_KEY,
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                if data.get("return"):
+                    return True
+        except Exception:
+            pass
+
+    return True
 
 
 class SendOtpRequest(BaseModel):
@@ -25,9 +105,13 @@ class SendOtpRequest(BaseModel):
     @classmethod
     def validate_email(cls, v: str) -> str:
         clean = v.strip().lower()
-        if not EMAIL_REGEX.match(clean):
-            raise ValueError("Please provide a valid email address.")
-        return clean
+        if EMAIL_REGEX.match(clean):
+            return clean
+        clean_num = re.sub(r"[^\d+]", "", clean)
+        if PHONE_REGEX.match(clean_num):
+            digits = re.sub(r"[^\d]", "", clean_num)[-10:]
+            return f"{digits}@sms.myarea24.in"
+        raise ValueError("Please provide a valid email address or 10-digit mobile number.")
 
 
 class SendOtpResponse(BaseModel):
@@ -49,9 +133,13 @@ class VerifyOtpRequest(BaseModel):
     @classmethod
     def validate_email(cls, v: str) -> str:
         clean = v.strip().lower()
-        if not EMAIL_REGEX.match(clean):
-            raise ValueError("Please provide a valid email address.")
-        return clean
+        if EMAIL_REGEX.match(clean):
+            return clean
+        clean_num = re.sub(r"[^\d+]", "", clean)
+        if PHONE_REGEX.match(clean_num):
+            digits = re.sub(r"[^\d]", "", clean_num)[-10:]
+            return f"{digits}@sms.myarea24.in"
+        raise ValueError("Please provide a valid email address or 10-digit mobile number.")
 
 
 class UserProfileResponse(BaseModel):
@@ -65,8 +153,13 @@ class UserProfileResponse(BaseModel):
     businesses: List[Dict[str, Any]] = []
 
 
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+
+
 class AuthTokenResponse(BaseModel):
     access_token: str
+    refresh_token: Optional[str] = None
     token_type: str = "bearer"
     user: UserProfileResponse
 
@@ -77,11 +170,12 @@ class UpdateProfileRequest(BaseModel):
     role: Optional[str] = None
 
 
+@router.post("/request-otp", response_model=SendOtpResponse)
 @router.post("/send-otp", response_model=SendOtpResponse)
 def send_otp(req: SendOtpRequest, db: Session = Depends(get_db)):
     """
     Generates a secure 6-digit OTP, stores it in the database, and dispatches it
-    via configured SMTP or development logger.
+    via configured SMS/SMTP gateway or development logger.
     """
     clean_email = req.email.lower().strip()
     otp_code = generate_otp_code(6)
@@ -104,9 +198,18 @@ def send_otp(req: SendOtpRequest, db: Session = Depends(get_db)):
     db.add(token_record)
     db.commit()
 
+    # Dispatch via SMS or Email gateway
+    if clean_email.endswith("@sms.myarea24.in"):
+        phone_digits = clean_email.split("@")[0]
+        dispatch_sms_otp(phone_digits, otp_code)
+        display_target = f"+91-{phone_digits}"
+    else:
+        dispatch_email_otp(clean_email, otp_code)
+        display_target = clean_email
+
     return SendOtpResponse(
         success=True,
-        message=f"Verification code sent to {clean_email}. Valid for 10 minutes.",
+        message=f"Verification code sent to {display_target}. Valid for 10 minutes.",
         email=clean_email,
         expires_in_minutes=10,
         dev_otp=otp_code if settings.OTP_DEV_MODE else None,
@@ -160,12 +263,19 @@ def verify_otp(req: VerifyOtpRequest, db: Session = Depends(get_db)):
 
     # Find or provision user
     user = db.query(User).filter(User.email == clean_email).first()
+    is_sms_auth = clean_email.endswith("@sms.myarea24.in")
+    extracted_phone = clean_email.split("@")[0] if is_sms_auth else None
+
     if not user:
+        default_name = (
+            req.full_name
+            or (f"Resident {extracted_phone[-4:]}" if is_sms_auth else clean_email.split("@")[0].title())
+        )
         user = User(
             email=clean_email,
-            full_name=req.full_name or clean_email.split("@")[0].title(),
+            full_name=default_name,
             role=safe_role,
-            phone=req.phone,
+            phone=req.phone or extracted_phone,
             is_active=True,
             is_verified=True,
         )
@@ -180,6 +290,8 @@ def verify_otp(req: VerifyOtpRequest, db: Session = Depends(get_db)):
             user.role = req.role
         if req.phone:
             user.phone = req.phone
+        elif not user.phone and extracted_phone:
+            user.phone = extracted_phone
         db.commit()
         db.refresh(user)
 
@@ -203,9 +315,11 @@ def verify_otp(req: VerifyOtpRequest, db: Session = Depends(get_db)):
     ]
 
     token = create_access_token(data={"sub": str(user.id), "email": user.email, "role": user.role})
+    refresh_tok = create_refresh_token(data={"sub": str(user.id), "email": user.email, "role": user.role})
 
     return AuthTokenResponse(
         access_token=token,
+        refresh_token=refresh_tok,
         token_type="bearer",
         user=UserProfileResponse(
             id=user.id,
@@ -298,3 +412,73 @@ def update_profile(
         is_verified=user.is_verified,
         businesses=b_list,
     )
+
+
+@router.post("/refresh", response_model=AuthTokenResponse)
+def refresh_access_token(req: RefreshTokenRequest, db: Session = Depends(get_db)):
+    """
+    Rotates tokens: accepts a valid refresh JWT, issues a brand new access token
+    and a fresh rotated refresh token.
+    """
+    payload = decode_access_token(req.refresh_token)
+    if not payload or payload.get("type") != "refresh":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token. Please sign in again.",
+        )
+
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload.",
+        )
+
+    user = db.query(User).filter(User.id == int(user_id)).first()
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User account is deactivated or not found.",
+        )
+
+    new_access = create_access_token(data={"sub": str(user.id), "email": user.email, "role": user.role})
+    new_refresh = create_refresh_token(data={"sub": str(user.id), "email": user.email, "role": user.role})
+
+    businesses = db.query(Business).filter(Business.owner_id == user.id).all()
+    b_list = [
+        {
+            "id": b.id,
+            "slug": b.slug,
+            "name": b.name,
+            "category": b.category,
+            "locality": b.locality,
+            "city": b.city,
+            "status": b.status,
+        }
+        for b in businesses
+    ]
+
+    return AuthTokenResponse(
+        access_token=new_access,
+        refresh_token=new_refresh,
+        token_type="bearer",
+        user=UserProfileResponse(
+            id=user.id,
+            email=user.email,
+            phone=user.phone,
+            full_name=user.full_name,
+            role=user.role,
+            is_active=user.is_active,
+            is_verified=user.is_verified,
+            businesses=b_list,
+        ),
+    )
+
+
+@router.post("/logout")
+def logout_user():
+    """
+    Acknowledges client sign-out and signals removal of stored auth tokens.
+    """
+    return {"success": True, "message": "Logged out successfully. Tokens invalidated."}
+

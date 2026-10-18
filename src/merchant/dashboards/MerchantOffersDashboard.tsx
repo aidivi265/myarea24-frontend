@@ -37,6 +37,13 @@ export function MerchantOffersDashboard({
   >('all');
   const [searchQuery, setSearchQuery] = useState('');
 
+  const totalOffers = offers.length;
+  const activeOffers = offers.filter((o) => o.status.toLowerCase() === 'active').length;
+  const scheduledOffers = offers.filter((o) => o.status.toLowerCase() === 'scheduled').length;
+  const pausedOffers = offers.filter((o) => o.status.toLowerCase() === 'paused').length;
+  const expiredOffers = offers.filter((o) => o.status.toLowerCase() === 'expired').length;
+  const totalViewsAcrossOffers = offers.reduce((acc, o) => acc + (o.views || 0), 0);
+
   const filteredOffers = offers.filter((o) => {
     const matchesSearch =
       o.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -46,6 +53,10 @@ export function MerchantOffersDashboard({
       activeFilterTab === 'all' || o.status.toLowerCase() === activeFilterTab;
     return matchesSearch && matchesTab;
   });
+
+  const topOffers = [...offers]
+    .sort((a, b) => (b.views || 0) - (a.views || 0))
+    .slice(0, 3);
 
   return (
     <div className="space-y-6">
@@ -96,8 +107,8 @@ export function MerchantOffersDashboard({
             <span className="text-[11px] font-medium text-slate-500">Total Offers</span>
             <Tag className="w-3.5 h-3.5 text-purple-600" />
           </div>
-          <p className="text-xl font-extrabold text-slate-900">12</p>
-          <span className="text-[10px] text-emerald-600 font-bold">▲ 20% from last month</span>
+          <p className="text-xl font-extrabold text-slate-900">{totalOffers}</p>
+          <span className="text-[10px] text-slate-500">All created deals</span>
         </div>
 
         <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
@@ -105,8 +116,8 @@ export function MerchantOffersDashboard({
             <span className="text-[11px] font-medium text-slate-500">Active Offers</span>
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
           </div>
-          <p className="text-xl font-extrabold text-emerald-700">8</p>
-          <span className="text-[10px] text-emerald-600 font-bold">▲ 14% from last month</span>
+          <p className="text-xl font-extrabold text-emerald-700">{activeOffers}</p>
+          <span className="text-[10px] text-emerald-600 font-bold">Currently live</span>
         </div>
 
         <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
@@ -114,7 +125,7 @@ export function MerchantOffersDashboard({
             <span className="text-[11px] font-medium text-slate-500">Scheduled</span>
             <Clock className="w-3.5 h-3.5 text-amber-500" />
           </div>
-          <p className="text-xl font-extrabold text-amber-600">2</p>
+          <p className="text-xl font-extrabold text-amber-600">{scheduledOffers}</p>
           <span className="text-[10px] text-slate-400">Upcoming deals</span>
         </div>
 
@@ -123,8 +134,8 @@ export function MerchantOffersDashboard({
             <span className="text-[11px] font-medium text-slate-500">Paused</span>
             <PauseCircle className="w-3.5 h-3.5 text-rose-500" />
           </div>
-          <p className="text-xl font-extrabold text-rose-600">1</p>
-          <span className="text-[10px] text-rose-600 font-bold">▼ 50% from last month</span>
+          <p className="text-xl font-extrabold text-rose-600">{pausedOffers}</p>
+          <span className="text-[10px] text-slate-400">Temporarily paused</span>
         </div>
 
         <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
@@ -132,7 +143,7 @@ export function MerchantOffersDashboard({
             <span className="text-[11px] font-medium text-slate-500">Expired</span>
             <Archive className="w-3.5 h-3.5 text-slate-400" />
           </div>
-          <p className="text-xl font-extrabold text-slate-500">1</p>
+          <p className="text-xl font-extrabold text-slate-500">{expiredOffers}</p>
           <span className="text-[10px] text-slate-400">Completed validity</span>
         </div>
       </div>
@@ -147,11 +158,11 @@ export function MerchantOffersDashboard({
           <div className="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
             <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
               {[
-                { id: 'all', label: 'All Offers (12)' },
-                { id: 'active', label: 'Active (8)' },
-                { id: 'scheduled', label: 'Scheduled (2)' },
-                { id: 'paused', label: 'Paused (1)' },
-                { id: 'expired', label: 'Expired (1)' },
+                { id: 'all', label: `All Offers (${totalOffers})` },
+                { id: 'active', label: `Active (${activeOffers})` },
+                { id: 'scheduled', label: `Scheduled (${scheduledOffers})` },
+                { id: 'paused', label: `Paused (${pausedOffers})` },
+                { id: 'expired', label: `Expired (${expiredOffers})` },
               ].map((tab) => {
                 const active = activeFilterTab === tab.id;
                 return (
@@ -194,91 +205,111 @@ export function MerchantOffersDashboard({
 
           {/* Desktop Table & Mobile Cards */}
           <div className="bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-xs">
-            <div className="divide-y divide-slate-100">
-              {filteredOffers.map((offer) => (
-                <div
-                  key={offer.id}
-                  className="p-4 hover:bg-slate-50/70 transition flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+            {filteredOffers.length === 0 ? (
+              <div className="p-12 text-center">
+                <Tag className="w-12 h-12 text-purple-300 mx-auto mb-3" />
+                <h3 className="text-sm font-bold text-slate-800">No Offers Found</h3>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-4">
+                  {offers.length === 0
+                    ? 'You have not created any promotional offers yet. Create your first deal to attract local residents!'
+                    : 'No offers match your selected filter or search term.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={onOpenCreateOfferModal}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition shadow-sm cursor-pointer"
                 >
-                  <div className="flex items-center gap-3.5 min-w-0">
-                    <div className="w-14 h-14 rounded-2xl bg-slate-100 overflow-hidden shrink-0 border border-slate-200">
-                      <img
-                        src={offer.image}
-                        alt={offer.title}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 text-[10px] font-extrabold">
-                          {offer.type}
-                        </span>
-                        <span className="text-xs font-extrabold text-rose-600">
-                          {offer.discountText}
-                        </span>
-                        {offer.badgeText && (
-                          <span className="text-[10px] line-through text-slate-400">
-                            {offer.badgeText}
-                          </span>
-                        )}
+                  <Plus className="w-4 h-4" />
+                  <span>Create First Offer</span>
+                </button>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {filteredOffers.map((offer) => (
+                  <div
+                    key={offer.id}
+                    className="p-4 hover:bg-slate-50/70 transition flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+                  >
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <div className="w-14 h-14 rounded-2xl bg-slate-100 overflow-hidden shrink-0 border border-slate-200">
+                        <img
+                          src={offer.image}
+                          alt={offer.title}
+                          className="w-full h-full object-cover"
+                        />
                       </div>
-                      <h4 className="text-xs font-bold text-slate-900 truncate">
-                        {offer.title}
-                      </h4>
-                      <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
-                        {offer.description}
-                      </p>
-                      <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
-                        <Calendar className="w-3 h-3 text-slate-400" />
-                        {offer.validityStart} – {offer.validityEnd}
-                      </p>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 text-[10px] font-extrabold">
+                            {offer.type}
+                          </span>
+                          <span className="text-xs font-extrabold text-rose-600">
+                            {offer.discountText}
+                          </span>
+                          {offer.badgeText && (
+                            <span className="text-[10px] line-through text-slate-400">
+                              {offer.badgeText}
+                            </span>
+                          )}
+                        </div>
+                        <h4 className="text-xs font-bold text-slate-900 truncate">
+                          {offer.title}
+                        </h4>
+                        <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
+                          {offer.description}
+                        </p>
+                        <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
+                          <Calendar className="w-3 h-3 text-slate-400" />
+                          {offer.validityStart} – {offer.validityEnd}
+                        </p>
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
-                    <div className="text-left sm:text-right">
-                      <span
-                        className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
-                          offer.status === 'Active'
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : offer.status === 'Scheduled'
-                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                            : 'bg-slate-100 text-slate-600'
+                    <div className="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                      <div className="text-left sm:text-right">
+                        <span
+                          className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                            offer.status === 'Active'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : offer.status === 'Scheduled'
+                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                              : 'bg-slate-100 text-slate-600'
+                          }`}
+                        >
+                          {offer.status}
+                        </span>
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          👁️ {offer.views} Views • 🎟️ {offer.redemptions} Uses
+                        </p>
+                      </div>
+
+                      {/* Toggle Switch */}
+                      <button
+                        type="button"
+                        onClick={() => onToggleOfferStatus(offer.id)}
+                        className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer ${
+                          offer.status === 'Active' ? 'bg-purple-600' : 'bg-slate-300'
                         }`}
                       >
-                        {offer.status}
-                      </span>
-                      <p className="text-[10px] text-slate-400 mt-1">
-                        👁️ {offer.views} Views • 🎟️ {offer.redemptions} Uses
-                      </p>
+                        <span
+                          className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-transform ${
+                            offer.status === 'Active' ? 'left-4.5' : 'left-0.5'
+                          }`}
+                        />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => alert(`Edit offer: ${offer.title}`)}
+                        className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
-
-                    {/* Toggle Switch */}
-                    <button
-                      type="button"
-                      onClick={() => onToggleOfferStatus(offer.id)}
-                      className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer ${
-                        offer.status === 'Active' ? 'bg-purple-600' : 'bg-slate-300'
-                      }`}
-                    >
-                      <span
-                        className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-transform ${
-                          offer.status === 'Active' ? 'left-4.5' : 'left-0.5'
-                        }`}
-                      />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => alert(`Edit offer: ${offer.title}`)}
-                      className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -291,16 +322,18 @@ export function MerchantOffersDashboard({
                 <TrendingUp className="w-4 h-4 text-purple-600" />
                 Offer Insights
               </h4>
-              <span className="text-xs font-bold text-slate-500">Last 30 Days</span>
+              <span className="text-xs font-bold text-slate-500">Live</span>
             </div>
 
             <div className="p-3 bg-purple-50/60 rounded-2xl border border-purple-100 mb-3 flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-purple-800">Total Views Across Offers</p>
-                <p className="text-xl font-extrabold text-purple-950 mt-0.5">1,540</p>
+                <p className="text-xl font-extrabold text-purple-950 mt-0.5">
+                  {totalViewsAcrossOffers.toLocaleString()}
+                </p>
               </div>
-              <span className="text-[10px] font-extrabold text-emerald-600 px-2 py-0.5 bg-emerald-100 rounded-full">
-                ▲ 24%
+              <span className="text-[10px] font-extrabold text-purple-700 px-2 py-0.5 bg-purple-100 rounded-full">
+                Active Catalog
               </span>
             </div>
 
@@ -322,41 +355,31 @@ export function MerchantOffersDashboard({
             <h4 className="text-xs font-extrabold text-slate-900 mb-3">
               Top Performing Offers
             </h4>
-            <div className="space-y-3">
-              {[
-                {
-                  rank: '1',
-                  title: 'Flat 20% Off on All Beverages',
-                  stats: '1.2K Views • 86 Redemptions',
-                  image: './assets/crops/biz-urban-chai.webp',
-                },
-                {
-                  rank: '2',
-                  title: 'Weekend Special Burger',
-                  stats: '980 Views • 64 Redemptions',
-                  image: './assets/crops/offer-burger-singh.webp',
-                },
-                {
-                  rank: '3',
-                  title: 'Buy 1 Get 1 Free on Cakes',
-                  stats: '750 Views • 48 Redemptions',
-                  image: './assets/crops/biz-bikanervala.webp',
-                },
-              ].map((item) => (
-                <div key={item.rank} className="flex items-center gap-3">
-                  <div className="w-5 h-5 rounded-full bg-purple-100 text-purple-700 text-xs font-extrabold flex items-center justify-center shrink-0">
-                    {item.rank}
+            {topOffers.length === 0 ? (
+              <div className="py-6 text-center text-slate-400">
+                <Tag className="w-8 h-8 text-slate-300 mx-auto mb-1" />
+                <p className="text-xs">No active offers yet</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {topOffers.map((item, idx) => (
+                  <div key={item.id} className="flex items-center gap-3">
+                    <div className="w-5 h-5 rounded-full bg-purple-100 text-purple-700 text-xs font-extrabold flex items-center justify-center shrink-0">
+                      {idx + 1}
+                    </div>
+                    <div className="w-9 h-9 rounded-xl bg-slate-100 overflow-hidden shrink-0">
+                      <img src={item.image} alt="" className="w-full h-full object-cover" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold text-slate-900 truncate">{item.title}</p>
+                      <p className="text-[10px] text-slate-500">
+                        {item.views} Views • {item.redemptions} Uses
+                      </p>
+                    </div>
                   </div>
-                  <div className="w-9 h-9 rounded-xl bg-slate-100 overflow-hidden shrink-0">
-                    <img src={item.image} alt="" className="w-full h-full object-cover" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-bold text-slate-900 truncate">{item.title}</p>
-                    <p className="text-[10px] text-slate-500">{item.stats}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Box 3: Quick Actions */}

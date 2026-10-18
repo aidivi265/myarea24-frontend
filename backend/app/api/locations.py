@@ -8,6 +8,7 @@ from backend.app.services.indian_spatial_service import (
     global_geocode_cache,
     global_nominatim_limiter,
     reverse_geocode_hybrid,
+    fetch_places_nearby,
     haversine_km,
 )
 import time
@@ -302,3 +303,33 @@ async def detect_location_from_gps(
         pincode=pincode or None,
         accuracy=accuracy,
     )
+
+
+@router.get("/places-nearby", response_model=Dict[str, Any])
+async def get_places_and_roads_nearby(
+    lat: float = Query(..., ge=-90.0, le=90.0, description="Latitude"),
+    lon: Optional[float] = Query(None, ge=-180.0, le=180.0, description="Longitude"),
+    lng: Optional[float] = Query(None, ge=-180.0, le=180.0, description="Longitude alias"),
+    radius: int = Query(4000, ge=500, le=25000, description="Radius in meters"),
+    category: Optional[str] = Query(None, description="Optional category filter"),
+):
+    """
+    Unified nearby POI, business storefront, and road corridor resolver.
+    Proxies and caches spatial queries on the backend with application User-Agent
+    and strict rate-limiting, preventing browser HTTP 429 errors and Nominatim TOS violations.
+    """
+    lon_val = lon if lon is not None else lng
+    if lon_val is None:
+        raise HTTPException(status_code=400, detail="Missing lon or lng parameter")
+    return await fetch_places_nearby(lat, lon_val, radius_meters=radius, category=category)
+
+
+locations_plural_router = APIRouter(prefix="/api/v1/locations", tags=["Pan-India Locations (Plural Alias)"])
+locations_plural_router.add_api_route(
+    "/places-nearby",
+    get_places_and_roads_nearby,
+    methods=["GET"],
+    response_model=Dict[str, Any],
+    description="Plural alias for /api/v1/location/places-nearby",
+)
+

@@ -69,6 +69,11 @@ export function MerchantMessagesDashboard({
     onSendMessage(currentConv.id, preset);
   };
 
+  const totalCount = conversations.length;
+  const unreadCount = conversations.filter((c) => c.unreadCount > 0).length;
+  const enquiriesCount = conversations.filter((c) => c.badge === 'Enquiry').length;
+  const customersCount = conversations.filter((c) => c.badge === 'Customer').length;
+
   return (
     <div className="space-y-6">
       {/* =========================================================================
@@ -86,20 +91,18 @@ export function MerchantMessagesDashboard({
           </div>
 
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => alert('New Message: Start chat with a customer by phone or email')}
-              className="px-4 py-2.5 rounded-xl bg-purple-500 hover:bg-purple-600 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-md"
-            >
-              <Plus className="w-4 h-4" />
-              <span>+ New Message</span>
-            </button>
             <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 border border-white/30 hidden sm:block">
-              <img
-                src={business.coverImage}
-                alt={business.name}
-                className="w-full h-full object-cover"
-              />
+              {business.coverImage ? (
+                <img
+                  src={business.coverImage}
+                  alt={business.name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full bg-purple-500/20 flex items-center justify-center text-white">
+                  <MessageSquare className="w-6 h-6" />
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -114,35 +117,35 @@ export function MerchantMessagesDashboard({
             <span className="text-xs font-medium text-slate-500">Total Conversations</span>
             <MessageSquare className="w-4 h-4 text-purple-600" />
           </div>
-          <p className="text-2xl font-extrabold text-slate-900">24</p>
-          <span className="text-[10px] text-emerald-600 font-bold">▲ 32% from last month</span>
+          <p className="text-2xl font-extrabold text-slate-900">{totalCount}</p>
+          <span className="text-[10px] text-emerald-600 font-bold">{totalCount > 0 ? '▲ Active' : 'No chats yet'}</span>
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-medium text-slate-500">New Messages</span>
+            <span className="text-xs font-medium text-slate-500">Unread Messages</span>
             <Sparkles className="w-4 h-4 text-emerald-600" />
           </div>
-          <p className="text-2xl font-extrabold text-emerald-700">18</p>
-          <span className="text-[10px] text-emerald-600 font-bold">▲ 40% from last month</span>
+          <p className="text-2xl font-extrabold text-emerald-700">{unreadCount}</p>
+          <span className="text-[10px] text-emerald-600 font-bold">{unreadCount > 0 ? 'Needs attention' : 'All caught up'}</span>
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-medium text-slate-500">Replied</span>
+            <span className="text-xs font-medium text-slate-500">Customer Inquiries</span>
             <CheckCheck className="w-4 h-4 text-blue-600" />
           </div>
-          <p className="text-2xl font-extrabold text-slate-900">12</p>
-          <span className="text-[10px] text-emerald-600 font-bold">▲ 20% from last month</span>
+          <p className="text-2xl font-extrabold text-slate-900">{enquiriesCount}</p>
+          <span className="text-[10px] text-slate-400">Direct questions</span>
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-medium text-slate-500">Pending Reply</span>
+            <span className="text-xs font-medium text-slate-500">Customers</span>
             <Clock className="w-4 h-4 text-amber-500" />
           </div>
-          <p className="text-2xl font-extrabold text-amber-600">3</p>
-          <span className="text-[10px] text-rose-600 font-bold">▼ 25% from last month</span>
+          <p className="text-2xl font-extrabold text-amber-600">{customersCount}</p>
+          <span className="text-[10px] text-slate-400">Saved buyers</span>
         </div>
       </div>
 
@@ -155,10 +158,10 @@ export function MerchantMessagesDashboard({
           {/* Tabs */}
           <div className="p-3 border-b border-slate-100 flex items-center gap-1 overflow-x-auto no-scrollbar">
             {[
-              { id: 'all', label: 'All (24)' },
-              { id: 'unread', label: 'Unread (3)' },
-              { id: 'enquiries', label: 'Enquiries (12)' },
-              { id: 'customers', label: 'Customers (9)' },
+              { id: 'all', label: `All (${totalCount})` },
+              { id: 'unread', label: `Unread (${unreadCount})` },
+              { id: 'enquiries', label: `Enquiries (${enquiriesCount})` },
+              { id: 'customers', label: `Customers (${customersCount})` },
             ].map((tab) => {
               const active = activeTab === tab.id;
               return (
@@ -200,24 +203,31 @@ export function MerchantMessagesDashboard({
 
           {/* Conversations Scrollable Stream */}
           <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
-            {filteredConversations.map((conv) => {
-              const isSelected = conv.id === currentConv?.id;
-              return (
-                <div
-                  key={conv.id}
-                  onClick={() => onSelectConversation(conv.id)}
-                  className={`p-3.5 transition cursor-pointer flex items-start justify-between gap-3 ${
-                    isSelected
-                      ? 'bg-purple-50/80 border-l-4 border-purple-600'
-                      : 'hover:bg-slate-50'
-                  }`}
-                >
-                  <div className="flex items-start gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 font-extrabold text-xs flex items-center justify-center shrink-0">
-                      {conv.avatar}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5 mb-0.5">
+            {filteredConversations.length === 0 ? (
+              <div className="p-8 text-center text-slate-400">
+                <MessageSquare className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <p className="text-xs font-bold text-slate-600">No conversations yet</p>
+                <p className="text-[11px] text-slate-400 mt-1">Direct inquiries from local shoppers will appear here.</p>
+              </div>
+            ) : (
+              filteredConversations.map((conv) => {
+                const isSelected = conv.id === currentConv?.id;
+                return (
+                  <div
+                    key={conv.id}
+                    onClick={() => onSelectConversation(conv.id)}
+                    className={`p-3.5 transition cursor-pointer flex items-start justify-between gap-3 ${
+                      isSelected
+                        ? 'bg-purple-50/80 border-l-4 border-purple-600'
+                        : 'hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 font-extrabold text-xs flex items-center justify-center shrink-0">
+                        {conv.avatar}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 mb-0.5">
                         <span className="font-bold text-xs text-slate-900 truncate">
                           {conv.customerName}
                         </span>
@@ -241,7 +251,8 @@ export function MerchantMessagesDashboard({
                   </div>
                 </div>
               );
-            })}
+            })
+          )}
           </div>
         </div>
 

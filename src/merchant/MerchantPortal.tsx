@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   MerchantDashboardId,
   MerchantBusinessInfo,
@@ -12,6 +13,7 @@ import {
   MerchantLeadItem,
   MerchantPromotionItem,
   MerchantInvoiceItem,
+  MerchantOrderItem,
 } from './types';
 import {
   DEFAULT_BUSINESS_THE_DAILY_BREW,
@@ -26,6 +28,7 @@ import {
   INITIAL_MERCHANT_LEADS,
   INITIAL_MERCHANT_PROMOTIONS,
   INITIAL_MERCHANT_INVOICES,
+  INITIAL_MERCHANT_ORDERS,
 } from './data/merchantMockData';
 import {
   Home,
@@ -55,10 +58,26 @@ import {
   HelpCircle,
   CheckCircle2,
   Globe,
+  ShoppingBag,
+  Lock,
+  KeyRound,
+  Plus,
+  ShieldCheck,
 } from 'lucide-react';
+import {
+  realtimeService,
+  REALTIME_STATUS_EVENT,
+  MERCHANT_LEAD_EVENT,
+  MERCHANT_INQUIRY_EVENT,
+  MERCHANT_REVIEW_EVENT,
+  MERCHANT_ORDER_EVENT,
+  ORDER_STATUS_EVENT,
+  RealtimeConnectionStatus,
+} from '../services/realtimeService';
 import { MerchantHomeDashboard } from './dashboards/MerchantHomeDashboard';
 import { MerchantProfileDashboard } from './dashboards/MerchantProfileDashboard';
 import { MerchantProductsDashboard } from './dashboards/MerchantProductsDashboard';
+import { MerchantOrdersDashboard } from './dashboards/MerchantOrdersDashboard';
 import { MerchantOffersDashboard } from './dashboards/MerchantOffersDashboard';
 import { MerchantPostsDashboard } from './dashboards/MerchantPostsDashboard';
 import { MerchantEventsDashboard } from './dashboards/MerchantEventsDashboard';
@@ -70,13 +89,27 @@ import { MerchantPromotionsDashboard } from './dashboards/MerchantPromotionsDash
 import { MerchantPaymentsDashboard } from './dashboards/MerchantPaymentsDashboard';
 import { MerchantSettingsDashboard } from './dashboards/MerchantSettingsDashboard';
 import { MerchantMobileAppView } from './components/MerchantMobileAppView';
+import { MerchantActionModals } from './components/MerchantActionModals';
 import {
   LiveCommunityMarketplaceState,
   syncMerchantProductToGlobal,
   syncMerchantProductToggle,
   getStoredMerchantProfile,
+  getStoredMerchantSession,
+  getStoredMerchantAccounts,
+  saveMerchantSession,
+  clearMerchantSession,
+  MerchantRegistrationProfile,
 } from '../services/communityMarketplaceService';
-import { UserLocation } from '../components/LocationPickerModal';
+import { UserLocation } from '../types';
+import { MerchantRegistrationModal } from '../components/MerchantRegistrationModal';
+import {
+  getMerchantOverview,
+  createMerchantProduct,
+  createMerchantService,
+  createMerchantOffer,
+  createMerchantEvent,
+} from './services/merchantApiService';
 
 interface MerchantPortalProps {
   onSwitchToCitizen: () => void;
@@ -86,24 +119,65 @@ interface MerchantPortalProps {
 
 const STORAGE_KEY = 'myarea24_merchant_portal_state_v1';
 
+function buildMerchantBusinessInfo(profile: MerchantRegistrationProfile): MerchantBusinessInfo {
+  const categoryTaglines: Record<string, string> = {
+    'Restaurants & Cafes': 'Fresh Local Dining, Delicacies & Express Delivery',
+    'Groceries & Daily Staples': 'Daily Farm-Fresh Staples, Fruits & Supermarket Goods',
+    '24×7 Pharmacies & Healthcare': 'Certified Healthcare, Prescription Medicines & Emergency Care',
+    'Electronics, Mobiles & Repair': 'Authentic Gadgets, Mobile Accessories & Certified Repairs',
+    'Home Utility & Repair Services': 'Prompt Neighborhood Electricians, Plumbers & Technicians',
+    'Salons, Spa & Grooming': 'Professional Beauty Care, Haircuts & Wellness Treatments',
+    'Fitness, Gyms & Sports Arenas': 'Modern Equipment, Certified Trainers & Fitness Community',
+    'Clothing, Footwear & Fashion': 'Trending Apparel, Local Boutiques & Tailoring Services',
+    'Event Venues & Hall Bookings': 'Banquet Halls, Event Spaces & Community Celebrations',
+  };
+
+  const bizId = profile.id || `biz_${profile.businessName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+  const tagline = profile.tagline || categoryTaglines[profile.category] || 'Verified Local Merchant Storefront';
+
+  return {
+    id: bizId,
+    name: profile.businessName,
+    tagline,
+    category: profile.category,
+    ownerName: profile.ownerName,
+    ownerRole: 'Owner & Operator',
+    locationArea: `${profile.locality || 'Local'}, ${profile.city || 'India'}`,
+    pincode: profile.pincode || '',
+    fullAddress: profile.fullAddress,
+    landmark: `${profile.locality || 'Commercial'} Market`,
+    serviceArea: `${profile.locality || 'Neighborhood'} and nearby sectors`,
+    phone: profile.phone,
+    email: profile.email,
+    website: `www.${profile.businessName.toLowerCase().replace(/[^a-z0-9]+/g, '')}.in`,
+    rating: 5.0,
+    reviewCount: 0,
+    verificationStatus: profile.isVerified ? 'Verified' : 'Under Review',
+    submissionDate: new Date(profile.registeredAt || Date.now()).toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    }),
+    profileCompletion: profile.isVerified ? 100 : 75,
+    logo: './assets/crops/biz-card-chai.webp',
+    coverImage: './assets/crops/biz-ai-cafe.webp',
+  };
+}
+
 export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation }: MerchantPortalProps) {
+  // Active Merchant Session & Profile
+  const [session, setSession] = useState<MerchantRegistrationProfile | null>(() => {
+    return getStoredMerchantSession() || getStoredMerchantProfile();
+  });
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('login');
+
   // Business Storefront: checks verified registration profile first, then fallback
   const [currentBusiness, setCurrentBusiness] = useState<MerchantBusinessInfo>(() => {
     try {
-      const regProfile = getStoredMerchantProfile();
-      if (regProfile && regProfile.isVerified) {
-        return {
-          ...DEFAULT_BUSINESS_THE_DAILY_BREW,
-          name: regProfile.businessName,
-          category: regProfile.category,
-          ownerName: regProfile.ownerName,
-          locationArea: regProfile.locality,
-          pincode: regProfile.pincode,
-          fullAddress: regProfile.fullAddress,
-          phone: regProfile.phone,
-          email: regProfile.email,
-          verificationStatus: 'Verified',
-        };
+      const activeSession = getStoredMerchantSession() || getStoredMerchantProfile();
+      if (activeSession && activeSession.isVerified) {
+        return buildMerchantBusinessInfo(activeSession);
       }
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
@@ -114,7 +188,37 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
     return DEFAULT_BUSINESS_THE_DAILY_BREW;
   });
 
-  const [activeDashboard, setActiveDashboard] = useState<MerchantDashboardId>('overview');
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const merchantSubroute = location.pathname.replace(/^\/merchant\/?/, '').split('/')[0].toLowerCase();
+  const validMerchantDashboards: MerchantDashboardId[] = [
+    'overview',
+    'profile',
+    'products',
+    'orders',
+    'offers',
+    'posts',
+    'events',
+    'reviews',
+    'messages',
+    'leads',
+    'analytics',
+    'promotions',
+    'payments',
+    'settings',
+  ];
+  const activeDashboard: MerchantDashboardId = validMerchantDashboards.includes(
+    merchantSubroute as MerchantDashboardId
+  )
+    ? (merchantSubroute as MerchantDashboardId)
+    : 'overview';
+
+  const handleNavigate = (dash: MerchantDashboardId) => {
+    navigate(dash === 'overview' ? '/merchant' : `/merchant/${dash}`);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const [searchQuery, setSearchQuery] = useState('');
   const [modalType, setModalType] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -124,23 +228,366 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
     setTimeout(() => setToastMsg(null), 3500);
   };
 
-  // Data Collections
-  const [products, setProducts] = useState<MerchantProductItem[]>(INITIAL_MERCHANT_PRODUCTS);
-  const [services, setServices] = useState<MerchantServiceItem[]>(INITIAL_MERCHANT_SERVICES);
-  const [offers, setOffers] = useState<MerchantOfferItem[]>(INITIAL_MERCHANT_OFFERS);
-  const [posts, setPosts] = useState<MerchantPostItem[]>(INITIAL_MERCHANT_POSTS);
-  const [events, setEvents] = useState<MerchantEventItem[]>(INITIAL_MERCHANT_EVENTS);
-  const [reviews, setReviews] = useState<MerchantReviewItem[]>(INITIAL_MERCHANT_REVIEWS);
-  const [conversations, setConversations] = useState<MerchantConversation[]>(INITIAL_MERCHANT_CONVERSATIONS);
-  const [activeConversationId, setActiveConversationId] = useState<string>(INITIAL_MERCHANT_CONVERSATIONS[0].id);
-  const [leads, setLeads] = useState<MerchantLeadItem[]>(INITIAL_MERCHANT_LEADS);
-  const [promotions, setPromotions] = useState<MerchantPromotionItem[]>(INITIAL_MERCHANT_PROMOTIONS);
+  // Helpers for per-business isolated storage
+  const loadStoredCollection = <T,>(key: string, bizId: string, demoFallback: T[]): T[] => {
+    try {
+      const stored = localStorage.getItem(`myarea24_merchant_${key}_${bizId}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return demoFallback || [];
+  };
+
+  const loadStoredOrders = (bizId: string, bizName: string, demoFallback: MerchantOrderItem[]): MerchantOrderItem[] => {
+    try {
+      const stored = localStorage.getItem(`myarea24_merchant_orders_${bizId}`);
+      let list: MerchantOrderItem[] = [];
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) list = parsed;
+      } else if (demoFallback && demoFallback.length > 0) {
+        list = [...demoFallback];
+      }
+
+      // Automatically sync citizen orders placed for this storefront
+      const citizenRaw = localStorage.getItem('myarea24_citizen_orders');
+      if (citizenRaw) {
+        const citizenOrders: any[] = JSON.parse(citizenRaw);
+        citizenOrders.forEach((co) => {
+          const matches =
+            (co.storeName && co.storeName.trim().toLowerCase() === bizName.trim().toLowerCase()) ||
+            co.businessId === bizId ||
+            co.business_id === bizId;
+          if (matches) {
+            const already = list.some((it) => it.orderNumber === co.orderNumber || it.id === co.id);
+            if (!already) {
+              list.unshift({
+                id: co.id,
+                orderNumber: co.orderNumber,
+                businessId: bizId,
+                businessName: bizName,
+                customerName:
+                  co.customerName ||
+                  (typeof co.deliveryAddress === 'object' ? co.deliveryAddress?.recipientName : 'Local Citizen'),
+                customerPhone:
+                  co.customerPhone ||
+                  (typeof co.deliveryAddress === 'object' ? co.deliveryAddress?.recipientPhone : '+91 98000 00000'),
+                deliveryAddress:
+                  typeof co.deliveryAddress === 'string'
+                    ? co.deliveryAddress
+                    : co.deliveryAddress?.streetAddress || 'Local Residential Address',
+                finalPayable: Number(co.finalPayable || 0),
+                paymentMethod: co.paymentMethod || 'upi_qr',
+                paymentStatus: co.paymentStatus === 'paid' ? 'paid' : co.paymentStatus === 'cod' ? 'cod' : 'pending',
+                status: co.status || 'placed',
+                items: (co.items || []).map((it: any) => ({
+                  productName: it.name || it.product_name,
+                  unitPrice: it.price || it.unit_price,
+                  quantity: it.quantity,
+                  totalPrice: (it.price || it.unit_price) * it.quantity,
+                })),
+                estimatedDeliveryMins: co.estimatedDeliveryMins || 20,
+                createdAt: co.createdAt || new Date().toISOString(),
+              });
+            }
+          }
+        });
+      }
+      return list;
+    } catch {
+      return bizId === 'biz-daily-brew' ? demoFallback : [];
+    }
+  };
+
+  // Data Collections (Stored per business)
+  const [products, setProducts] = useState<MerchantProductItem[]>(() =>
+    loadStoredCollection('products', currentBusiness.id, INITIAL_MERCHANT_PRODUCTS)
+  );
+  const [services, setServices] = useState<MerchantServiceItem[]>(() =>
+    loadStoredCollection('services', currentBusiness.id, INITIAL_MERCHANT_SERVICES)
+  );
+  const [offers, setOffers] = useState<MerchantOfferItem[]>(() =>
+    loadStoredCollection('offers', currentBusiness.id, INITIAL_MERCHANT_OFFERS)
+  );
+  const [posts, setPosts] = useState<MerchantPostItem[]>(() =>
+    loadStoredCollection('posts', currentBusiness.id, INITIAL_MERCHANT_POSTS)
+  );
+  const [events, setEvents] = useState<MerchantEventItem[]>(() =>
+    loadStoredCollection('events', currentBusiness.id, INITIAL_MERCHANT_EVENTS)
+  );
+  const [reviews, setReviews] = useState<MerchantReviewItem[]>(() =>
+    loadStoredCollection('reviews', currentBusiness.id, INITIAL_MERCHANT_REVIEWS)
+  );
+  const [conversations, setConversations] = useState<MerchantConversation[]>(() =>
+    loadStoredCollection('conversations', currentBusiness.id, INITIAL_MERCHANT_CONVERSATIONS)
+  );
+  const [activeConversationId, setActiveConversationId] = useState<string>(
+    () => loadStoredCollection('conversations', currentBusiness.id, INITIAL_MERCHANT_CONVERSATIONS)[0]?.id || ''
+  );
+  const [leads, setLeads] = useState<MerchantLeadItem[]>(() =>
+    loadStoredCollection('leads', currentBusiness.id, INITIAL_MERCHANT_LEADS)
+  );
+  const [orders, setOrders] = useState<MerchantOrderItem[]>(() =>
+    loadStoredOrders(currentBusiness.id, currentBusiness.name, INITIAL_MERCHANT_ORDERS)
+  );
+  const [promotions, setPromotions] = useState<MerchantPromotionItem[]>(() =>
+    loadStoredCollection('promotions', currentBusiness.id, INITIAL_MERCHANT_PROMOTIONS)
+  );
   const [invoices] = useState<MerchantInvoiceItem[]>(INITIAL_MERCHANT_INVOICES);
+
+  // Synchronize collections whenever currentBusiness switches
+  useEffect(() => {
+    const bizId = currentBusiness.id;
+    const bizName = currentBusiness.name;
+
+    const nextProducts = loadStoredCollection('products', bizId, INITIAL_MERCHANT_PRODUCTS);
+    const nextServices = loadStoredCollection('services', bizId, INITIAL_MERCHANT_SERVICES);
+    const nextOffers = loadStoredCollection('offers', bizId, INITIAL_MERCHANT_OFFERS);
+    const nextPosts = loadStoredCollection('posts', bizId, INITIAL_MERCHANT_POSTS);
+    const nextEvents = loadStoredCollection('events', bizId, INITIAL_MERCHANT_EVENTS);
+    const nextReviews = loadStoredCollection('reviews', bizId, INITIAL_MERCHANT_REVIEWS);
+    const nextConversations = loadStoredCollection('conversations', bizId, INITIAL_MERCHANT_CONVERSATIONS);
+    const nextLeads = loadStoredCollection('leads', bizId, INITIAL_MERCHANT_LEADS);
+    const nextOrders = loadStoredOrders(bizId, bizName, INITIAL_MERCHANT_ORDERS);
+    const nextPromotions = loadStoredCollection('promotions', bizId, INITIAL_MERCHANT_PROMOTIONS);
+
+    setProducts(nextProducts);
+    setServices(nextServices);
+    setOffers(nextOffers);
+    setPosts(nextPosts);
+    setEvents(nextEvents);
+    setReviews(nextReviews);
+    setConversations(nextConversations);
+    setActiveConversationId(nextConversations[0]?.id || '');
+    setLeads(nextLeads);
+    setOrders(nextOrders);
+    setPromotions(nextPromotions);
+  }, [currentBusiness.id, currentBusiness.name]);
+
+  // Sync live backend overview telemetry
+  useEffect(() => {
+    let isMounted = true;
+    getMerchantOverview().then((res) => {
+      if (res && isMounted && res.business) {
+        setCurrentBusiness((prev) => ({
+          ...prev,
+          viewCount: res.metrics.profileViews,
+          directionClicks: res.metrics.directionClicks,
+          callClicks: res.metrics.callClicks,
+          rating: res.business.rating,
+          reviewCount: res.business.reviewCount,
+          verificationStatus: res.business.isVerified ? 'Verified' : prev.verificationStatus,
+        }));
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [currentBusiness.id]);
+
+  // Persist collections per business
+  useEffect(() => {
+    try {
+      localStorage.setItem(`myarea24_merchant_products_${currentBusiness.id}`, JSON.stringify(products));
+    } catch {}
+  }, [products, currentBusiness.id]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`myarea24_merchant_services_${currentBusiness.id}`, JSON.stringify(services));
+    } catch {}
+  }, [services, currentBusiness.id]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`myarea24_merchant_offers_${currentBusiness.id}`, JSON.stringify(offers));
+    } catch {}
+  }, [offers, currentBusiness.id]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`myarea24_merchant_posts_${currentBusiness.id}`, JSON.stringify(posts));
+    } catch {}
+  }, [posts, currentBusiness.id]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`myarea24_merchant_events_${currentBusiness.id}`, JSON.stringify(events));
+    } catch {}
+  }, [events, currentBusiness.id]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`myarea24_merchant_reviews_${currentBusiness.id}`, JSON.stringify(reviews));
+    } catch {}
+  }, [reviews, currentBusiness.id]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`myarea24_merchant_conversations_${currentBusiness.id}`, JSON.stringify(conversations));
+    } catch {}
+  }, [conversations, currentBusiness.id]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`myarea24_merchant_leads_${currentBusiness.id}`, JSON.stringify(leads));
+    } catch {}
+  }, [leads, currentBusiness.id]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`myarea24_merchant_orders_${currentBusiness.id}`, JSON.stringify(orders));
+    } catch {}
+  }, [orders, currentBusiness.id]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`myarea24_merchant_promotions_${currentBusiness.id}`, JSON.stringify(promotions));
+    } catch {}
+  }, [promotions, currentBusiness.id]);
 
   // Notifications Popover & Profile Menu
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [businessDropdownOpen, setBusinessDropdownOpen] = useState(false);
+
+  // Real-Time WebSockets State & Event Listeners
+  const [wsStatus, setWsStatus] = useState<RealtimeConnectionStatus>(() => realtimeService.getStatus());
+  const [isSimulating, setIsSimulating] = useState(false);
+
+  useEffect(() => {
+    // Keep socket subscriptions aligned with active storefront
+    realtimeService.updateSubscriptions({
+      businessId: currentBusiness.id,
+      area: currentBusiness.locationArea,
+    });
+
+    const handleStatus = (e: any) => {
+      setWsStatus(e.detail?.status || 'disconnected');
+    };
+
+    const handleNewLead = (e: any) => {
+      const lead = e.detail?.lead as MerchantLeadItem;
+      if (!lead) return;
+      setLeads((prev) => [lead, ...prev]);
+      showMerchantToast(`🎯 Live Lead: ${lead.customerName} - ${lead.interestedCategory}`);
+    };
+
+    const handleNewInquiry = (e: any) => {
+      const inq = e.detail?.inquiry;
+      if (!inq) return;
+      const newMsg = {
+        id: `msg-${Date.now()}`,
+        sender: 'customer' as const,
+        text: inq.message,
+        time: 'Just now',
+      };
+      setConversations((prev) => {
+        const existingIdx = prev.findIndex(
+          (c) => c.customerName.toLowerCase() === inq.customerName.toLowerCase()
+        );
+        if (existingIdx >= 0) {
+          return prev.map((c, i) =>
+            i === existingIdx
+              ? {
+                  ...c,
+                  lastMessage: inq.message,
+                  lastTime: 'Just now',
+                  unreadCount: (c.unreadCount || 0) + 1,
+                  messages: [...c.messages, newMsg],
+                }
+              : c
+          );
+        } else {
+          const newConv: MerchantConversation = {
+            id: `conv-${Date.now()}`,
+            customerName: inq.customerName,
+            avatar:
+              'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80',
+            badge: 'Enquiry',
+            lastMessage: inq.message,
+            lastTime: 'Just now',
+            unreadCount: 1,
+            phone: '+91 98112 00000',
+            email: `${inq.customerName.toLowerCase().replace(/\s+/g, '.')}@example.com`,
+            location: currentBusiness.locationArea,
+            memberSince: 'Today',
+            tags: ['Live Customer', 'Instant Message'],
+            messages: [newMsg],
+          };
+          return [newConv, ...prev];
+        }
+      });
+      showMerchantToast(`💬 Live Inquiry from ${inq.customerName}: "${inq.message}"`);
+    };
+
+    const handleNewReview = (e: any) => {
+      const rev = e.detail?.review as MerchantReviewItem;
+      if (!rev) return;
+      setReviews((prev) => [rev, ...prev]);
+      showMerchantToast(`⭐ New ${rev.rating}★ Review from ${rev.customerName}!`);
+    };
+
+    const handleNewOrder = (e: any) => {
+      const ord = e.detail?.order;
+      if (!ord) return;
+      const formatted: MerchantOrderItem = {
+        id: ord.id || `ord-${Date.now()}`,
+        orderNumber: ord.order_number || ord.orderNumber || `MA24-ORD-${Math.floor(1000 + Math.random() * 9000)}`,
+        businessId: ord.business_id || ord.businessId || currentBusiness.id,
+        businessName: ord.business_name || ord.businessName || currentBusiness.name,
+        customerName: ord.customer_name || ord.customerName || 'Local Neighbor',
+        customerPhone: ord.customer_phone || ord.customerPhone || '+91 98000 00000',
+        deliveryAddress: ord.delivery_address || ord.deliveryAddress || currentBusiness.locationArea,
+        finalPayable: Number(ord.final_payable || ord.finalPayable || 350),
+        paymentMethod: ord.payment_method || ord.paymentMethod || 'upi_qr',
+        paymentStatus: ord.payment_status || ord.paymentStatus || 'paid',
+        status: (ord.status as any) || 'placed',
+        estimatedDeliveryMins: ord.estimated_delivery_mins || ord.estimatedDeliveryMins || 20,
+        createdAt: ord.created_at || ord.createdAt || new Date().toISOString(),
+        items: Array.isArray(ord.items)
+          ? ord.items.map((it: any) => ({
+              productName: it.product_name || it.productName || 'Item',
+              unitPrice: Number(it.unit_price || it.unitPrice || 100),
+              quantity: Number(it.quantity || 1),
+              totalPrice: Number(it.total_price || it.totalPrice || 100),
+            }))
+          : [],
+      };
+      setOrders((prev) => [formatted, ...prev.filter((o) => o.orderNumber !== formatted.orderNumber)]);
+      showMerchantToast(`🛍️ Live Order: #${formatted.orderNumber} - ₹${formatted.finalPayable} (${formatted.customerName})!`);
+    };
+
+    const handleOrderStatusUpdate = (e: any) => {
+      const detail = e.detail;
+      if (!detail?.orderNumber) return;
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.orderNumber.toLowerCase() === detail.orderNumber.toLowerCase()
+            ? { ...o, status: detail.status, paymentStatus: detail.paymentStatus || o.paymentStatus }
+            : o
+        )
+      );
+    };
+
+    window.addEventListener(REALTIME_STATUS_EVENT, handleStatus);
+    window.addEventListener(MERCHANT_LEAD_EVENT, handleNewLead);
+    window.addEventListener(MERCHANT_INQUIRY_EVENT, handleNewInquiry);
+    window.addEventListener(MERCHANT_REVIEW_EVENT, handleNewReview);
+    window.addEventListener(MERCHANT_ORDER_EVENT, handleNewOrder);
+    window.addEventListener(ORDER_STATUS_EVENT, handleOrderStatusUpdate);
+
+    return () => {
+      window.removeEventListener(REALTIME_STATUS_EVENT, handleStatus);
+      window.removeEventListener(MERCHANT_LEAD_EVENT, handleNewLead);
+      window.removeEventListener(MERCHANT_INQUIRY_EVENT, handleNewInquiry);
+      window.removeEventListener(MERCHANT_REVIEW_EVENT, handleNewReview);
+      window.removeEventListener(MERCHANT_ORDER_EVENT, handleNewOrder);
+      window.removeEventListener(ORDER_STATUS_EVENT, handleOrderStatusUpdate);
+    };
+  }, [currentBusiness.id, currentBusiness.locationArea]);
 
   // Sync state to localStorage
   useEffect(() => {
@@ -156,13 +603,51 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
   }, [currentBusiness, activeDashboard]);
 
   // Handlers
-  const handleSwitchBusiness = (id: string) => {
-    if (id === 'biz-sharma-fuel') {
-      setCurrentBusiness(DEFAULT_BUSINESS_SHARMA_FUEL);
+  const handleSwitchBusiness = (bizOrId: string | MerchantRegistrationProfile) => {
+    if (typeof bizOrId === 'string') {
+      const accounts = getStoredMerchantAccounts();
+      const found = accounts.find((a) => (a.id || a.businessName) === bizOrId);
+      if (found) {
+        saveMerchantSession(found);
+        setSession(found);
+        const updatedBiz = buildMerchantBusinessInfo(found);
+        setCurrentBusiness(updatedBiz);
+        try {
+          const stored = localStorage.getItem(`myarea24_merchant_products_${updatedBiz.id}`);
+          setProducts(stored ? JSON.parse(stored) : []);
+        } catch {
+          setProducts([]);
+        }
+        setBusinessDropdownOpen(false);
+        showMerchantToast(`Switched storefront to ${updatedBiz.name}`);
+        return;
+      }
+      if (bizOrId === 'biz-sharma-fuel') {
+        setCurrentBusiness(DEFAULT_BUSINESS_SHARMA_FUEL);
+      } else {
+        setCurrentBusiness(DEFAULT_BUSINESS_THE_DAILY_BREW);
+      }
     } else {
-      setCurrentBusiness(DEFAULT_BUSINESS_THE_DAILY_BREW);
+      saveMerchantSession(bizOrId);
+      setSession(bizOrId);
+      const updatedBiz = buildMerchantBusinessInfo(bizOrId);
+      setCurrentBusiness(updatedBiz);
+      try {
+        const stored = localStorage.getItem(`myarea24_merchant_products_${updatedBiz.id}`);
+        setProducts(stored ? JSON.parse(stored) : []);
+      } catch {
+        setProducts([]);
+      }
+      showMerchantToast(`Switched storefront to ${updatedBiz.name}`);
     }
     setBusinessDropdownOpen(false);
+  };
+
+  const handleLockStorefront = () => {
+    clearMerchantSession();
+    setSession(null);
+    showMerchantToast('Storefront locked.');
+    onSwitchToCitizen();
   };
 
   const handleUpdateBusiness = (updated: Partial<MerchantBusinessInfo>) => {
@@ -179,15 +664,10 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
   };
 
   const handleToggleProductStatus = (id: string) => {
-    let nextStatus: 'Active' | 'Paused' = 'Active';
+    const target = products.find((p) => p.id === id);
+    const nextStatus: 'Active' | 'Paused' = target?.status === 'Active' ? 'Paused' : 'Active';
     setProducts((prev) =>
-      prev.map((p) => {
-        if (p.id === id) {
-          nextStatus = p.status === 'Active' ? 'Paused' : 'Active';
-          return { ...p, status: nextStatus };
-        }
-        return p;
-      })
+      prev.map((p) => (p.id === id ? { ...p, status: nextStatus } : p))
     );
     syncMerchantProductToggle(id, nextStatus === 'Paused');
     window.dispatchEvent(new CustomEvent('myarea24_marketplace_sync'));
@@ -268,13 +748,47 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
     );
   };
 
+  const handleUpdateOrderStatus = (
+    orderNumber: string,
+    nextStatus: 'placed' | 'confirmed' | 'out_for_delivery' | 'delivered' | 'cancelled'
+  ) => {
+    setOrders((prev) =>
+      prev.map((o) => (o.orderNumber === orderNumber ? { ...o, status: nextStatus } : o))
+    );
+    showMerchantToast(`Order #${orderNumber} marked as ${nextStatus.replace(/_/g, ' ')}.`);
+  };
+
+  const handleSimulateOrder = async () => {
+    showMerchantToast('Simulating live incoming customer order...');
+    await realtimeService.triggerMerchantOrder({
+      customerName: 'Aanya Mathur',
+      customerPhone: '+91 98112 77889',
+      deliveryAddress: `Flat 502, Tower C, ${currentBusiness.locationArea}`,
+      finalPayable: 450.0,
+      items: [
+        {
+          productName: products[0]?.name || `${currentBusiness.category.split('&')[0].trim()} Package`,
+          unitPrice: 220.0,
+          quantity: 1,
+          totalPrice: 220.0,
+        },
+        {
+          productName: products[1]?.name || 'Neighborhood Special',
+          unitPrice: 230.0,
+          quantity: 1,
+          totalPrice: 230.0,
+        },
+      ],
+    });
+  };
+
   const renderActiveDashboardContent = () => {
     switch (activeDashboard) {
       case 'overview':
         return (
           <MerchantHomeDashboard
             business={currentBusiness}
-            onNavigate={setActiveDashboard}
+            onNavigate={handleNavigate}
             onOpenQuickAction={setModalType}
             products={products}
             offers={offers}
@@ -282,6 +796,16 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
             reviews={reviews}
             conversations={conversations}
             leads={leads}
+            orders={orders}
+          />
+        );
+      case 'orders':
+        return (
+          <MerchantOrdersDashboard
+            business={currentBusiness}
+            orders={orders}
+            onUpdateOrderStatus={handleUpdateOrderStatus}
+            onSimulateOrder={handleSimulateOrder}
           />
         );
       case 'profile':
@@ -289,7 +813,7 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
           <MerchantProfileDashboard
             business={currentBusiness}
             onUpdateBusiness={handleUpdateBusiness}
-            onNavigate={setActiveDashboard}
+            onNavigate={handleNavigate}
             onOpenQuickAction={setModalType}
           />
         );
@@ -357,12 +881,20 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
             leads={leads}
             onUpdateLeadStatus={handleUpdateLeadStatus}
             onOpenMessageWithLead={(lead) => {
-              setActiveDashboard('messages');
+              handleNavigate('messages');
             }}
           />
         );
       case 'analytics':
-        return <MerchantAnalyticsDashboard business={currentBusiness} />;
+        return (
+          <MerchantAnalyticsDashboard
+            business={currentBusiness}
+            products={products}
+            orders={orders}
+            leads={leads}
+            reviews={reviews}
+          />
+        );
       case 'promotions':
         return (
           <MerchantPromotionsDashboard
@@ -390,18 +922,92 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
     }
   };
 
+  if (!session) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#0F172A] via-[#1E1B4B] to-[#312E81] flex flex-col items-center justify-center p-6 text-white text-center">
+        <div className="w-16 h-16 rounded-3xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300 mb-4 shadow-xl">
+          <Lock className="w-8 h-8 text-indigo-300" />
+        </div>
+        <div className="max-w-md space-y-2">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 text-xs font-bold mb-1">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>MyArea24 Merchant Security Shield</span>
+          </div>
+          <h2 className="text-2xl font-black tracking-tight">Merchant Portal Authentication Required</h2>
+          <p className="text-xs text-indigo-200/80 leading-relaxed">
+            Your neighborhood storefront is password & PIN-protected to safeguard live orders, customer inquiries, and commercial operations.
+          </p>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-3 mt-8 w-full max-w-sm">
+          <button
+            type="button"
+            onClick={() => {
+              setAuthModalMode('login');
+              setAuthModalOpen(true);
+            }}
+            className="flex-1 py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg cursor-pointer transition active:scale-98"
+          >
+            <KeyRound className="w-4 h-4" />
+            <span>Enter Store PIN / Log In</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setAuthModalMode('register');
+              setAuthModalOpen(true);
+            }}
+            className="flex-1 py-3 px-4 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 font-extrabold text-xs flex items-center justify-center gap-2 cursor-pointer transition active:scale-98"
+          >
+            <Store className="w-4 h-4" />
+            <span>Register New Store</span>
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={onSwitchToCitizen}
+          className="mt-6 text-xs text-slate-400 hover:text-white flex items-center gap-1.5 cursor-pointer transition"
+        >
+          <Globe className="w-3.5 h-3.5" />
+          <span>← Back to Resident / Citizen Portal</span>
+        </button>
+
+        <MerchantRegistrationModal
+          isOpen={authModalOpen}
+          defaultMode={authModalMode}
+          onClose={() => setAuthModalOpen(false)}
+          onSuccess={(profile) => {
+            setSession(profile);
+            setCurrentBusiness(buildMerchantBusinessInfo(profile));
+            setAuthModalOpen(false);
+            showMerchantToast(`Authenticated into ${profile.businessName}!`);
+          }}
+          currentArea={currentLocation?.areaName || 'Your Local Area'}
+          coords={currentLocation?.coords}
+        />
+      </div>
+    );
+  }
+
+  const unreadMsgCount = conversations.reduce(
+    (acc, c) => acc + (c.unreadCount || 0),
+    0
+  );
+  const newLeadsCount = leads.filter((l) => l.status === 'New').length;
+
   return (
     <div className="min-h-screen bg-[#F4F6FB] text-slate-900 flex flex-col font-sans">
       {/* =========================================================================
           1. NATIVE MOBILE APP VIEW (< lg)
              Automatically renders full-screen on mobile devices:
              100% full-width, clean native app bar, native cards, and fixed bottom navigation.
-         ========================================================================= */}
+          ========================================================================= */}
       <div className="lg:hidden flex-1 flex flex-col w-full min-h-screen">
         <MerchantMobileAppView
           business={currentBusiness}
           activeDashboard={activeDashboard}
-          onNavigate={setActiveDashboard}
+          onNavigate={handleNavigate}
           onSwitchBusiness={handleSwitchBusiness}
           onOpenQuickAction={setModalType}
           products={products}
@@ -413,6 +1019,7 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
           conversations={conversations}
           activeConversationId={activeConversationId}
           leads={leads}
+          orders={orders}
           promotions={promotions}
           invoices={invoices}
           onToggleProductStatus={handleToggleProductStatus}
@@ -422,6 +1029,8 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
           onSelectConversation={setActiveConversationId}
           onSendMessage={handleSendMessage}
           onUpdateLeadStatus={handleUpdateLeadStatus}
+          onUpdateOrderStatus={handleUpdateOrderStatus}
+          onSimulateOrder={handleSimulateOrder}
           onAddReplyToReview={handleAddReplyToReview}
           onUpdateBusiness={handleUpdateBusiness}
           onOpenAddProductModal={() => setModalType('add_product')}
@@ -459,6 +1068,14 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
               <nav className="space-y-0.5">
                 {[
                   { id: 'overview', label: 'Dashboard', icon: Home },
+                  {
+                    id: 'orders',
+                    label: 'Live Orders',
+                    icon: ShoppingBag,
+                    badge: orders.filter((o) => o.status === 'placed').length > 0
+                      ? String(orders.filter((o) => o.status === 'placed').length)
+                      : undefined,
+                  },
                   { id: 'profile', label: 'Business Profile', icon: Store },
                   { id: 'products', label: 'Products & Services', icon: Package },
                   { id: 'offers', label: 'Offers & Deals', icon: Tag },
@@ -471,15 +1088,22 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
                     <button
                       key={item.id}
                       type="button"
-                      onClick={() => setActiveDashboard(item.id as any)}
-                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
+                      onClick={() => handleNavigate(item.id as any)}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
                         active
                           ? 'bg-[#F3E8FF] text-[#7C3AED] font-bold shadow-2xs'
                           : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                       }`}
                     >
-                      <Icon className={`w-4 h-4 ${active ? 'text-[#7C3AED]' : 'text-slate-500'}`} />
-                      <span>{item.label}</span>
+                      <span className="flex items-center gap-3">
+                        <Icon className={`w-4 h-4 ${active ? 'text-[#7C3AED]' : 'text-slate-500'}`} />
+                        <span>{item.label}</span>
+                      </span>
+                      {item.badge && (
+                        <span className="px-1.5 py-0.2 rounded-full bg-rose-600 text-white text-[10px] font-extrabold animate-pulse">
+                          {item.badge}
+                        </span>
+                      )}
                     </button>
                   );
                 })}
@@ -493,8 +1117,18 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
                 <nav className="space-y-0.5">
                   {[
                     { id: 'reviews', label: 'Customer Reviews', icon: Star },
-                    { id: 'messages', label: 'Messages', icon: MessageSquare, badge: '3' },
-                    { id: 'leads', label: 'Leads & Enquiries', icon: Users, badge: '5' },
+                    {
+                      id: 'messages',
+                      label: 'Messages',
+                      icon: MessageSquare,
+                      badge: unreadMsgCount > 0 ? String(unreadMsgCount) : undefined,
+                    },
+                    {
+                      id: 'leads',
+                      label: 'Leads & Enquiries',
+                      icon: Users,
+                      badge: newLeadsCount > 0 ? String(newLeadsCount) : undefined,
+                    },
                   ].map((item) => {
                     const Icon = item.icon;
                     const active = activeDashboard === item.id;
@@ -502,7 +1136,7 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
                       <button
                         key={item.id}
                         type="button"
-                        onClick={() => setActiveDashboard(item.id as any)}
+                        onClick={() => handleNavigate(item.id as any)}
                         className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
                           active
                             ? 'bg-[#F3E8FF] text-[#7C3AED] font-bold'
@@ -541,7 +1175,7 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
                       <button
                         key={item.id}
                         type="button"
-                        onClick={() => setActiveDashboard(item.id as any)}
+                        onClick={() => handleNavigate(item.id as any)}
                         className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
                           active
                             ? 'bg-[#F3E8FF] text-[#7C3AED] font-bold'
@@ -563,7 +1197,7 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
                 </p>
                 <button
                   type="button"
-                  onClick={() => setActiveDashboard('settings')}
+                  onClick={() => handleNavigate('settings')}
                   className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
                     activeDashboard === 'settings'
                       ? 'bg-[#F3E8FF] text-[#7C3AED] font-bold'
@@ -624,31 +1258,63 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
                     onClick={() => setBusinessDropdownOpen((v) => !v)}
                     className="flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-slate-50 hover:bg-purple-50 border border-slate-200 hover:border-purple-200 text-xs font-bold text-slate-800 transition cursor-pointer"
                   >
-                    <span>📍 {currentBusiness.locationArea}</span>
+                    <Store className="w-3.5 h-3.5 text-indigo-600" />
+                    <span className="truncate max-w-[170px]">{currentBusiness.name}</span>
                     <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
                   </button>
 
                   {businessDropdownOpen && (
                     <div
                       onClick={() => setBusinessDropdownOpen(false)}
-                      className="absolute left-0 top-full mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 z-50"
+                      className="absolute left-0 top-full mt-2 w-72 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 z-50 animate-in fade-in zoom-in-95 duration-100"
                     >
                       <p className="px-2 py-1 text-[10px] font-extrabold text-slate-400 uppercase">
                         Select Storefront
                       </p>
+                      <div className="space-y-1 max-h-56 overflow-y-auto">
+                        {getStoredMerchantAccounts().length > 0 ? (
+                          getStoredMerchantAccounts().map((acc) => {
+                            const isSelected = acc.businessName === currentBusiness.name;
+                            return (
+                              <button
+                                key={acc.id || acc.businessName}
+                                type="button"
+                                onClick={() => handleSwitchBusiness(acc)}
+                                className={`w-full p-2.5 rounded-xl text-left transition text-xs font-bold flex items-center justify-between cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-purple-50 text-purple-900 border border-purple-200'
+                                    : 'hover:bg-slate-50 text-slate-800'
+                                }`}
+                              >
+                                <div className="truncate pr-2">
+                                  <p className="truncate font-extrabold">{acc.businessName}</p>
+                                  <p className="text-[10px] text-slate-400 font-medium truncate">
+                                    {acc.category} • {acc.locality}
+                                  </p>
+                                </div>
+                                {isSelected && (
+                                  <CheckCircle2 className="w-4 h-4 text-purple-600 shrink-0" />
+                                )}
+                              </button>
+                            );
+                          })
+                        ) : (
+                          <div className="p-2.5 text-xs font-bold text-slate-800">
+                            {currentBusiness.name} ({currentBusiness.category})
+                          </div>
+                        )}
+                      </div>
                       <button
                         type="button"
-                        onClick={() => handleSwitchBusiness('biz-daily-brew')}
-                        className="w-full p-2 rounded-xl text-left hover:bg-purple-50 transition text-xs font-bold text-slate-800"
+                        onClick={() => {
+                          setBusinessDropdownOpen(false);
+                          setAuthModalMode('register');
+                          setAuthModalOpen(true);
+                        }}
+                        className="w-full mt-2 pt-2 border-t border-slate-100 p-1.5 rounded-lg text-left hover:bg-slate-50 transition text-xs font-extrabold text-indigo-600 flex items-center gap-1.5 cursor-pointer"
                       >
-                        ☕ The Daily Brew (Rohini Sector 9)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSwitchBusiness('biz-sharma-fuel')}
-                        className="w-full p-2 rounded-xl text-left hover:bg-purple-50 transition text-xs font-bold text-slate-800"
-                      >
-                        ⛽ Sharma Fuel Station (Rohini Sector 9)
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>+ Register Another Store / Branch</span>
                       </button>
                     </div>
                   )}
@@ -683,6 +1349,61 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
                 >
                   <Globe className="w-3.5 h-3.5 text-blue-200" />
                   <span>Switch to Citizen View</span>
+                </button>
+
+                {/* Lock Storefront Button */}
+                <button
+                  type="button"
+                  onClick={handleLockStorefront}
+                  className="px-3 py-1.5 rounded-full bg-slate-50 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 border border-slate-200 text-xs font-bold text-slate-700 flex items-center gap-1.5 transition cursor-pointer"
+                  title="Lock Merchant Portal & Sign Out"
+                >
+                  <Lock className="w-3.5 h-3.5 text-slate-500 hover:text-rose-600" />
+                  <span>Lock Store</span>
+                </button>
+
+                {/* Live WebSocket Indicator */}
+                <div
+                  className="hidden xl:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700 select-none"
+                  title={
+                    wsStatus === 'connected'
+                      ? 'Real-Time WebSockets Active: Leads, Reviews & Inquiries arrive instantly'
+                      : `WebSocket: ${wsStatus}`
+                  }
+                >
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      wsStatus === 'connected'
+                        ? 'bg-emerald-500 animate-pulse'
+                        : wsStatus === 'connecting' || wsStatus === 'reconnecting'
+                        ? 'bg-amber-400 animate-bounce'
+                        : 'bg-slate-400'
+                    }`}
+                  />
+                  <span className="text-[10px] tracking-wider uppercase font-black text-slate-600">
+                    {wsStatus === 'connected' ? 'Live Storefront' : wsStatus}
+                  </span>
+                </div>
+
+                {/* Instant Simulator Pill */}
+                <button
+                  type="button"
+                  disabled={isSimulating}
+                  onClick={async () => {
+                    setIsSimulating(true);
+                    await realtimeService.triggerMerchantLead({
+                      customerName: 'Aarav Sharma',
+                      topic: 'Espresso Bar & Pastry Catering Quote',
+                      phone: '+91 98112 44321',
+                      message: 'Inquiring for 40-person corporate team kit delivery this Friday.',
+                    });
+                    setTimeout(() => setIsSimulating(false), 800);
+                  }}
+                  className="px-3 py-1.5 rounded-full bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition shadow-2xs"
+                  title="Simulate instant customer lead over WebSocket"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                  <span>{isSimulating ? 'Simulating...' : 'Test Lead'}</span>
                 </button>
 
                 <span className="px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-xs font-bold text-amber-800 flex items-center gap-1.5">
@@ -743,7 +1464,7 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
                     <div
                       onClick={() => {
                         setNotificationsOpen(false);
-                        setActiveDashboard('messages');
+                        handleNavigate('messages');
                       }}
                       className="p-2 rounded-xl bg-purple-50/70 hover:bg-purple-100 cursor-pointer"
                     >
@@ -753,7 +1474,7 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
                     <div
                       onClick={() => {
                         setNotificationsOpen(false);
-                        setActiveDashboard('leads');
+                        handleNavigate('leads');
                       }}
                       className="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 cursor-pointer"
                     >
@@ -763,7 +1484,7 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
                     <div
                       onClick={() => {
                         setNotificationsOpen(false);
-                        setActiveDashboard('reviews');
+                        handleNavigate('reviews');
                       }}
                       className="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 cursor-pointer"
                     >
@@ -794,7 +1515,7 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
                     type="button"
                     onClick={() => {
                       setProfileMenuOpen(false);
-                      setActiveDashboard('profile');
+                      handleNavigate('profile');
                     }}
                     className="w-full px-3 py-2 rounded-xl hover:bg-slate-50 text-left font-bold text-slate-700 flex items-center justify-between"
                   >
@@ -805,7 +1526,7 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
                     type="button"
                     onClick={() => {
                       setProfileMenuOpen(false);
-                      setActiveDashboard('settings');
+                      handleNavigate('settings');
                     }}
                     className="w-full px-3 py-2 rounded-xl hover:bg-slate-50 text-left font-bold text-slate-700 flex items-center justify-between"
                   >
@@ -818,10 +1539,23 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
                       setProfileMenuOpen(false);
                       onSwitchToCitizen();
                     }}
-                    className="w-full px-3 py-2 rounded-xl hover:bg-indigo-50 text-left font-bold text-indigo-700 flex items-center justify-between"
+                    className="w-full px-3 py-2 rounded-xl hover:bg-indigo-50 text-left font-bold text-indigo-700 flex items-center justify-between cursor-pointer"
                   >
                     <span>Switch to Citizen App</span>
                     <ExternalLink className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProfileMenuOpen(false);
+                      handleLockStorefront();
+                    }}
+                    className="w-full px-3 py-2 rounded-xl hover:bg-rose-50 text-left font-bold text-rose-600 flex items-center justify-between border-t border-slate-100 mt-1 cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>Lock & Sign Out</span>
+                    </span>
                   </button>
                 </div>
               </div>
@@ -844,6 +1578,14 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
         onClose={() => setModalType(null)}
         onAddProduct={(newProd) => {
           setProducts((prev) => [newProd, ...prev]);
+          createMerchantProduct({
+            name: newProd.name,
+            category: newProd.category,
+            price: newProd.price,
+            originalPrice: newProd.originalPrice,
+            inStock: newProd.status === 'Active',
+            image: newProd.image,
+          });
           syncMerchantProductToGlobal(newProd, {
             name: currentBusiness.name,
             address: currentBusiness.fullAddress,
@@ -867,6 +1609,13 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
         }}
         onAddService={(newSrv) => {
           setServices((prev) => [newSrv, ...prev]);
+          createMerchantService({
+            name: newSrv.name,
+            category: newSrv.category,
+            priceValue: newSrv.priceValue || 500,
+            phone: currentBusiness.phone,
+            description: newSrv.description,
+          });
           marketplace?.addService({
             name: newSrv.name,
             cat: newSrv.category,
@@ -879,6 +1628,11 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
         }}
         onAddOffer={(newOffer) => {
           setOffers((prev) => [newOffer, ...prev]);
+          createMerchantOffer({
+            title: newOffer.title,
+            discountText: newOffer.discountText,
+            code: newOffer.code,
+          });
           marketplace?.addOffer({
             title: newOffer.title,
             store: currentBusiness.name,
@@ -896,6 +1650,12 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
         }}
         onAddEvent={(newEvent) => {
           setEvents((prev) => [newEvent, ...prev]);
+          createMerchantEvent({
+            title: newEvent.title,
+            category: newEvent.category,
+            venue: newEvent.venue,
+            dateDisplay: newEvent.dateDisplay,
+          });
           marketplace?.addEvent({
             title: newEvent.title,
             cat: newEvent.category,
@@ -919,6 +1679,21 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
           <span>{toastMsg}</span>
         </div>
       )}
+
+      {/* BRANCH REGISTRATION & AUTH MODAL */}
+      <MerchantRegistrationModal
+        isOpen={authModalOpen}
+        defaultMode={authModalMode}
+        onClose={() => setAuthModalOpen(false)}
+        onSuccess={(profile) => {
+          setSession(profile);
+          setCurrentBusiness(buildMerchantBusinessInfo(profile));
+          setAuthModalOpen(false);
+          showMerchantToast(`Authenticated into ${profile.businessName}!`);
+        }}
+        currentArea={currentLocation?.areaName || 'Your Local Area'}
+        coords={currentLocation?.coords}
+      />
     </div>
   );
 }

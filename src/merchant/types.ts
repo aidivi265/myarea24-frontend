@@ -2,6 +2,7 @@ export type MerchantDashboardId =
   | 'overview'
   | 'profile'
   | 'products'
+  | 'orders'
   | 'offers'
   | 'posts'
   | 'events'
@@ -12,6 +13,31 @@ export type MerchantDashboardId =
   | 'promotions'
   | 'payments'
   | 'settings';
+
+export interface MerchantOrderItem {
+  id: string | number;
+  orderNumber: string;
+  businessId?: string;
+  businessName?: string;
+  customerName: string;
+  customerPhone: string;
+  deliveryAddress: string;
+  items: {
+    productName: string;
+    unitPrice: number;
+    quantity: number;
+    totalPrice: number;
+    storeName?: string;
+    imageUrl?: string;
+  }[];
+  finalPayable: number;
+  paymentMethod: string;
+  paymentStatus: string;
+  status: 'placed' | 'confirmed' | 'out_for_delivery' | 'delivered' | 'cancelled';
+  createdAt: string;
+  estimatedDeliveryMins?: number;
+  notes?: string;
+}
 
 export type MerchantDeviceViewMode = 'desktop' | 'app' | 'comparison';
 
@@ -37,6 +63,7 @@ export interface MerchantBusinessInfo {
   profileCompletion: number;
   logo: string;
   coverImage: string;
+  gstin?: string;
 }
 
 export interface MerchantProductItem {
@@ -58,6 +85,7 @@ export interface MerchantServiceItem {
   category: string;
   priceText: string;
   priceValue: number;
+  startingPrice?: number;
   status: 'Active' | 'In Review' | 'Paused' | 'Archived';
   views: number;
   enquiries: number;
@@ -72,11 +100,15 @@ export interface MerchantOfferItem {
   type: 'Discount' | 'Combo' | 'BOGO' | 'Special Price' | 'Event Offer';
   discountText: string;
   badgeText?: string;
+  badge?: string;
+  discountPercent?: number;
   validityStart: string;
   validityEnd: string;
+  validTill?: string;
   status: 'Active' | 'Scheduled' | 'Paused' | 'Expired';
   views: number;
   redemptions: number;
+  claimsCount?: number;
   image: string;
   code?: string;
 }
@@ -85,12 +117,15 @@ export interface MerchantPostItem {
   id: string;
   title: string;
   caption: string;
+  content?: string;
   type: 'Announcement' | 'Offer' | 'Update' | 'Event' | 'Community';
   status: 'Published' | 'Scheduled' | 'Draft' | 'Archived';
   date: string;
   views: number;
   likes: number;
   shares: number;
+  comments?: number;
+  badge?: string;
   image: string;
   isLiked?: boolean;
 }
@@ -103,10 +138,14 @@ export interface MerchantEventItem {
   dayNumber: string;
   monthText: string;
   timeText: string;
+  date?: string;
+  time?: string;
   venue: string;
   status: 'Published' | 'Upcoming' | 'Ongoing' | 'Past' | 'Draft';
   interestedCount: number;
   goingCount: number;
+  attendeesCount?: number;
+  ticketPrice?: number;
   image: string;
   description: string;
 }
@@ -115,10 +154,14 @@ export interface MerchantReviewItem {
   id: string;
   customerName: string;
   avatar: string;
+  customerAvatar?: string;
   rating: number;
   timeAgo: string;
+  date?: string;
   isVerified: boolean;
+  verifiedBuyer?: boolean;
   comment: string;
+  reviewText?: string;
   tags: string[];
   photos?: string[];
   reply?: {
@@ -201,6 +244,7 @@ export interface MerchantPortalState {
   conversations: MerchantConversation[];
   activeConversationId: string;
   leads: MerchantLeadItem[];
+  orders: MerchantOrderItem[];
   promotions: MerchantPromotionItem[];
   invoices: MerchantInvoiceItem[];
   pricingBillingCycle: 'monthly' | 'yearly';

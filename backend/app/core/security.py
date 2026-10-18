@@ -42,6 +42,37 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[datetime.t
     return f"{header_b64}.{payload_b64}.{sig_b64}"
 
 
+def create_refresh_token(data: Dict[str, Any], expires_delta: Optional[datetime.timedelta] = None) -> str:
+    """
+    Creates an RFC 7519 compliant JSON Web Token (JWT) specifically for refresh token rotation.
+    Valid for 30 days by default.
+    """
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.datetime.utcnow() + datetime.timedelta(days=30)
+    
+    to_encode.update({"exp": int(expire.timestamp()), "type": "refresh"})
+    
+    header = {"alg": "HS256", "typ": "JWT"}
+    header_bytes = json.dumps(header, separators=(",", ":")).encode("utf-8")
+    header_b64 = base64.urlsafe_b64encode(header_bytes).decode("utf-8").rstrip("=")
+    
+    payload_bytes = json.dumps(to_encode, separators=(",", ":")).encode("utf-8")
+    payload_b64 = base64.urlsafe_b64encode(payload_bytes).decode("utf-8").rstrip("=")
+    
+    signing_input = f"{header_b64}.{payload_b64}".encode("utf-8")
+    signature = hmac.new(
+        settings.JWT_SECRET_KEY.encode("utf-8"),
+        signing_input,
+        hashlib.sha256
+    ).digest()
+    sig_b64 = base64.urlsafe_b64encode(signature).decode("utf-8").rstrip("=")
+    
+    return f"{header_b64}.{payload_b64}.{sig_b64}"
+
+
 def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
     """
     Validates and decodes a JWT token. Returns payload dict if valid, else None.

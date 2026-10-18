@@ -18,11 +18,17 @@ engine_kwargs: dict = {
 }
 
 if is_sqlite:
-    # check_same_thread=False allows FastAPI multi-threading; timeout=15 waits on locks
+    # check_same_thread=False allows FastAPI multi-threading; timeout=30 waits on locks
+    from sqlalchemy.pool import QueuePool
     engine_kwargs["connect_args"] = {
         "check_same_thread": False,
-        "timeout": 15,
+        "timeout": 30,
     }
+    engine_kwargs["poolclass"] = QueuePool
+    engine_kwargs["pool_size"] = 25
+    engine_kwargs["max_overflow"] = 35
+    engine_kwargs["pool_timeout"] = 60
+    engine_kwargs["pool_recycle"] = 1800
 else:
     # Production PostgreSQL connection pool configuration
     engine_kwargs["pool_size"] = settings.DB_POOL_SIZE

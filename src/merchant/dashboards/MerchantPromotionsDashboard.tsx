@@ -31,6 +31,16 @@ export function MerchantPromotionsDashboard({
   const [activeTab, setActiveTab] = useState<'all' | 'active' | 'scheduled' | 'completed' | 'paused'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
+  const totalPromos = promotions.length;
+  const activePromos = promotions.filter((p) => p.status.toLowerCase() === 'active').length;
+  const scheduledPromos = promotions.filter((p) => p.status.toLowerCase() === 'scheduled').length;
+  const completedPromos = promotions.filter((p) => p.status.toLowerCase() === 'completed').length;
+  const pausedPromos = promotions.filter((p) => p.status.toLowerCase() === 'paused').length;
+  const totalReach = promotions.reduce((acc, p) => acc + (p.reach || 0), 0);
+  const totalViews = promotions.reduce((acc, p) => acc + (p.reach ? Math.round(p.reach * 0.4) : 0), 0);
+  const totalClicks = promotions.reduce((acc, p) => acc + (p.clicks || 0), 0);
+  const totalRedemptions = promotions.reduce((acc, p) => acc + (p.redemptions || 0), 0);
+
   const filteredPromos = promotions.filter((p) => {
     const matchesSearch =
       p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -73,8 +83,8 @@ export function MerchantPromotionsDashboard({
             <span className="text-[11px] font-medium text-slate-500">Active Promotions</span>
             <Megaphone className="w-3.5 h-3.5 text-purple-600" />
           </div>
-          <p className="text-xl font-extrabold text-slate-900">12</p>
-          <span className="text-[10px] text-emerald-600 font-bold">▲ 33% from last month</span>
+          <p className="text-xl font-extrabold text-slate-900">{activePromos}</p>
+          <span className="text-[10px] text-emerald-600 font-bold">Currently running</span>
         </div>
 
         <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
@@ -82,8 +92,8 @@ export function MerchantPromotionsDashboard({
             <span className="text-[11px] font-medium text-slate-500">Total Reach</span>
             <Eye className="w-3.5 h-3.5 text-blue-600" />
           </div>
-          <p className="text-xl font-extrabold text-slate-900">8,452</p>
-          <span className="text-[10px] text-emerald-600 font-bold">▲ 28% from last month</span>
+          <p className="text-xl font-extrabold text-slate-900">{totalReach.toLocaleString()}</p>
+          <span className="text-[10px] text-slate-500 font-medium">Local residents</span>
         </div>
 
         <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
@@ -91,8 +101,8 @@ export function MerchantPromotionsDashboard({
             <span className="text-[11px] font-medium text-slate-500">Total Views</span>
             <Eye className="w-3.5 h-3.5 text-indigo-600" />
           </div>
-          <p className="text-xl font-extrabold text-slate-900">3,216</p>
-          <span className="text-[10px] text-emerald-600 font-bold">▲ 42% from last month</span>
+          <p className="text-xl font-extrabold text-slate-900">{totalViews.toLocaleString()}</p>
+          <span className="text-[10px] text-slate-500 font-medium">Card impressions</span>
         </div>
 
         <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
@@ -100,8 +110,8 @@ export function MerchantPromotionsDashboard({
             <span className="text-[11px] font-medium text-slate-500">Total Clicks</span>
             <MousePointerClick className="w-3.5 h-3.5 text-amber-500" />
           </div>
-          <p className="text-xl font-extrabold text-slate-900">426</p>
-          <span className="text-[10px] text-emerald-600 font-bold">▲ 26% from last month</span>
+          <p className="text-xl font-extrabold text-slate-900">{totalClicks.toLocaleString()}</p>
+          <span className="text-[10px] text-slate-500 font-medium">Direct interactions</span>
         </div>
 
         <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
@@ -109,17 +119,17 @@ export function MerchantPromotionsDashboard({
             <span className="text-[11px] font-medium text-slate-500">Offer Redemptions</span>
             <Tag className="w-3.5 h-3.5 text-rose-500" />
           </div>
-          <p className="text-xl font-extrabold text-slate-900">68</p>
-          <span className="text-[10px] text-emerald-600 font-bold">▲ 18% from last month</span>
+          <p className="text-xl font-extrabold text-slate-900">{totalRedemptions.toLocaleString()}</p>
+          <span className="text-[10px] text-slate-500 font-medium">In-store claims</span>
         </div>
 
         <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[11px] font-medium text-slate-500">Avg. ROI</span>
+            <span className="text-[11px] font-medium text-slate-500">Total Campaigns</span>
             <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
           </div>
-          <p className="text-xl font-extrabold text-emerald-700">4.8x</p>
-          <span className="text-[10px] text-emerald-600 font-bold">▲ 22% from last month</span>
+          <p className="text-xl font-extrabold text-emerald-700">{totalPromos}</p>
+          <span className="text-[10px] text-emerald-600 font-bold">Lifetime created</span>
         </div>
       </div>
 
@@ -262,11 +272,11 @@ export function MerchantPromotionsDashboard({
           <div className="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
             <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
               {[
-                { id: 'all', label: 'All (12)' },
-                { id: 'active', label: 'Active (6)' },
-                { id: 'scheduled', label: 'Scheduled (2)' },
-                { id: 'completed', label: 'Completed (3)' },
-                { id: 'paused', label: 'Paused (1)' },
+                { id: 'all', label: `All (${totalPromos})` },
+                { id: 'active', label: `Active (${activePromos})` },
+                { id: 'scheduled', label: `Scheduled (${scheduledPromos})` },
+                { id: 'completed', label: `Completed (${completedPromos})` },
+                { id: 'paused', label: `Paused (${pausedPromos})` },
               ].map((tab) => {
                 const active = activeTab === tab.id;
                 return (
@@ -298,46 +308,68 @@ export function MerchantPromotionsDashboard({
             </div>
           </div>
 
-          <div className="bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-xs divide-y divide-slate-100">
-            {filteredPromos.map((p) => (
-              <div
-                key={p.id}
-                className="p-4 hover:bg-slate-50/70 transition flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs"
-              >
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-bold text-slate-900">{p.title}</span>
-                    <span className="px-1.5 py-0.2 rounded bg-purple-50 text-purple-700 text-[10px] font-extrabold">
-                      {p.type}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-400">
-                    {p.startDate} – {p.endDate}
-                  </p>
-                </div>
-
-                <div className="flex items-center justify-between sm:justify-end gap-6 w-full sm:w-auto shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
-                  <div className="text-left sm:text-right">
-                    <span className="font-bold text-slate-800">
-                      👁️ {p.reach} Reach • 🖱️ {p.clicks} Clicks
-                    </span>
-                    <p className="text-[10px] text-slate-400">{p.redemptions} Redemptions</p>
-                  </div>
-
-                  <span
-                    className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold ${
-                      p.status === 'Active'
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                        : p.status === 'Scheduled'
-                        ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                        : 'bg-slate-100 text-slate-600'
-                    }`}
-                  >
-                    {p.status}
-                  </span>
-                </div>
+          <div className="bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-xs">
+            {filteredPromos.length === 0 ? (
+              <div className="p-12 text-center">
+                <Megaphone className="w-12 h-12 text-purple-300 mx-auto mb-3" />
+                <h3 className="text-sm font-bold text-slate-800">No Promotions Found</h3>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-4">
+                  {promotions.length === 0
+                    ? 'You have not launched any promotional campaigns yet. Start a special offer or featured listing to get local reach!'
+                    : 'No promotions match your selected filter or search keyword.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => onOpenCreatePromoModal('Special Offer')}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition shadow-sm cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Create First Campaign</span>
+                </button>
               </div>
-            ))}
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {filteredPromos.map((p) => (
+                  <div
+                    key={p.id}
+                    className="p-4 hover:bg-slate-50/70 transition flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-bold text-slate-900">{p.title}</span>
+                        <span className="px-1.5 py-0.2 rounded bg-purple-50 text-purple-700 text-[10px] font-extrabold">
+                          {p.type}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400">
+                        {p.startDate} – {p.endDate}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-between sm:justify-end gap-6 w-full sm:w-auto shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                      <div className="text-left sm:text-right">
+                        <span className="font-bold text-slate-800">
+                          👁️ {p.reach} Reach • 🖱️ {p.clicks} Clicks
+                        </span>
+                        <p className="text-[10px] text-slate-400">{p.redemptions} Redemptions</p>
+                      </div>
+
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold ${
+                          p.status === 'Active'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : p.status === 'Scheduled'
+                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                            : 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        {p.status}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -347,27 +379,31 @@ export function MerchantPromotionsDashboard({
             <h4 className="text-xs font-extrabold text-slate-900 mb-3">
               Top Performing Promotions
             </h4>
-            <div className="space-y-3 text-xs">
-              {[
-                { rank: 1, title: 'Weekend Special Menu', reach: '1,245', clicks: 186, red: 42 },
-                { rank: 2, title: 'Live Music Night', reach: '2,340', clicks: 658, red: 36 },
-                { rank: 3, title: 'Happy Hour', reach: '980', clicks: 142, red: 28 },
-                { rank: 4, title: 'New Dessert Launch', reach: '1,856', clicks: 324, red: 18 },
-                { rank: 5, title: 'Catering Services', reach: '1,032', clicks: 168, red: 12 },
-              ].map((row) => (
-                <div key={row.rank} className="flex items-center justify-between py-1">
-                  <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-full bg-purple-100 text-purple-700 text-[10px] font-extrabold flex items-center justify-center">
-                      {row.rank}
-                    </span>
-                    <span className="font-bold text-slate-800 truncate">{row.title}</span>
-                  </div>
-                  <span className="text-[11px] text-slate-500 font-semibold shrink-0">
-                    {row.clicks} Clicks
-                  </span>
-                </div>
-              ))}
-            </div>
+            {promotions.length === 0 ? (
+              <div className="py-6 text-center text-slate-400">
+                <TrendingUp className="w-8 h-8 text-slate-300 mx-auto mb-1" />
+                <p className="text-xs">No promotions recorded yet</p>
+              </div>
+            ) : (
+              <div className="space-y-3 text-xs">
+                {[...promotions]
+                  .sort((a, b) => (b.clicks || 0) - (a.clicks || 0))
+                  .slice(0, 5)
+                  .map((row, idx) => (
+                    <div key={row.id} className="flex items-center justify-between py-1">
+                      <div className="flex items-center gap-2">
+                        <span className="w-5 h-5 rounded-full bg-purple-100 text-purple-700 text-[10px] font-extrabold flex items-center justify-center">
+                          {idx + 1}
+                        </span>
+                        <span className="font-bold text-slate-800 truncate">{row.title}</span>
+                      </div>
+                      <span className="text-[11px] text-slate-500 font-semibold shrink-0">
+                        {row.clicks} Clicks
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            )}
           </div>
 
           <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs">

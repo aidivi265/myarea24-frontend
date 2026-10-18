@@ -12,116 +12,16 @@ import {
   ChevronRight,
   Navigation,
   Loader2,
-  Globe,
   Trash2,
-  RotateCcw,
+  Clock,
+  Sparkles,
 } from 'lucide-react';
 import { reverseGeocodeLive, searchLocationsLive } from '../services/liveIntelligence';
-
-export interface UserLocation {
-  id: string;
-  label: string; // e.g. "Home", "Work", or area name
-  areaName: string; // e.g. "Rohini Sector 10, Delhi"
-  fullAddress: string; // e.g. "Pocket B-4, Sector 10, Rohini, Outer North Delhi 110085"
-  pincode: string;
-  coords?: { lat: number; lng: number };
-}
-
-export const DEFAULT_SAVED_LOCATIONS: UserLocation[] = [
-  {
-    id: 'loc-home',
-    label: 'Home',
-    areaName: 'Rohini Sector 10, Delhi',
-    fullAddress: 'Pocket B-4, Rohini Sector 10, Outer North Delhi, Delhi 110085',
-    pincode: '110085',
-    coords: { lat: 28.7196, lng: 77.1186 },
-  },
-  {
-    id: 'loc-work',
-    label: 'Work',
-    areaName: 'Connaught Place, New Delhi',
-    fullAddress: 'Inner Circle, Rajiv Chowk, Connaught Place, New Delhi 110001',
-    pincode: '110001',
-    coords: { lat: 28.6315, lng: 77.2167 },
-  },
-  {
-    id: 'loc-akgec',
-    label: 'Campus',
-    areaName: 'AKGEC, Ghaziabad, Uttar Pradesh',
-    fullAddress: '27th Km Milestone, Delhi-Meerut Expressway, Adhyatmik Nagar, Ghaziabad 201009',
-    pincode: '201009',
-    coords: { lat: 28.6757, lng: 77.5020 },
-  },
-];
-
-export const POPULAR_AREAS: UserLocation[] = [
-  {
-    id: 'pop-1',
-    label: 'Rohini Sector 10',
-    areaName: 'Rohini Sector 10, Delhi',
-    fullAddress: 'Near Japanese Park & Rohini West Metro, Outer North Delhi 110085',
-    pincode: '110085',
-    coords: { lat: 28.7196, lng: 77.1186 },
-  },
-  {
-    id: 'pop-2',
-    label: 'Connaught Place',
-    areaName: 'Connaught Place, New Delhi',
-    fullAddress: 'Inner Circle, Rajiv Chowk, Central Delhi 110001',
-    pincode: '110001',
-    coords: { lat: 28.6315, lng: 77.2167 },
-  },
-  {
-    id: 'pop-3',
-    label: 'Noida Sector 62',
-    areaName: 'Noida Sector 62, Uttar Pradesh',
-    fullAddress: 'Electronic City Metro Corridor, Sector 62, Noida 201309',
-    pincode: '201309',
-    coords: { lat: 28.6280, lng: 77.3649 },
-  },
-  {
-    id: 'pop-4',
-    label: 'Indiranagar, Bengaluru',
-    areaName: 'Indiranagar, Bengaluru',
-    fullAddress: '100 Feet Road, HAL 2nd Stage, Indiranagar, Bengaluru, Karnataka 560038',
-    pincode: '560038',
-    coords: { lat: 12.9784, lng: 77.6408 },
-  },
-  {
-    id: 'pop-5',
-    label: 'Bandra Kurla Complex, Mumbai',
-    areaName: 'Bandra Kurla Complex, Mumbai',
-    fullAddress: 'G Block BKC, Bandra East, Mumbai, Maharashtra 400051',
-    pincode: '400051',
-    coords: { lat: 19.0657, lng: 72.8679 },
-  },
-  {
-    id: 'pop-6',
-    label: 'Hitec City, Hyderabad',
-    areaName: 'Hitec City, Hyderabad',
-    fullAddress: 'Cyber Towers, Madhapur, Hyderabad, Telangana 500081',
-    pincode: '500081',
-    coords: { lat: 17.4504, lng: 78.3808 },
-  },
-  {
-    id: 'pop-7',
-    label: 'Hazratganj, Lucknow',
-    areaName: 'Hazratganj, Lucknow',
-    fullAddress: 'Hazratganj Chauraha, Central Lucknow, Uttar Pradesh 226001',
-    pincode: '226001',
-    coords: { lat: 26.8467, lng: 80.9462 },
-  },
-  {
-    id: 'pop-8',
-    label: 'Hinjewadi, Pune',
-    areaName: 'Hinjewadi Phase 1, Pune',
-    fullAddress: 'Rajiv Gandhi Infotech Park, Hinjewadi, Pune, Maharashtra 411057',
-    pincode: '411057',
-    coords: { lat: 18.5913, lng: 73.7389 },
-  },
-];
+import { DEFAULT_SAVED_LOCATIONS, type UserLocation } from '../types';
+export { DEFAULT_SAVED_LOCATIONS, type UserLocation };
 
 const SAVED_LOCATIONS_STORAGE_KEY = 'myarea24_saved_locations_v1';
+const RECENT_LOCATIONS_STORAGE_KEY = 'myarea24_recent_locations_v1';
 
 interface LocationPickerModalProps {
   isOpen: boolean;
@@ -139,6 +39,8 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [liveResults, setLiveResults] = useState<UserLocation[]>([]);
   const [searchingLive, setSearchingLive] = useState(false);
+
+  // User-created Saved Addresses only — never fake pre-populated addresses!
   const [savedLocations, setSavedLocations] = useState<UserLocation[]>(() => {
     try {
       const raw = localStorage.getItem(SAVED_LOCATIONS_STORAGE_KEY);
@@ -149,8 +51,23 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
     } catch {
       // ignore storage errors
     }
-    return DEFAULT_SAVED_LOCATIONS;
+    return [];
   });
+
+  // Recent user search history
+  const [recentLocations, setRecentLocations] = useState<UserLocation[]>(() => {
+    try {
+      const raw = localStorage.getItem(RECENT_LOCATIONS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return [];
+  });
+
   const [detectingGps, setDetectingGps] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [addingNew, setAddingNew] = useState(false);
@@ -164,10 +81,29 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
       try {
         localStorage.setItem(SAVED_LOCATIONS_STORAGE_KEY, JSON.stringify(next));
       } catch {
-        // ignore storage errors
+        // ignore
       }
       return next;
     });
+  };
+
+  const addLocationToRecent = (loc: UserLocation) => {
+    setRecentLocations((prev) => {
+      const filtered = prev.filter((item) => item.areaName !== loc.areaName);
+      const next = [loc, ...filtered].slice(0, 5);
+      try {
+        localStorage.setItem(RECENT_LOCATIONS_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
+
+  const handleSelect = (loc: UserLocation) => {
+    addLocationToRecent(loc);
+    onSelectLocation(loc);
+    onClose();
   };
 
   const handleDeleteSavedLocation = (e: React.MouseEvent, idToDelete: string) => {
@@ -175,22 +111,16 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
     updateSavedLocations((prev) => prev.filter((item) => item.id !== idToDelete));
   };
 
-  const handleToggleBookmarkArea = (e: React.MouseEvent, area: UserLocation) => {
-    e.stopPropagation();
-    const existing = savedLocations.find((s) => s.areaName === area.areaName);
-    if (existing) {
-      updateSavedLocations((prev) => prev.filter((item) => item.id !== existing.id));
-    } else {
-      const newSaved: UserLocation = {
-        ...area,
-        id: `loc-${Date.now()}`,
-        label: area.label || area.areaName.split(',')[0],
-      };
-      updateSavedLocations((prev) => [newSaved, ...prev]);
+  const handleClearRecents = () => {
+    setRecentLocations([]);
+    try {
+      localStorage.removeItem(RECENT_LOCATIONS_STORAGE_KEY);
+    } catch {
+      // ignore
     }
   };
 
-  // Debounced Pan-India + Nominatim Live Search
+  // Debounced Pan-India Live Location Search via Nominatim / FastAPI
   useEffect(() => {
     if (!isOpen) return;
     const q = searchQuery.trim();
@@ -218,19 +148,6 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
 
   if (!isOpen) return null;
 
-  const localFiltered = POPULAR_AREAS.filter(
-    (a) =>
-      !searchQuery.trim() ||
-      a.areaName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      a.fullAddress.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      a.pincode.includes(searchQuery.trim())
-  );
-
-  const displayAreas =
-    searchQuery.trim().length >= 2
-      ? [...liveResults, ...localFiltered.filter((l) => !liveResults.some((r) => r.areaName === l.areaName))]
-      : POPULAR_AREAS;
-
   const handleUseCurrentGps = () => {
     setDetectingGps(true);
     setGpsError(null);
@@ -246,32 +163,40 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
         try {
           const resolved = await reverseGeocodeLive(pos.coords.latitude, pos.coords.longitude);
           setDetectingGps(false);
-          onSelectLocation(resolved);
-          onClose();
+          handleSelect(resolved);
         } catch {
           setDetectingGps(false);
           const fallbackGps: UserLocation = {
-            id: 'loc-gps',
+            id: `loc-gps-${Date.now()}`,
             label: 'Current Location',
-            areaName: `GPS (${pos.coords.latitude.toFixed(3)}°N, ${pos.coords.longitude.toFixed(3)}°E)`,
-            fullAddress: `Live GPS Coordinates: ${pos.coords.latitude.toFixed(4)}°N, ${pos.coords.longitude.toFixed(4)}°E`,
+            areaName: `Location (${pos.coords.latitude.toFixed(3)}°N, ${pos.coords.longitude.toFixed(3)}°E)`,
+            fullAddress: `Detected via device GPS at coordinates ${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`,
             pincode: '',
             coords: { lat: pos.coords.latitude, lng: pos.coords.longitude },
           };
-          onSelectLocation(fallbackGps);
-          onClose();
+          handleSelect(fallbackGps);
         }
       },
       (err) => {
         setDetectingGps(false);
         setGpsError(
           err.code === 1
-            ? 'Location permission denied. Please allow location access in browser settings or search your area above.'
-            : 'Unable to lock GPS signal. Please search your locality or city above.'
+            ? 'Location permission was denied. Please allow location access in your browser settings or search your locality above.'
+            : 'Unable to acquire accurate GPS signal. Please search your locality, city, or pincode above.'
         );
       },
-      { enableHighAccuracy: true, timeout: 8000 }
+      { enableHighAccuracy: true, timeout: 9000 }
     );
+  };
+
+  const handleSaveCurrentAsFavorite = (label: 'Home' | 'Work') => {
+    const existing = savedLocations.find((s) => s.label === label);
+    const updated: UserLocation = {
+      ...currentLocation,
+      id: existing ? existing.id : `loc-saved-${Date.now()}`,
+      label,
+    };
+    updateSavedLocations((prev) => [updated, ...prev.filter((s) => s.label !== label)]);
   };
 
   const handleSaveNewAddress = async (e: React.FormEvent) => {
@@ -288,14 +213,13 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
       areaName: best ? best.areaName : newArea.trim(),
       fullAddress: newAddress.trim() || best?.fullAddress || `${newArea.trim()}, India`,
       pincode: best?.pincode || '',
-      coords: best?.coords || currentLocation.coords || { lat: 28.7196, lng: 77.1186 },
+      coords: best?.coords || currentLocation.coords || { lat: 28.6139, lng: 77.2090 },
     };
     updateSavedLocations((prev) => [created, ...prev]);
-    onSelectLocation(created);
+    handleSelect(created);
     setAddingNew(false);
     setNewArea('');
     setNewAddress('');
-    onClose();
   };
 
   return (
@@ -312,7 +236,7 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
           <div>
             <h3 className="text-base font-extrabold text-slate-900">Select Your Location</h3>
             <p className="text-xs text-slate-500">
-              Live weather, CPCB AQI, TomTom traffic & NDMA alerts sync to your exact coordinates
+              Hyperlocal stores, services, emergency SOS & weather for your area in India
             </p>
           </div>
           <button
@@ -324,7 +248,7 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
           </button>
         </div>
 
-        {/* Search Input Bar (Blinkit / Uber style) */}
+        {/* Search Input Bar (Real-world Pan-India Search) */}
         <div className="p-4 border-b border-slate-100 bg-slate-50/60">
           <div className="bg-white border-2 border-indigo-500/80 focus-within:border-indigo-600 rounded-xl px-3.5 py-2.5 flex items-center gap-2.5 shadow-xs">
             {searchingLive ? (
@@ -337,7 +261,7 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
               autoFocus
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search any city, sector, landmark, village or pincode in India..."
+              placeholder="Search area, landmark, street, city or 6-digit pincode across India..."
               className="flex-1 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none"
             />
             {searchQuery && (
@@ -356,7 +280,7 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
             type="button"
             onClick={handleUseCurrentGps}
             disabled={detectingGps}
-            className="mt-2.5 w-full bg-white hover:bg-indigo-50/60 border border-slate-200/90 rounded-xl p-3 flex items-center justify-between gap-3 text-left transition group"
+            className="mt-2.5 w-full bg-white hover:bg-indigo-50/60 border border-slate-200/90 rounded-xl p-3 flex items-center justify-between gap-3 text-left transition group cursor-pointer"
           >
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 group-hover:bg-indigo-600 group-hover:text-white transition">
@@ -368,12 +292,12 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
               </div>
               <div>
                 <p className="text-xs font-extrabold text-indigo-600">
-                  {detectingGps ? 'Detecting live GPS & reverse-geocoding...' : 'Use current location'}
+                  {detectingGps ? 'Detecting device GPS & reverse-geocoding...' : 'Use Current Location'}
                 </p>
                 <p className="text-[11px] text-slate-500">
-                  {currentLocation.coords
-                    ? `Active: ${currentLocation.areaName} (${currentLocation.coords.lat.toFixed(3)}°N, ${currentLocation.coords.lng.toFixed(3)}°E)`
-                    : 'Auto-detect via browser GPS + OpenStreetMap Nominatim'}
+                  {currentLocation.coords && currentLocation.areaName !== 'Select Your Area (India)'
+                    ? `Current: ${currentLocation.areaName}`
+                    : 'Auto-detect exact coordinates via device GPS anywhere in India'}
                 </p>
               </div>
             </div>
@@ -389,257 +313,285 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-4 space-y-5">
-          {/* Saved Addresses Section */}
-          {!searchQuery && (
+          {/* Live Search Results Mode */}
+          {searchQuery.trim().length >= 2 ? (
             <div>
               <div className="flex items-center justify-between mb-2.5">
                 <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
-                  Saved Addresses ({savedLocations.length})
+                  Search Results ({liveResults.length})
                 </p>
-                <div className="flex items-center gap-3">
-                  {savedLocations.length < DEFAULT_SAVED_LOCATIONS.length && (
-                    <button
-                      type="button"
-                      onClick={() => updateSavedLocations(() => DEFAULT_SAVED_LOCATIONS)}
-                      className="text-[11px] font-semibold text-slate-500 hover:text-slate-700 flex items-center gap-1"
-                      title="Restore default saved locations"
-                    >
-                      <RotateCcw className="w-3 h-3" /> Reset
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setAddingNew((v) => !v)}
-                    className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
-                  >
-                    <Plus className="w-3.5 h-3.5" /> Add New
-                  </button>
-                </div>
+                {searchingLive && (
+                  <span className="text-[10px] font-semibold text-indigo-600 flex items-center gap-1">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Searching India...
+                  </span>
+                )}
               </div>
 
-              {addingNew && (
-                <form
-                  onSubmit={handleSaveNewAddress}
-                  className="mb-3 p-3.5 rounded-xl bg-indigo-50/60 border border-indigo-200/80 space-y-2.5"
-                >
-                  <div className="flex gap-1.5">
-                    {(['Home', 'Work', 'Other'] as const).map((t) => (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() => setNewLabel(t)}
-                        className={`px-3 py-1 rounded-lg text-xs font-bold ${
-                          newLabel === t
-                            ? 'bg-indigo-600 text-white'
-                            : 'bg-white text-slate-600 border border-slate-200'
-                        }`}
-                      >
-                        {t}
-                      </button>
-                    ))}
-                  </div>
-                  <input
-                    type="text"
-                    required
-                    value={newArea}
-                    onChange={(e) => setNewArea(e.target.value)}
-                    placeholder="City / Sector / Locality (e.g. Indirapuram Ghaziabad, Koramangala Bengaluru)"
-                    className="w-full px-3 py-2 rounded-lg bg-white border border-slate-200 text-xs focus:outline-none"
-                  />
-                  <input
-                    type="text"
-                    value={newAddress}
-                    onChange={(e) => setNewAddress(e.target.value)}
-                    placeholder="House / Flat / Landmark (optional)"
-                    className="w-full px-3 py-2 rounded-lg bg-white border border-slate-200 text-xs focus:outline-none"
-                  />
-                  <div className="flex justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setAddingNew(false)}
-                      className="px-3 py-1.5 rounded-lg bg-white text-slate-600 text-xs font-semibold"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-3.5 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-bold"
-                    >
-                      Geocode & Save
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              {savedLocations.length === 0 ? (
-                <div className="p-4 rounded-xl border border-dashed border-slate-200 bg-slate-50/60 text-center">
-                  <p className="text-xs font-semibold text-slate-600">No saved addresses</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    Click "+ Add New" above or bookmark any locality below
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => updateSavedLocations(() => DEFAULT_SAVED_LOCATIONS)}
-                    className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white border border-slate-200 text-[11px] font-bold text-indigo-600 hover:bg-indigo-50 transition"
-                  >
-                    <RotateCcw className="w-3 h-3" /> Restore Default Addresses
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {savedLocations.map((loc) => {
-                    const isSelected =
-                      currentLocation.areaName === loc.areaName && currentLocation.label === loc.label;
-                    const Icon =
-                      loc.label === 'Home' ? Home : loc.label === 'Work' ? Briefcase : Bookmark;
+              {liveResults.length > 0 ? (
+                <div className="space-y-1.5">
+                  {liveResults.map((area) => {
+                    const isSelected = currentLocation.areaName === area.areaName;
                     return (
                       <div
-                        key={loc.id}
-                        onClick={() => {
-                          onSelectLocation(loc);
-                          onClose();
-                        }}
-                        className={`w-full p-3 rounded-xl border text-left flex items-center justify-between gap-2 transition cursor-pointer ${
-                          isSelected
-                            ? 'bg-indigo-50/70 border-indigo-500 ring-1 ring-indigo-500/30'
-                            : 'bg-white hover:bg-slate-50 border-slate-200/80'
+                        key={area.id}
+                        onClick={() => handleSelect(area)}
+                        className={`w-full p-2.5 rounded-xl flex items-center justify-between gap-2 text-left transition cursor-pointer ${
+                          isSelected ? 'bg-indigo-50 border border-indigo-200 text-indigo-900' : 'hover:bg-slate-50 border border-slate-100'
                         }`}
                       >
-                        <div className="flex items-start gap-3 min-w-0 flex-1">
-                          <div
-                            className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
-                              isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
-                            }`}
-                          >
-                            <Icon className="w-4 h-4" />
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
+                            <Navigation className="w-3.5 h-3.5" />
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
-                              <span className="text-xs font-extrabold text-slate-900">{loc.label}</span>
-                              <span className="text-[11px] font-semibold text-indigo-600 truncate">
-                                • {loc.areaName}
-                              </span>
+                              <p className="text-xs font-bold text-slate-900 truncate">{area.areaName}</p>
+                              {area.pincode && (
+                                <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 shrink-0">
+                                  {area.pincode}
+                                </span>
+                              )}
                             </div>
-                            <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
-                              {loc.fullAddress}
-                            </p>
+                            <p className="text-[11px] text-slate-500 truncate">{area.fullAddress}</p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {isSelected && (
-                            <span
-                              className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center"
-                              title="Currently active location"
-                            >
-                              <Check className="w-3 h-3" />
-                            </span>
-                          )}
-                          <button
-                            type="button"
-                            onClick={(e) => handleDeleteSavedLocation(e, loc.id)}
-                            title={`Delete ${loc.label} (${loc.areaName})`}
-                            aria-label={`Delete ${loc.label}`}
-                            className="w-7 h-7 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                        <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
                       </div>
                     );
                   })}
                 </div>
-              )}
-            </div>
-          )}
-
-          {/* Live Searched / Popular Pan-India Localities */}
-          <div>
-            <div className="flex items-center justify-between mb-2.5">
-              <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                <Globe className="w-3.5 h-3.5 text-indigo-500" />
-                {searchQuery
-                  ? `Live Geocoded Locations (${displayAreas.length})`
-                  : 'Popular Pan-India Hubs & Localities'}
-              </p>
-              {searchingLive && (
-                <span className="text-[10px] font-semibold text-indigo-600">Searching India...</span>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              {displayAreas.map((area) => {
-                const isSelected = currentLocation.areaName === area.areaName;
-                const isBookmarked = savedLocations.some((s) => s.areaName === area.areaName);
-                return (
-                  <div
-                    key={area.id}
-                    onClick={() => {
-                      onSelectLocation(area);
-                      onClose();
-                    }}
-                    className={`w-full p-2.5 rounded-xl flex items-center justify-between gap-2 text-left transition cursor-pointer ${
-                      isSelected ? 'bg-indigo-50 text-indigo-900' : 'hover:bg-slate-50'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
-                        <Navigation className="w-3.5 h-3.5" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <p className="text-xs font-bold text-slate-900 truncate">{area.areaName}</p>
-                          {area.coords && (
-                            <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 shrink-0">
-                              {area.coords.lat.toFixed(2)}°N, {area.coords.lng.toFixed(2)}°E
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-slate-500 truncate">{area.fullAddress}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        onClick={(e) => handleToggleBookmarkArea(e, area)}
-                        title={isBookmarked ? 'Remove from Saved Addresses' : 'Save to Saved Addresses'}
-                        className={`w-7 h-7 rounded-lg flex items-center justify-center transition ${
-                          isBookmarked
-                            ? 'text-indigo-600 bg-indigo-50 hover:bg-rose-50 hover:text-rose-600'
-                            : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'
-                        }`}
-                      >
-                        <Bookmark className={`w-3.5 h-3.5 ${isBookmarked ? 'fill-current' : ''}`} />
-                      </button>
-                      {isSelected ? (
-                        <span className="text-[10px] font-extrabold text-indigo-600 shrink-0">Selected</span>
-                      ) : (
-                        <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-
-              {displayAreas.length === 0 && !searchingLive && (
+              ) : !searchingLive ? (
                 <div className="text-center py-6">
                   <MapPin className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                  <p className="text-xs font-bold text-slate-700">
-                    No matching locality found for "{searchQuery}"
+                  <p className="text-xs font-bold text-slate-700">No matching places found</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Try searching with city name, sector number, or 6-digit pincode
                   </p>
                   <button
                     type="button"
                     onClick={() => {
-                      setAddingNew(true);
-                      setNewArea(searchQuery);
-                      setSearchQuery('');
+                      const custom: UserLocation = {
+                        id: `loc-custom-${Date.now()}`,
+                        label: searchQuery.trim(),
+                        areaName: searchQuery.trim(),
+                        fullAddress: `${searchQuery.trim()}, India`,
+                        pincode: '',
+                        coords: currentLocation.coords || { lat: 28.6139, lng: 77.2090 },
+                      };
+                      handleSelect(custom);
                     }}
                     className="mt-3 px-4 py-1.5 rounded-full bg-indigo-600 text-white text-xs font-bold"
                   >
-                    + Use "{searchQuery}" as Custom Location
+                    + Use "{searchQuery}" as my location
                   </button>
                 </div>
-              )}
+              ) : null}
             </div>
-          </div>
+          ) : (
+            <>
+              {/* Saved Addresses Section (Strictly user-saved) */}
+              <div>
+                <div className="flex items-center justify-between mb-2.5">
+                  <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
+                    Saved Addresses ({savedLocations.length})
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setAddingNew((v) => !v)}
+                    className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add Address
+                  </button>
+                </div>
+
+                {addingNew && (
+                  <form
+                    onSubmit={handleSaveNewAddress}
+                    className="mb-3 p-3.5 rounded-xl bg-indigo-50/60 border border-indigo-200/80 space-y-2.5"
+                  >
+                    <div className="flex gap-1.5">
+                      {(['Home', 'Work', 'Other'] as const).map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => setNewLabel(t)}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold ${
+                            newLabel === t
+                              ? 'bg-indigo-600 text-white'
+                              : 'bg-white text-slate-600 border border-slate-200'
+                          }`}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                    <input
+                      type="text"
+                      required
+                      value={newArea}
+                      onChange={(e) => setNewArea(e.target.value)}
+                      placeholder="Area / Locality / City (e.g. Indiranagar Bengaluru, Sector 18 Noida)"
+                      className="w-full px-3 py-2 rounded-lg bg-white border border-slate-200 text-xs focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      value={newAddress}
+                      onChange={(e) => setNewAddress(e.target.value)}
+                      placeholder="House / Flat / Street / Landmark (optional)"
+                      className="w-full px-3 py-2 rounded-lg bg-white border border-slate-200 text-xs focus:outline-none"
+                    />
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setAddingNew(false)}
+                        className="px-3 py-1.5 rounded-lg bg-white text-slate-600 text-xs font-semibold cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-3.5 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-bold cursor-pointer"
+                      >
+                        Save Address
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {savedLocations.length === 0 ? (
+                  <div className="p-4 rounded-xl border border-dashed border-slate-200 bg-slate-50/60 text-center space-y-2">
+                    <p className="text-xs font-semibold text-slate-700">No saved addresses yet</p>
+                    <p className="text-[11px] text-slate-400">
+                      Save your Home or Work address for quick 1-tap switching.
+                    </p>
+                    {currentLocation.coords && currentLocation.areaName !== 'Select Your Area (India)' && (
+                      <div className="flex justify-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => handleSaveCurrentAsFavorite('Home')}
+                          className="px-3 py-1 rounded-lg bg-white border border-slate-200 hover:border-indigo-400 text-slate-700 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition shadow-xs"
+                        >
+                          <Home className="w-3 h-3 text-indigo-600" /> Save as Home
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSaveCurrentAsFavorite('Work')}
+                          className="px-3 py-1 rounded-lg bg-white border border-slate-200 hover:border-indigo-400 text-slate-700 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition shadow-xs"
+                        >
+                          <Briefcase className="w-3 h-3 text-indigo-600" /> Save as Work
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {savedLocations.map((loc) => {
+                      const isSelected = currentLocation.areaName === loc.areaName && currentLocation.label === loc.label;
+                      const Icon = loc.label === 'Home' ? Home : loc.label === 'Work' ? Briefcase : Bookmark;
+                      return (
+                        <div
+                          key={loc.id}
+                          onClick={() => handleSelect(loc)}
+                          className={`w-full p-3 rounded-xl border text-left flex items-center justify-between gap-2 transition cursor-pointer ${
+                            isSelected
+                              ? 'bg-indigo-50/70 border-indigo-500 ring-1 ring-indigo-500/30'
+                              : 'bg-white hover:bg-slate-50 border-slate-200/80'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3 min-w-0 flex-1">
+                            <div
+                              className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
+                                isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
+                              }`}
+                            >
+                              <Icon className="w-4 h-4" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-extrabold text-slate-900">{loc.label}</span>
+                                <span className="text-[11px] font-semibold text-indigo-600 truncate">
+                                  • {loc.areaName}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
+                                {loc.fullAddress}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {isSelected && (
+                              <span
+                                className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center"
+                                title="Active Location"
+                              >
+                                <Check className="w-3 h-3" />
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={(e) => handleDeleteSavedLocation(e, loc.id)}
+                              title={`Delete ${loc.label}`}
+                              className="w-7 h-7 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Recent Locations Section */}
+              {recentLocations.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5 text-slate-400" /> Recent Searches
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleClearRecents}
+                      className="text-[10px] font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <div className="space-y-1">
+                    {recentLocations.map((rec) => (
+                      <div
+                        key={rec.id || rec.areaName}
+                        onClick={() => handleSelect(rec)}
+                        className="p-2.5 rounded-xl hover:bg-slate-50 flex items-center justify-between gap-2 cursor-pointer border border-slate-100 transition"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-800 truncate">{rec.areaName}</p>
+                            <p className="text-[10px] text-slate-400 truncate">{rec.fullAddress}</p>
+                          </div>
+                        </div>
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Pan-India Helpful Discovery Card */}
+              {recentLocations.length === 0 && (
+                <div className="p-4 rounded-2xl bg-indigo-50/70 border border-indigo-100/90 text-left">
+                  <div className="flex items-center gap-2 text-indigo-900 font-extrabold text-xs">
+                    <Sparkles className="w-4 h-4 text-indigo-600" /> Pan-India Hyperlocal Coverage
+                  </div>
+                  <p className="text-[11px] text-indigo-950/80 mt-1">
+                    MyArea24 covers all Indian cities, towns, and districts. Type any landmark, sector, or 6-digit pincode above to explore live local intelligence.
+                  </p>
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { DashboardCommonProps } from './MainDashboards';
 import { AlertsDashboard } from './IntelligenceDashboards';
 import { HeroBanner } from '../components/HeroBanner';
@@ -11,6 +11,7 @@ import {
   logoutAuthUser,
   AuthUserProfile,
 } from '../services/communityMarketplaceService';
+import { AUTH_CHANGE_EVENT } from '../services/authService';
 import {
   MapPin,
   Phone,
@@ -482,10 +483,10 @@ export const EmergencyDashboard: React.FC<DashboardCommonProps> = ({
                   </div>
                   <button
                     type="button"
-                    onClick={() => triggerSos(h.name, h.phone)}
+                    onClick={() => triggerSos(h.name, h.phone || '112')}
                     className="px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white text-xs font-bold shrink-0 transition cursor-pointer"
                   >
-                    📞 {h.phone}
+                    📞 {h.phone || '112'}
                   </button>
                 </div>
               ))}
@@ -562,81 +563,33 @@ export const MarketRatesDashboard: React.FC<
   const { mandiRates, fuelRates } = liveIntel;
   const shortArea = selectedArea.split(',')[0]?.trim() || selectedArea;
 
-  // Derive additional seasonal vegetables dynamically around the city's base mandi index
-  const baseFactor = (mandiRates[0]?.pricePerKg || 40) / 40;
-  const fullMandiTable = [
-    ...mandiRates.map((m) => ({
-      item: m.commodity,
-      icon: m.icon,
-      unit: m.unit,
-      price: m.pricePerKg,
-      trend: m.trend,
-      mandi: m.mandiName,
-    })),
-    {
-      item: 'Green Chilli',
-      icon: '🌶️',
-      unit: 'kg',
-      price: Math.round(68 * baseFactor),
-      trend: 'Stable',
-      mandi: `${fuelRates.city} APMC`,
-    },
-    {
-      item: 'Cauliflower',
-      icon: '🥦',
-      unit: 'kg',
-      price: Math.round(36 * baseFactor),
-      trend: '▼ ₹2',
-      mandi: `${fuelRates.city} APMC`,
-    },
-    {
-      item: 'Shimla Apple',
-      icon: '🍎',
-      unit: 'kg',
-      price: Math.round(135 * baseFactor),
-      trend: '▲ ₹4',
-      mandi: `${fuelRates.city} APMC`,
-    },
-    {
-      item: 'Robusta Banana',
-      icon: '🍌',
-      unit: 'dozen',
-      price: Math.round(52 * baseFactor),
-      trend: 'Stable',
-      mandi: `${fuelRates.city} APMC`,
-    },
-  ];
+  const fullMandiTable = mandiRates.map((m) => ({
+    item: m.commodity,
+    icon: m.icon,
+    unit: m.unit,
+    price: m.pricePerKg,
+    trend: m.trend,
+    mandi: m.mandiName,
+  }));
 
-  const nearbyStations = [
-    {
-      name: `Indian Oil (${shortArea} Main)`,
-      d: '1.1 km',
-      p: fuelRates.petrol.toFixed(2),
-      dl: fuelRates.diesel.toFixed(2),
-      cng: fuelRates.cng.toFixed(2),
-    },
-    {
-      name: `Bharat Petroleum (${shortArea})`,
-      d: '2.0 km',
-      p: (fuelRates.petrol + 0.03).toFixed(2),
-      dl: (fuelRates.diesel + 0.02).toFixed(2),
-      cng: fuelRates.cng.toFixed(2),
-    },
-    {
-      name: `Hindustan Petroleum (Highway Corridor)`,
-      d: '2.8 km',
-      p: (fuelRates.petrol - 0.04).toFixed(2),
-      dl: (fuelRates.diesel - 0.03).toFixed(2),
-      cng: (fuelRates.cng - 0.25).toFixed(2),
-    },
-    {
-      name: `City Gas / CNG Rapid Fill (${fuelRates.city})`,
-      d: '3.4 km',
-      p: fuelRates.petrol.toFixed(2),
-      dl: fuelRates.diesel.toFixed(2),
-      cng: (fuelRates.cng - 0.5).toFixed(2),
-    },
-  ];
+  const fuelPois = liveIntel.nearbyPois.filter(
+    (p) =>
+      p.category === 'fuel' ||
+      p.name.toLowerCase().includes('petrol') ||
+      p.name.toLowerCase().includes('cng') ||
+      p.name.toLowerCase().includes('fuel') ||
+      p.name.toLowerCase().includes('iocl') ||
+      p.name.toLowerCase().includes('bpcl') ||
+      p.name.toLowerCase().includes('hpcl')
+  );
+
+  const nearbyStations = fuelPois.map((p) => ({
+    name: p.name,
+    d: `${p.distanceKm.toFixed(1)} km`,
+    p: fuelRates.petrol > 0 ? fuelRates.petrol.toFixed(2) : '—',
+    dl: fuelRates.diesel > 0 ? fuelRates.diesel.toFixed(2) : '—',
+    cng: fuelRates.cng > 0 ? fuelRates.cng.toFixed(2) : '—',
+  }));
 
   return (
     <div className="space-y-4">
@@ -704,33 +657,33 @@ export const MarketRatesDashboard: React.FC<
         {[
           {
             name: `Petrol (${fuelRates.city})`,
-            val: `₹${fuelRates.petrol.toFixed(2)} / L`,
-            ch: 'Live OMC Revision',
-            cls: 'text-emerald-600',
+            val: fuelRates.petrol > 0 ? `₹${fuelRates.petrol.toFixed(2)} / L` : 'Awaiting API Key',
+            ch: fuelRates.petrol > 0 ? 'Live OMC Revision' : 'Pending PPAC/OMC API',
+            cls: fuelRates.petrol > 0 ? 'text-emerald-600' : 'text-amber-600',
             icon: '⛽',
             bg: 'bg-rose-500',
           },
           {
             name: `Diesel (${fuelRates.city})`,
-            val: `₹${fuelRates.diesel.toFixed(2)} / L`,
-            ch: 'Live OMC Revision',
-            cls: 'text-emerald-600',
+            val: fuelRates.diesel > 0 ? `₹${fuelRates.diesel.toFixed(2)} / L` : 'Awaiting API Key',
+            ch: fuelRates.diesel > 0 ? 'Live OMC Revision' : 'Pending PPAC/OMC API',
+            cls: fuelRates.diesel > 0 ? 'text-emerald-600' : 'text-amber-600',
             icon: '🛢️',
             bg: 'bg-blue-600',
           },
           {
             name: `CNG (${fuelRates.city})`,
-            val: `₹${fuelRates.cng.toFixed(2)} / kg`,
-            ch: 'City Gas Retail',
-            cls: 'text-blue-600',
+            val: fuelRates.cng > 0 ? `₹${fuelRates.cng.toFixed(2)} / kg` : 'Awaiting API Key',
+            ch: fuelRates.cng > 0 ? 'City Gas Retail' : 'Pending City Gas API',
+            cls: fuelRates.cng > 0 ? 'text-blue-600' : 'text-amber-600',
             icon: '🟢',
             bg: 'bg-emerald-600',
           },
           {
             name: `Domestic LPG (14.2 kg)`,
-            val: `₹${fuelRates.lpg.toFixed(0)}`,
-            ch: `${fuelRates.city} Refill Rate`,
-            cls: 'text-slate-500',
+            val: fuelRates.lpg > 0 ? `₹${fuelRates.lpg.toFixed(0)}` : 'Awaiting API Key',
+            ch: fuelRates.lpg > 0 ? `${fuelRates.city} Refill Rate` : 'Pending OMC API',
+            cls: fuelRates.lpg > 0 ? 'text-slate-500' : 'text-amber-600',
             icon: '🔥',
             bg: 'bg-orange-500',
           },
@@ -788,17 +741,28 @@ export const MarketRatesDashboard: React.FC<
                   </tr>
                 </thead>
                 <tbody>
-                  {fullMandiTable.map((r) => (
-                    <tr key={r.item} className="border-b border-slate-50 last:border-none">
-                      <td className="py-2.5 font-bold text-slate-800 flex items-center gap-2">
-                        <span>{r.icon}</span> {r.item}
+                  {fullMandiTable.length > 0 ? (
+                    fullMandiTable.map((r) => (
+                      <tr key={r.item} className="border-b border-slate-50 last:border-none">
+                        <td className="py-2.5 font-bold text-slate-800 flex items-center gap-2">
+                          <span>{r.icon}</span> {r.item}
+                        </td>
+                        <td className="py-2.5 text-slate-500">1 {r.unit}</td>
+                        <td className="py-2.5 font-extrabold text-slate-900">₹{r.price}</td>
+                        <td className="py-2.5 text-slate-500">{r.mandi}</td>
+                        <td className="py-2.5 font-bold text-emerald-600 text-right">{r.trend}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={5} className="py-8 text-center text-slate-500">
+                        <p className="font-extrabold text-slate-700">Awaiting Live Mandi Feed</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          Configure Agmarknet / APMC API key to stream live commodity prices for {fuelRates.city}.
+                        </p>
                       </td>
-                      <td className="py-2.5 text-slate-500">1 {r.unit}</td>
-                      <td className="py-2.5 font-extrabold text-slate-900">₹{r.price}</td>
-                      <td className="py-2.5 text-slate-500">{r.mandi}</td>
-                      <td className="py-2.5 font-bold text-emerald-600 text-right">{r.trend}</td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
@@ -854,34 +818,45 @@ export const MarketRatesDashboard: React.FC<
                       </tr>
                     </thead>
                     <tbody>
-                      {nearbyStations.map((st) => (
-                        <tr key={st.name} className="border-b border-slate-50 last:border-none">
-                          <td className="py-2.5 font-extrabold text-slate-900">{st.name}</td>
-                          <td className="py-2.5 font-semibold text-slate-500">{st.d}</td>
-                          <td className="py-2.5 font-extrabold text-slate-900">₹{st.p}</td>
-                          <td className="py-2.5 font-extrabold text-slate-900">₹{st.dl}</td>
-                          <td className="py-2.5 font-extrabold text-emerald-700">₹{st.cng}</td>
-                          <td className="py-2.5 text-right">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                onOpenModal({
-                                  title: st.name,
-                                  category: 'Fuel Station Route',
-                                  price: `Petrol ₹${st.p}/L • Diesel ₹${st.dl}/L • CNG ₹${st.cng}/kg`,
-                                  location: `${st.d} from ${selectedArea}`,
-                                  description:
-                                    '24/7 fuel & CNG station with free nitrogen/air check and UPI payments.',
-                                  primaryActionLabel: 'Start Navigation',
-                                })
-                              }
-                              className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 font-bold cursor-pointer"
-                            >
-                              🧭 Go
-                            </button>
+                      {nearbyStations.length > 0 ? (
+                        nearbyStations.map((st) => (
+                          <tr key={st.name} className="border-b border-slate-50 last:border-none">
+                            <td className="py-2.5 font-extrabold text-slate-900">{st.name}</td>
+                            <td className="py-2.5 font-semibold text-slate-500">{st.d}</td>
+                            <td className="py-2.5 font-extrabold text-slate-900">{st.p}</td>
+                            <td className="py-2.5 font-extrabold text-slate-900">{st.dl}</td>
+                            <td className="py-2.5 font-extrabold text-emerald-700">{st.cng}</td>
+                            <td className="py-2.5 text-right">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onOpenModal({
+                                    title: st.name,
+                                    category: 'Fuel Station Route',
+                                    price: `Petrol ${st.p} • Diesel ${st.dl} • CNG ${st.cng}`,
+                                    location: `${st.d} from ${selectedArea}`,
+                                    description:
+                                      '24/7 fuel & CNG station with free nitrogen/air check and UPI payments.',
+                                    primaryActionLabel: 'Start Navigation',
+                                  })
+                                }
+                                className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 font-bold hover:bg-blue-100 transition cursor-pointer"
+                              >
+                                Route ›
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={6} className="py-8 text-center text-slate-500">
+                            <p className="font-extrabold text-slate-700">No Fuel Stations Detected in Active Radius</p>
+                            <p className="text-[11px] text-slate-400 mt-0.5">
+                              Ready for OpenStreetMap POI or Google Places API integration for {shortArea}.
+                            </p>
                           </td>
                         </tr>
-                      ))}
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -897,19 +872,14 @@ export const MarketRatesDashboard: React.FC<
                   </h3>
                   <span className="text-[11px] font-semibold text-slate-400">{fuelRates.city} Index</span>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
-                  {[
-                    { t: '1 BHK Apartment', r: '₹12,500 / mo', ch: 'High Demand' },
-                    { t: '2 BHK Apartment', r: '₹19,000 / mo', ch: 'Most Searched' },
-                    { t: '3 BHK Apartment', r: '₹28,500 / mo', ch: 'Family Unit' },
-                    { t: ' Builder Floor / Villa', r: '₹36,000 / mo', ch: 'Verified' },
-                  ].map((pr) => (
-                    <div key={pr.t} className="p-3 rounded-xl bg-slate-50 border border-slate-100">
-                      <p className="font-bold text-slate-600 text-[11px]">{pr.t}</p>
-                      <p className="text-sm font-extrabold text-slate-900 mt-1">{pr.r}</p>
-                      <p className="text-[10px] font-bold text-indigo-600 mt-0.5">{pr.ch}</p>
-                    </div>
-                  ))}
+                <div className="py-8 text-center text-slate-500 bg-slate-50 rounded-xl border border-slate-100">
+                  <p className="font-extrabold text-slate-700 text-xs">Awaiting Real Estate & Rental Index Feed</p>
+                  <p className="text-[11px] text-slate-400 mt-1 max-w-sm mx-auto">
+                    Integration slot ready for 99acres, MagicBricks or municipal circle rate feeds for {fuelRates.city}.
+                  </p>
+                  <span className="inline-block mt-2.5 px-3 py-1 rounded-full bg-white text-[10px] font-bold text-slate-600 border border-slate-200 shadow-2xs">
+                    VITE_PROPERTY_API_KEY Slot Ready
+                  </span>
                 </div>
               </div>
             )}
@@ -937,12 +907,25 @@ export const SavedDashboard: React.FC<
   const [selectedCat, setSelectedCat] = useState('All Saved');
   const [authUser, setAuthUser] = useState<AuthUserProfile | null>(() => getStoredAuthUser());
   const [emailInput, setEmailInput] = useState(authUser?.email || '');
-  const [nameInput, setNameInput] = useState('Divyansh Gupta');
+  const [nameInput, setNameInput] = useState(authUser?.fullName || '');
   const [otpSent, setOtpSent] = useState(false);
   const [otpCode, setOtpCode] = useState('');
   const [devOtpHint, setDevOtpHint] = useState<string | null>(null);
   const [authStatus, setAuthStatus] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
+
+  useEffect(() => {
+    const handleAuthChange = (e: any) => {
+      const u = e.detail || null;
+      setAuthUser(u);
+      if (u) {
+        setEmailInput(u.email);
+        setNameInput(u.fullName);
+      }
+    };
+    window.addEventListener(AUTH_CHANGE_EVENT, handleAuthChange);
+    return () => window.removeEventListener(AUTH_CHANGE_EVENT, handleAuthChange);
+  }, []);
 
   const fuelSaved = savedEntries.filter((e) => e.category === 'Fuel Stations');
   const propSaved = savedEntries.filter((e) => e.category === 'Properties');

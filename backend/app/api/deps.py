@@ -64,3 +64,7 @@ def get_optional_user(
     except Exception:
         pass
     return None
+
+
+get_current_user_optional = get_optional_user
+

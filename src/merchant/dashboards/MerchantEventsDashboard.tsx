@@ -30,6 +30,13 @@ export function MerchantEventsDashboard({
   const [activeTab, setActiveTab] = useState<'all' | 'upcoming' | 'ongoing' | 'past' | 'drafts'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
+  const totalEvents = events.length;
+  const publishedEvents = events.filter((e) => e.status === 'Published').length;
+  const upcomingEvents = events.filter((e) => e.status === 'Upcoming' || e.status === 'Published').length;
+  const ongoingEvents = events.filter((e) => e.status === 'Ongoing').length;
+  const completedEvents = events.filter((e) => e.status === 'Past').length;
+  const draftEvents = events.filter((e) => e.status === 'Draft').length;
+
   const filteredEvents = events.filter((e) => {
     const matchesSearch =
       e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -38,6 +45,8 @@ export function MerchantEventsDashboard({
     const matchesTab =
       activeTab === 'all' ||
       (activeTab === 'upcoming' && (e.status === 'Upcoming' || e.status === 'Published')) ||
+      (activeTab === 'past' && e.status === 'Past') ||
+      (activeTab === 'drafts' && e.status === 'Draft') ||
       e.status.toLowerCase() === activeTab;
     return matchesSearch && matchesTab;
   });
@@ -87,8 +96,8 @@ export function MerchantEventsDashboard({
             <span className="text-[11px] font-medium text-slate-500">Total Events</span>
             <Calendar className="w-3.5 h-3.5 text-purple-600" />
           </div>
-          <p className="text-xl font-extrabold text-slate-900">24</p>
-          <span className="text-[10px] text-emerald-600 font-bold">▲ 20% from last month</span>
+          <p className="text-xl font-extrabold text-slate-900">{totalEvents}</p>
+          <span className="text-[10px] text-slate-500 font-medium">All store events</span>
         </div>
 
         <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
@@ -96,8 +105,8 @@ export function MerchantEventsDashboard({
             <span className="text-[11px] font-medium text-slate-500">Published</span>
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
           </div>
-          <p className="text-xl font-extrabold text-emerald-700">14</p>
-          <span className="text-[10px] text-emerald-600 font-bold">▲ 27% from last month</span>
+          <p className="text-xl font-extrabold text-emerald-700">{publishedEvents}</p>
+          <span className="text-[10px] text-emerald-600 font-bold">Live on app</span>
         </div>
 
         <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
@@ -105,8 +114,8 @@ export function MerchantEventsDashboard({
             <span className="text-[11px] font-medium text-slate-500">Upcoming</span>
             <Clock className="w-3.5 h-3.5 text-amber-500" />
           </div>
-          <p className="text-xl font-extrabold text-amber-600">5</p>
-          <span className="text-[10px] text-emerald-600 font-bold">▲ 15% from last month</span>
+          <p className="text-xl font-extrabold text-amber-600">{upcomingEvents}</p>
+          <span className="text-[10px] text-amber-600 font-medium">Coming soon</span>
         </div>
 
         <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
@@ -114,7 +123,7 @@ export function MerchantEventsDashboard({
             <span className="text-[11px] font-medium text-slate-500">Ongoing</span>
             <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
           </div>
-          <p className="text-xl font-extrabold text-indigo-600">3</p>
+          <p className="text-xl font-extrabold text-indigo-600">{ongoingEvents}</p>
           <span className="text-[10px] text-slate-400">Active today</span>
         </div>
 
@@ -123,7 +132,7 @@ export function MerchantEventsDashboard({
             <span className="text-[11px] font-medium text-slate-500">Completed</span>
             <Users className="w-3.5 h-3.5 text-slate-400" />
           </div>
-          <p className="text-xl font-extrabold text-slate-500">2</p>
+          <p className="text-xl font-extrabold text-slate-500">{completedEvents}</p>
           <span className="text-[10px] text-slate-400">Past events</span>
         </div>
       </div>
@@ -131,87 +140,89 @@ export function MerchantEventsDashboard({
       {/* =========================================================================
           UPCOMING EVENTS HIGHLIGHT CAROUSEL / ROW
          ========================================================================= */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
-            <Calendar className="w-4 h-4 text-purple-600" />
-            Upcoming Events
-          </h3>
-          <button
-            type="button"
-            className="text-xs font-bold text-purple-600 hover:text-purple-700"
-          >
-            View All &gt;
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {events.map((evt) => (
-            <div
-              key={evt.id}
-              className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-xs hover:shadow-md transition flex flex-col justify-between"
+      {events.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
+              <Calendar className="w-4 h-4 text-purple-600" />
+              Upcoming Events
+            </h3>
+            <button
+              type="button"
+              className="text-xs font-bold text-purple-600 hover:text-purple-700"
             >
-              <div>
-                <div className="relative h-32 w-full bg-slate-900 overflow-hidden">
-                  <img
-                    src={evt.image}
-                    alt={evt.title}
-                    className="w-full h-full object-cover opacity-85"
-                  />
-                  <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-md bg-purple-600 text-white text-[10px] font-extrabold shadow-xs">
-                    {evt.category}
-                  </span>
-                  {/* Date badge */}
-                  <div className="absolute bottom-2 left-2.5 px-2 py-1 rounded-xl bg-white/95 text-center shadow-xs">
-                    <span className="block text-xs font-extrabold text-purple-700 leading-none">
-                      {evt.dayNumber}
+              View All &gt;
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {events.map((evt) => (
+              <div
+                key={evt.id}
+                className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-xs hover:shadow-md transition flex flex-col justify-between"
+              >
+                <div>
+                  <div className="relative h-32 w-full bg-slate-900 overflow-hidden">
+                    <img
+                      src={evt.image}
+                      alt={evt.title}
+                      className="w-full h-full object-cover opacity-85"
+                    />
+                    <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-md bg-purple-600 text-white text-[10px] font-extrabold shadow-xs">
+                      {evt.category}
                     </span>
-                    <span className="block text-[8px] font-extrabold text-slate-500 uppercase leading-none">
-                      {evt.monthText}
-                    </span>
+                    {/* Date badge */}
+                    <div className="absolute bottom-2 left-2.5 px-2 py-1 rounded-xl bg-white/95 text-center shadow-xs">
+                      <span className="block text-xs font-extrabold text-purple-700 leading-none">
+                        {evt.dayNumber}
+                      </span>
+                      <span className="block text-[8px] font-extrabold text-slate-500 uppercase leading-none">
+                        {evt.monthText}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5">
+                    <h4 className="text-xs font-bold text-slate-900 line-clamp-1 mb-1">
+                      {evt.title}
+                    </h4>
+                    <p className="text-[11px] text-slate-500 flex items-center gap-1 mb-2">
+                      <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                      <span className="truncate">{evt.venue}</span>
+                    </p>
+                    <p className="text-[11px] text-slate-600 line-clamp-2 leading-relaxed">
+                      {evt.description}
+                    </p>
                   </div>
                 </div>
 
-                <div className="p-3.5">
-                  <h4 className="text-xs font-bold text-slate-900 line-clamp-1 mb-1">
-                    {evt.title}
-                  </h4>
-                  <p className="text-[11px] text-slate-500 flex items-center gap-1 mb-2">
-                    <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
-                    <span className="truncate">{evt.venue}</span>
-                  </p>
-                  <p className="text-[11px] text-slate-600 line-clamp-2 leading-relaxed">
-                    {evt.description}
-                  </p>
+                <div className="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                  <div className="text-[10px] text-slate-500 font-semibold">
+                    <span>{evt.interestedCount} Interested</span> •{' '}
+                    <span className="text-emerald-600">{evt.goingCount} Going</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => alert(`View details for: ${evt.title}`)}
+                      className="px-2 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 font-bold text-[10px] hover:bg-slate-50"
+                    >
+                      View
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => alert(`Edit event: ${evt.title}`)}
+                      className="px-2 py-1 rounded-lg bg-purple-600 text-white font-bold text-[10px] hover:bg-purple-700 shadow-2xs"
+                    >
+                      Edit
+                    </button>
+                  </div>
                 </div>
               </div>
-
-              <div className="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[11px]">
-                <div className="text-[10px] text-slate-500 font-semibold">
-                  <span>{evt.interestedCount} Interested</span> •{' '}
-                  <span className="text-emerald-600">{evt.goingCount} Going</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => alert(`View details for: ${evt.title}`)}
-                    className="px-2 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 font-bold text-[10px] hover:bg-slate-50"
-                  >
-                    View
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => alert(`Edit event: ${evt.title}`)}
-                    className="px-2 py-1 rounded-lg bg-purple-600 text-white font-bold text-[10px] hover:bg-purple-700 shadow-2xs"
-                  >
-                    Edit
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* =========================================================================
           TWO-COLUMN MAIN SECTION (Left: All Events Table | Right: Calendar & Categories)
@@ -222,11 +233,11 @@ export function MerchantEventsDashboard({
           <div className="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
             <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
               {[
-                { id: 'all', label: 'All Events (24)' },
-                { id: 'upcoming', label: 'Upcoming (5)' },
-                { id: 'ongoing', label: 'Ongoing (3)' },
-                { id: 'past', label: 'Past (16)' },
-                { id: 'drafts', label: 'Drafts (2)' },
+                { id: 'all', label: `All Events (${totalEvents})` },
+                { id: 'upcoming', label: `Upcoming (${upcomingEvents})` },
+                { id: 'ongoing', label: `Ongoing (${ongoingEvents})` },
+                { id: 'past', label: `Past (${completedEvents})` },
+                { id: 'drafts', label: `Drafts (${draftEvents})` },
               ].map((tab) => {
                 const active = activeTab === tab.id;
                 return (
@@ -268,7 +279,26 @@ export function MerchantEventsDashboard({
           </div>
 
           <div className="bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-xs">
-            <div className="divide-y divide-slate-100">
+            {filteredEvents.length === 0 ? (
+              <div className="p-12 text-center">
+                <Calendar className="w-12 h-12 text-purple-300 mx-auto mb-3" />
+                <h3 className="text-sm font-bold text-slate-800">No Events Found</h3>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-4">
+                  {events.length === 0
+                    ? 'You have not scheduled any events yet. Host a live music evening, workshop, or community meetup!'
+                    : 'No events match your selected tab or search query.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={onOpenCreateEventModal}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition shadow-sm cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Create First Event</span>
+                </button>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
               {filteredEvents.map((evt) => (
                 <div
                   key={evt.id}
@@ -313,6 +343,7 @@ export function MerchantEventsDashboard({
                 </div>
               ))}
             </div>
+            )}
           </div>
         </div>
 
@@ -424,37 +455,49 @@ export function MerchantEventsDashboard({
                 <span className="flex items-center gap-2 text-slate-700">
                   🎵 Music
                 </span>
-                <span className="font-bold text-slate-900">6</span>
+                <span className="font-bold text-slate-900">
+                  {events.filter((e) => e.category.toLowerCase().includes('music')).length}
+                </span>
               </div>
               <div className="flex items-center justify-between py-1">
                 <span className="flex items-center gap-2 text-slate-700">
                   🍴 Food & Drinks
                 </span>
-                <span className="font-bold text-slate-900">5</span>
+                <span className="font-bold text-slate-900">
+                  {events.filter((e) => e.category.toLowerCase().includes('food') || e.category.toLowerCase().includes('drink')).length}
+                </span>
               </div>
               <div className="flex items-center justify-between py-1">
                 <span className="flex items-center gap-2 text-slate-700">
                   🎓 Workshops & Learning
                 </span>
-                <span className="font-bold text-slate-900">4</span>
+                <span className="font-bold text-slate-900">
+                  {events.filter((e) => e.category.toLowerCase().includes('workshop') || e.category.toLowerCase().includes('learn')).length}
+                </span>
               </div>
               <div className="flex items-center justify-between py-1">
                 <span className="flex items-center gap-2 text-slate-700">
                   ⚽ Sports & Fitness
                 </span>
-                <span className="font-bold text-slate-900">3</span>
+                <span className="font-bold text-slate-900">
+                  {events.filter((e) => e.category.toLowerCase().includes('sport') || e.category.toLowerCase().includes('fitness')).length}
+                </span>
               </div>
               <div className="flex items-center justify-between py-1">
                 <span className="flex items-center gap-2 text-slate-700">
                   💼 Business & Networking
                 </span>
-                <span className="font-bold text-slate-900">2</span>
+                <span className="font-bold text-slate-900">
+                  {events.filter((e) => e.category.toLowerCase().includes('business') || e.category.toLowerCase().includes('network')).length}
+                </span>
               </div>
               <div className="flex items-center justify-between py-1">
                 <span className="flex items-center gap-2 text-slate-700">
                   ✨ Others
                 </span>
-                <span className="font-bold text-slate-900">0</span>
+                <span className="font-bold text-slate-900">
+                  {events.filter((e) => !['music', 'food', 'drink', 'workshop', 'learn', 'sport', 'fitness', 'business', 'network'].some(k => e.category.toLowerCase().includes(k))).length}
+                </span>
               </div>
             </div>
           </div>
