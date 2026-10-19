@@ -61,9 +61,10 @@ export interface LiveMerchantOrderEventDetail {
   timestamp: string;
 }
 
-function getBackendUrl(): string {
-  const metaEnv = (import.meta as unknown as { env?: Record<string, string> }).env;
-  return metaEnv?.VITE_BACKEND_URL || 'http://localhost:8000';
+import { getApiBaseUrl } from '../config/apiClient';
+
+function getBackendUrl(): string | null {
+  return getApiBaseUrl();
 }
 
 let sharedAudioCtx: AudioContext | null = null;
@@ -251,11 +252,21 @@ class RealtimePushService {
     }
   }
 
-  private getWebSocketUrl(): string {
+  private getWebSocketUrl(): string | null {
     const rawBackend = getBackendUrl();
-    let baseWs = rawBackend.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:');
-    // Ensure trailing slash removed
-    baseWs = baseWs.replace(/\/+$/, '');
+    if (rawBackend === null) return null;
+
+    let baseWs = '';
+    if (rawBackend === '') {
+      if (typeof window !== 'undefined') {
+        const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        baseWs = `${proto}//${window.location.host}`;
+      } else {
+        baseWs = 'ws://127.0.0.1:8000';
+      }
+    } else {
+      baseWs = rawBackend.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:').replace(/\/+$/, '');
+    }
 
     const params = new URLSearchParams();
     params.set('client_id', this.clientId);
@@ -266,8 +277,13 @@ class RealtimePushService {
   }
 
   private initWebSocket() {
-    this.setStatus('connecting');
     const wsUrl = this.getWebSocketUrl();
+    if (!wsUrl) {
+      this.setStatus('disconnected');
+      return;
+    }
+
+    this.setStatus('connecting');
 
     try {
       this.socket = new WebSocket(wsUrl);
@@ -540,6 +556,10 @@ class RealtimePushService {
     }
 
     const rawBackend = getBackendUrl();
+    if (rawBackend === null) {
+      this.setStatus('disconnected');
+      return;
+    }
     const channels = ['civic', `merchant:${this.options.businessId || 'biz-daily-brew'}`].join(',');
     const sseUrl = `${rawBackend.replace(/\/+$/, '')}/api/v1/ws/sse?channels=${encodeURIComponent(channels)}`;
 
@@ -595,25 +615,29 @@ class RealtimePushService {
 
   public async triggerCivicAlert(alertData?: Partial<LiveAlertItem>): Promise<boolean> {
     const rawBackend = getBackendUrl();
-    try {
-      const res = await fetch(`${rawBackend.replace(/\/+$/, '')}/api/v1/ws/trigger-civic-alert`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: alertData?.title || '🚨 Flash Flood & Waterlogging Warning — NDMA SACHET',
-          description:
-            alertData?.description ||
-            `Waterlogging and traffic diversions active near low-lying roads in ${this.options.area || 'your area'}.`,
-          severity: alertData?.severity || 'Critical',
-          category: 'Civic Emergency',
-          sender: 'NDMA SACHET (CAP v1.2)',
-          target_area: this.options.area,
-          instruction: 'Avoid arterial underpasses and follow civic emergency lines (1077).',
-        }),
-      });
-      return res.ok;
-    } catch {
-      // If backend offline, simulate client-side frame
+    if (rawBackend) {
+      try {
+        const res = await fetch(`${rawBackend.replace(/\/+$/, '')}/api/v1/ws/trigger-civic-alert`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: alertData?.title || '🚨 Flash Flood & Waterlogging Warning — NDMA SACHET',
+            description:
+              alertData?.description ||
+              `Waterlogging and traffic diversions active near low-lying roads in ${this.options.area || 'your area'}.`,
+            severity: alertData?.severity || 'Critical',
+            category: 'Civic Emergency',
+            sender: 'NDMA SACHET (CAP v1.2)',
+            target_area: this.options.area,
+            instruction: 'Avoid arterial underpasses and follow civic emergency lines (1077).',
+          }),
+        });
+        if (res.ok) return true;
+      } catch {
+        // Fall back to client dispatch
+      }
+    }
+    // If backend offline, simulate client-side frame
       this.dispatchCivicAlert(
         {
           id: `sim-${Date.now()}`,
@@ -630,7 +654,6 @@ class RealtimePushService {
         true
       );
       return true;
-    }
   }
 
   public async triggerMerchantLead(custom?: {
@@ -642,26 +665,29 @@ class RealtimePushService {
     const rawBackend = getBackendUrl();
     const bizId = this.options.businessId || 'biz-daily-brew';
 
-    try {
-      const res = await fetch(`${rawBackend.replace(/\/+$/, '')}/api/v1/ws/trigger-merchant-lead`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          business_id: bizId,
-          customer_name: custom?.customerName || 'Aarav Sharma',
-          customer_phone: custom?.phone || '+91 98112 44321',
-          customer_email: 'aarav.sharma@example.com',
-          enquiry_type: 'quote',
-          topic: custom?.topic || 'Catering & Bulk Coffee Order',
-          message:
-            custom?.message ||
-            'Hi! Inquiring for 35 corporate snack & coffee kits for this Friday afternoon.',
-          locality: this.options.area || 'Local Area',
-        }),
-      });
-      return res.ok;
-    } catch {
-      // Fallback local dispatch
+    if (rawBackend) {
+      try {
+        const res = await fetch(`${rawBackend.replace(/\/+$/, '')}/api/v1/ws/trigger-merchant-lead`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            business_id: bizId,
+            customer_name: custom?.customerName || 'Aarav Sharma',
+            customer_phone: custom?.phone || '+91 98112 44321',
+            customer_email: 'aarav.sharma@example.com',
+            enquiry_type: 'quote',
+            topic: custom?.topic || 'Catering & Bulk Coffee Order',
+            message:
+              custom?.message ||
+              'Hi! Inquiring for 35 corporate snack & coffee kits for this Friday afternoon.',
+            locality: this.options.area || 'Local Area',
+          }),
+        });
+        if (res.ok) return true;
+      } catch {
+        // Fallback local dispatch
+      }
+    }
       this.dispatchMerchantLead(
         {
           id: `lead-sim-${Date.now()}`,
@@ -676,57 +702,63 @@ class RealtimePushService {
         bizId
       );
       return true;
-    }
   }
 
   public async triggerMerchantInquiry(customerName = 'Neha Kapoor', message = 'Do you offer vegan almond milk options for delivery?'): Promise<boolean> {
     const rawBackend = getBackendUrl();
     const bizId = this.options.businessId || 'biz-daily-brew';
 
-    try {
-      const res = await fetch(`${rawBackend.replace(/\/+$/, '')}/api/v1/ws/trigger-merchant-inquiry`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          business_id: bizId,
-          customer_name: customerName,
-          message,
-          time_ago: 'Just now',
-        }),
-      });
-      return res.ok;
-    } catch {
-      this.dispatchMerchantInquiry(
-        {
-          id: `inq-${Date.now()}`,
-          customerName,
-          message,
-          timeAgo: 'Just now',
-        },
-        bizId
-      );
-      return true;
+    if (rawBackend) {
+      try {
+        const res = await fetch(`${rawBackend.replace(/\/+$/, '')}/api/v1/ws/trigger-merchant-inquiry`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            business_id: bizId,
+            customer_name: customerName,
+            message,
+            time_ago: 'Just now',
+          }),
+        });
+        if (res.ok) return true;
+      } catch {
+        // Fallback local dispatch
+      }
     }
+    this.dispatchMerchantInquiry(
+      {
+        id: `inq-${Date.now()}`,
+        customerName,
+        message,
+        timeAgo: 'Just now',
+      },
+      bizId
+    );
+    return true;
   }
 
   public async triggerMerchantReview(customerName = 'Rahul Mehra', rating = 5, comment = 'Super fast delivery and the packaging was top notch! 10/10'): Promise<boolean> {
     const rawBackend = getBackendUrl();
     const bizId = this.options.businessId || 'biz-daily-brew';
 
-    try {
-      const res = await fetch(`${rawBackend.replace(/\/+$/, '')}/api/v1/ws/trigger-merchant-review`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          business_id: bizId,
-          customer_name: customerName,
-          rating,
-          comment,
-          time_ago: 'Just now',
-        }),
-      });
-      return res.ok;
-    } catch {
+    if (rawBackend) {
+      try {
+        const res = await fetch(`${rawBackend.replace(/\/+$/, '')}/api/v1/ws/trigger-merchant-review`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            business_id: bizId,
+            customer_name: customerName,
+            rating,
+            comment,
+            time_ago: 'Just now',
+          }),
+        });
+        if (res.ok) return true;
+      } catch {
+        // Fallback local dispatch
+      }
+    }
       this.dispatchMerchantReview(
         {
           id: `rev-${Date.now()}`,
@@ -738,7 +770,6 @@ class RealtimePushService {
         bizId
       );
       return true;
-    }
   }
 
   public async triggerMerchantOrder(custom?: {
@@ -753,64 +784,72 @@ class RealtimePushService {
     const rawBackend = getBackendUrl();
     const bizId = this.options.businessId || 'biz-registered-store';
 
-    try {
-      const res = await fetch(`${rawBackend.replace(/\/+$/, '')}/api/v1/ws/trigger-merchant-order`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          business_id: bizId,
-          business_name: custom?.businessName || (this.options.businessId ? 'Your Storefront' : 'Verified Storefront'),
-          customer_name: custom?.customerName || 'Local Citizen',
-          customer_phone: custom?.customerPhone || '+91 98765 43210',
-          delivery_address: custom?.deliveryAddress || (this.options.area ? `Flat 402, Tower B, ${this.options.area}` : 'Local Residential Complex'),
-          final_payable: custom?.finalPayable || 380.0,
-          items: custom?.items,
-        }),
-      });
-      return res.ok;
-    } catch {
-      const orderNum = custom?.orderNumber || `MA24-ORD-${Math.floor(1000 + Math.random() * 9000)}`;
-      this.dispatchMerchantOrder(
-        {
-          id: `ord-local-${Date.now()}`,
-          order_number: orderNum,
-          business_id: bizId,
-          business_name: custom?.businessName || 'Verified Storefront',
-          customer_name: custom?.customerName || 'Local Citizen',
-          customer_phone: custom?.customerPhone || '+91 98765 43210',
-          delivery_address: custom?.deliveryAddress || (this.options.area ? `Flat 402, Tower B, ${this.options.area}` : 'Local Residential Complex'),
-          final_payable: custom?.finalPayable || 380.0,
-          payment_method: 'upi_qr',
-          payment_status: 'paid',
-          status: 'placed',
-          estimated_delivery_mins: 20,
-          created_at: new Date().toISOString(),
-          items: custom?.items || [
-            { product_name: 'Caramel Macchiato (Large)', unit_price: 190.0, quantity: 1, total_price: 190.0 },
-            { product_name: 'Fresh Blueberry Muffin', unit_price: 190.0, quantity: 1, total_price: 190.0 },
-          ],
-        },
-        bizId
-      );
-      return true;
+    if (rawBackend) {
+      try {
+        const res = await fetch(`${rawBackend.replace(/\/+$/, '')}/api/v1/ws/trigger-merchant-order`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            business_id: bizId,
+            business_name: custom?.businessName || (this.options.businessId ? 'Your Storefront' : 'Verified Storefront'),
+            customer_name: custom?.customerName || 'Local Citizen',
+            customer_phone: custom?.customerPhone || '+91 98765 43210',
+            delivery_address: custom?.deliveryAddress || (this.options.area ? `Flat 402, Tower B, ${this.options.area}` : 'Local Residential Complex'),
+            final_payable: custom?.finalPayable || 380.0,
+            items: custom?.items,
+          }),
+        });
+        if (res.ok) return true;
+      } catch {
+        // Fallback local dispatch
+      }
     }
+
+    const orderNum = custom?.orderNumber || `MA24-ORD-${Math.floor(1000 + Math.random() * 9000)}`;
+    this.dispatchMerchantOrder(
+      {
+        id: `ord-local-${Date.now()}`,
+        order_number: orderNum,
+        business_id: bizId,
+        business_name: custom?.businessName || 'Verified Storefront',
+        customer_name: custom?.customerName || 'Local Citizen',
+        customer_phone: custom?.customerPhone || '+91 98765 43210',
+        delivery_address: custom?.deliveryAddress || (this.options.area ? `Flat 402, Tower B, ${this.options.area}` : 'Local Residential Complex'),
+        final_payable: custom?.finalPayable || 380.0,
+        payment_method: 'upi_qr',
+        payment_status: 'paid',
+        status: 'placed',
+        estimated_delivery_mins: 20,
+        created_at: new Date().toISOString(),
+        items: custom?.items || [
+          { product_name: 'Caramel Macchiato (Large)', unit_price: 190.0, quantity: 1, total_price: 190.0 },
+          { product_name: 'Fresh Blueberry Muffin', unit_price: 190.0, quantity: 1, total_price: 190.0 },
+        ],
+      },
+      bizId
+    );
+    return true;
   }
 
   public async triggerOrderStatusUpdate(orderNumber: string, status: string): Promise<boolean> {
     const rawBackend = getBackendUrl();
-    try {
-      const res = await fetch(`${rawBackend.replace(/\/+$/, '')}/api/v1/ws/trigger-order-status`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          order_number: orderNumber,
-          status,
-          payment_status: 'paid',
-          notes: `Order transitioned to ${status}`,
-        }),
-      });
-      return res.ok;
-    } catch {
+    if (rawBackend) {
+      try {
+        const res = await fetch(`${rawBackend.replace(/\/+$/, '')}/api/v1/ws/trigger-order-status`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            order_number: orderNumber,
+            status,
+            payment_status: 'paid',
+            notes: `Order transitioned to ${status}`,
+          }),
+        });
+        if (res.ok) return true;
+      } catch {
+        // Fallback local dispatch
+      }
+    }
       this.dispatchOrderStatusUpdate({
         order_number: orderNumber,
         status,
@@ -821,7 +860,6 @@ class RealtimePushService {
       return true;
     }
   }
-}
 
 // Global singleton instance
 export const realtimeService = new RealtimePushService();

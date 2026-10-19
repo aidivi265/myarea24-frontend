@@ -85,14 +85,22 @@ export function clearAuthSession(): void {
 /**
  * Requests an OTP from the backend via /api/v1/auth/request-otp (or /send-otp).
  */
+import { getApiBaseUrl } from '../config/apiClient';
+
+function getAuthEndpoint(path: string): string | null {
+  const base = getApiBaseUrl();
+  if (base === null) return null;
+  return `${base}${path}`;
+}
+
 export async function requestOtp(
   email: string,
   purpose: 'login' | 'signup' | 'merchant_onboarding' = 'login'
 ): Promise<{ success: boolean; message: string; devOtp?: string }> {
   const cleanEmail = email.trim().toLowerCase();
 
-  const endpoints = ['/api/v1/auth/request-otp', '/api/v1/auth/send-otp'];
-  for (const ep of endpoints) {
+  const ep = getAuthEndpoint('/api/v1/auth/request-otp');
+  if (ep) {
     try {
       const res = await fetch(ep, {
         method: 'POST',
@@ -112,7 +120,7 @@ export async function requestOtp(
         };
       }
     } catch {
-      // Continue to next endpoint attempt
+      // Continue to local fallback
     }
   }
 
@@ -138,59 +146,64 @@ export async function verifyOtp(params: {
   const cleanEmail = params.email.trim().toLowerCase();
   const code = params.otpCode.trim();
 
-  try {
-    const res = await fetch('/api/v1/auth/verify-otp', {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        email: cleanEmail,
-        otp_code: code,
-        full_name: params.fullName,
-        phone: params.phone,
-        role: params.role || 'resident',
-      }),
-    });
+  const ep = getAuthEndpoint('/api/v1/auth/verify-otp');
+  if (ep) {
+    try {
+      const res = await fetch(ep, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: cleanEmail,
+          otp_code: code,
+          full_name: params.fullName,
+          phone: params.phone,
+          role: params.role || 'resident',
+        }),
+      });
 
-    if (res.ok) {
-      const data = await res.json();
-      const profile: AuthUserProfile = {
-        id: data.user.id,
-        email: data.user.email,
-        fullName: data.user.full_name || cleanEmail.split('@')[0],
-        phone: data.user.phone || params.phone || '+91 98765 43210',
-        role: (data.user.role as 'resident' | 'merchant' | 'admin') || 'resident',
-        isVerified: true,
-        token: data.access_token,
-        refreshToken: data.refresh_token,
-      };
+      if (res.ok) {
+        const data = await res.json();
+        const profile: AuthUserProfile = {
+          id: data.user.id,
+          email: data.user.email,
+          fullName: data.user.full_name || cleanEmail.split('@')[0],
+          phone: data.user.phone || params.phone || '+91 98765 43210',
+          role: (data.user.role as 'resident' | 'merchant' | 'admin') || 'resident',
+          isVerified: true,
+          token: data.access_token,
+          refreshToken: data.refresh_token,
+        };
 
-      setAuthSession(data.access_token, data.refresh_token, profile);
-      return { success: true, user: profile };
-    } else {
-      const errData = await res.json().catch(() => null);
-      return {
-        success: false,
-        error: errData?.detail || errData?.message || 'Invalid or expired verification code.',
-      };
+        setAuthSession(data.access_token, data.refresh_token, profile);
+        return { success: true, user: profile };
+      } else {
+        const errData = await res.json().catch(() => null);
+        return {
+          success: false,
+          error: errData?.detail || errData?.message || 'Invalid or expired verification code.',
+        };
+      }
+    } catch {
+      // Offline fallback
     }
-  } catch {
-    // Offline simulation fallback
-    const fallbackProfile: AuthUserProfile = {
-      id: Date.now(),
-      email: cleanEmail,
-      fullName: params.fullName || cleanEmail.split('@')[0].toUpperCase(),
-      phone: params.phone || '+91 98765 43210',
-      role: params.role || 'resident',
-      isVerified: true,
-      token: `demo_jwt_${Date.now()}`,
-      refreshToken: `demo_refresh_${Date.now()}`,
-    };
-    setAuthSession(fallbackProfile.token!, fallbackProfile.refreshToken, fallbackProfile);
-    return { success: true, user: fallbackProfile };
   }
+
+  // Offline simulation fallback
+  const fallbackProfile: AuthUserProfile = {
+    id: Date.now(),
+    email: cleanEmail,
+    fullName: params.fullName || cleanEmail.split('@')[0].toUpperCase(),
+    phone: params.phone || '+91 98765 43210',
+    role: params.role || 'resident',
+    isVerified: true,
+    token: `demo_jwt_${Date.now()}`,
+    refreshToken: `demo_refresh_${Date.now()}`,
+  };
+  setAuthSession(fallbackProfile.token!, fallbackProfile.refreshToken, fallbackProfile);
+  return { success: true, user: fallbackProfile };
 }
 
 /**
@@ -203,8 +216,13 @@ export async function refreshAccessToken(): Promise<string | null> {
     return null;
   }
 
+  const ep = getAuthEndpoint('/api/v1/auth/refresh');
+  if (!ep) {
+    return currentRefresh;
+  }
+
   try {
-    const res = await fetch('/api/v1/auth/refresh', {
+    const res = await fetch(ep, {
       method: 'POST',
       headers: {
         Accept: 'application/json',

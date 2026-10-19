@@ -615,7 +615,9 @@ export const MarketRatesDashboard: React.FC<
               <MapPin className="w-3.5 h-3.5 text-blue-300" /> {fuelRates.city} Benchmark
             </p>
             <p className="text-[11px] text-blue-100/80 mt-1">
-              Petrol ₹{fuelRates.petrol.toFixed(2)}/L • CNG ₹{fuelRates.cng.toFixed(2)}/kg
+              {fuelRates.petrol > 0
+                ? `Petrol ₹${fuelRates.petrol.toFixed(2)}/L • CNG ₹${fuelRates.cng.toFixed(2)}/kg`
+                : 'Awaiting OMC / PPAC API Key'}
             </p>
             <div className="mt-2 pt-2 border-t border-white/15 flex items-center justify-between text-[11px] text-emerald-300 font-semibold">
               <span>● Synced {liveIntel.lastUpdated}</span>

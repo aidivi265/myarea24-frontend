@@ -1131,6 +1131,7 @@ export function App() {
               {/* User Profile Pill */}
               <button
                 type="button"
+                data-testid="user-profile-button"
                 onClick={() => {
                   setProfileMenuOpen((v) => !v);
                   setNotificationsOpen(false);
@@ -1331,6 +1332,7 @@ export function App() {
               <div className="pt-1 border-t border-slate-100">
                 <button
                   type="button"
+                  data-testid="switch-to-merchant-button"
                   onClick={() => {
                     setProfileMenuOpen(false);
                     handleSwitchToMerchant();

@@ -171,6 +171,8 @@ export interface LiveEmergencyFacility {
   lng: number;
 }
 
+import { requestBackendJson } from '../config/apiClient';
+
 /* ============================================================================
    HELPER UTILITIES & BACKEND FETCHERS
    ============================================================================ */
@@ -180,49 +182,7 @@ async function requestBackend<T>(
   options: RequestInit = {},
   timeoutMs = 4500
 ): Promise<T | null> {
-  const token = localStorage.getItem('myarea24_auth_token');
-  const headers: Record<string, string> = {
-    Accept: 'application/json',
-    'Content-Type': 'application/json',
-    ...((options.headers as Record<string, string>) || {}),
-  };
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
-  const urls = [path, `http://127.0.0.1:8000${path}`];
-  for (const url of urls) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      let res = await fetch(url, {
-        ...options,
-        headers,
-        signal: controller.signal,
-      });
-
-      // Handle 401 Unauthorized with token refresh rotation
-      if (res.status === 401) {
-        const refreshed = await refreshAccessToken();
-        if (refreshed) {
-          headers.Authorization = `Bearer ${refreshed}`;
-          res = await fetch(url, {
-            ...options,
-            headers,
-            signal: controller.signal,
-          });
-        }
-      }
-
-      clearTimeout(timer);
-      if (res.ok) {
-        return (await res.json()) as T;
-      }
-    } catch {
-      clearTimeout(timer);
-    }
-  }
-  return null;
+  return requestBackendJson<T>(path, options, timeoutMs);
 }
 
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {

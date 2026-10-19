@@ -435,33 +435,15 @@ export interface LiveAreaIntelligence {
   refresh: () => void;
 }
 
+import { requestBackendJson } from '../config/apiClient';
+
 /* ============================================================================
    BACKEND BASE URL RESOLUTION
-   Tries local FastAPI backend (/api/v1 or http://127.0.0.1:8000/api/v1) first,
-   then seamlessly merges with direct live Open-Meteo / Nominatim / Overpass APIs
+   Tries local FastAPI backend (/api/v1 or configured VITE_API_BASE_URL) first,
+   then seamlessly merges with direct live Open-Meteo / Nominatim APIs
    ============================================================================ */
 async function fetchBackendJson<T>(path: string, timeoutMs = 4500): Promise<T | null> {
-  const candidates = [
-    path, // Vite dev proxy (/api/v1/...)
-    `http://127.0.0.1:8000${path}`,
-  ];
-  for (const url of candidates) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const res = await fetch(url, {
-        signal: controller.signal,
-        headers: { Accept: 'application/json' },
-      });
-      clearTimeout(timer);
-      if (res.ok) {
-        return (await res.json()) as T;
-      }
-    } catch {
-      clearTimeout(timer);
-    }
-  }
-  return null;
+  return requestBackendJson<T>(path, {}, timeoutMs);
 }
 
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -815,83 +797,8 @@ async function fetchOsmRoadsAndPois(lat: number, lng: number) {
     return result;
   }
 
-  // Graceful offline fallback: Generate deterministic local road corridors and emergency/civic POIs
-  const fallbackRoads = [
-    { name: 'Arterial Ring Road', type: 'primary', lat: lat + 0.003, lon: lng + 0.002 },
-    { name: 'Main Commercial Avenue', type: 'secondary', lat: lat - 0.002, lon: lng + 0.004 },
-    { name: 'Civic Center Boulevard', type: 'tertiary', lat: lat + 0.001, lon: lng - 0.003 },
-    { name: 'Station Link Road', type: 'secondary', lat: lat - 0.004, lon: lng - 0.002 },
-  ];
-
-  const fallbackPois: LiveNearbyPoi[] = [
-    {
-      id: `fb-hospital-${lat.toFixed(2)}`,
-      name: 'Civil & Community Health Hospital',
-      category: 'hospital',
-      distanceKm: 0.8,
-      latitude: lat + 0.005,
-      longitude: lng + 0.004,
-      phone: '108',
-      sublabel: 'HOSPITAL • 0.8 km',
-      address: 'Near Central Circle, Main Road',
-    },
-    {
-      id: `fb-pharmacy-${lat.toFixed(2)}`,
-      name: '24/7 Medicos & Wellness Chemist',
-      category: 'pharmacy',
-      distanceKm: 0.3,
-      latitude: lat + 0.002,
-      longitude: lng + 0.002,
-      phone: '+91 98112 44101',
-      sublabel: 'PHARMACY • 0.3 km',
-      address: 'Shop 4, Market Complex',
-    },
-    {
-      id: `fb-police-${lat.toFixed(2)}`,
-      name: 'Local Police Station & Control Post',
-      category: 'police',
-      distanceKm: 1.1,
-      latitude: lat - 0.006,
-      longitude: lng + 0.003,
-      phone: '112',
-      sublabel: 'POLICE • 1.1 km',
-      address: 'Sector Police Chowki',
-    },
-    {
-      id: `fb-fuel-${lat.toFixed(2)}`,
-      name: 'Indian Oil Fuel & EV Charging Station',
-      category: 'fuel',
-      distanceKm: 0.9,
-      latitude: lat + 0.004,
-      longitude: lng - 0.005,
-      phone: '+91 98110 24024',
-      sublabel: 'FUEL • 0.9 km',
-      address: 'Main Arterial Bypass',
-    },
-    {
-      id: `fb-food-${lat.toFixed(2)}`,
-      name: 'Local Street Cafe & Sweets',
-      category: 'food',
-      distanceKm: 0.4,
-      latitude: lat - 0.002,
-      longitude: lng + 0.001,
-      phone: '+91 98110 24024',
-      sublabel: 'FOOD • 0.4 km',
-      address: 'Central Market',
-    },
-    {
-      id: `fb-park-${lat.toFixed(2)}`,
-      name: 'Community Ecological Park',
-      category: 'park',
-      distanceKm: 0.6,
-      latitude: lat + 0.003,
-      longitude: lng - 0.002,
-      sublabel: 'PARK • 0.6 km',
-      address: 'Green Belt Corridor',
-    },
-  ];
-
-  const result = { roads: fallbackRoads, pois: fallbackPois };
+  // Zero-mock guarantee: when no backend POIs are returned for coordinates, return clean empty sets
+  const result = { roads: [], pois: [] };
   ROAD_CACHE.set(key, result);
   return result;
 }

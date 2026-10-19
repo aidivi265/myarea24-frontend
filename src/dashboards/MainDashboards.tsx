@@ -1639,9 +1639,13 @@ export const ProductsDashboard: React.FC<DashboardCommonProps> = ({
                 </div>
                 <div className="text-right">
                   <p className="font-extrabold text-slate-900">
-                    ₹{fuelRates.petrol.toFixed(2)} / ₹{fuelRates.diesel.toFixed(2)}
+                    {fuelRates.petrol > 0
+                      ? `₹${fuelRates.petrol.toFixed(2)} / ₹${fuelRates.diesel.toFixed(2)}`
+                      : 'Awaiting API'}
                   </p>
-                  <p className="text-[10px] font-bold text-emerald-600">CNG ₹{fuelRates.cng.toFixed(2)}/kg</p>
+                  <p className="text-[10px] font-bold text-emerald-600">
+                    {fuelRates.cng > 0 ? `CNG ₹${fuelRates.cng.toFixed(2)}/kg` : 'Pending OMC Key'}
+                  </p>
                 </div>
               </div>
             </div>
