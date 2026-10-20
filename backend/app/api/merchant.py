@@ -7,7 +7,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
 
-from backend.app.api.deps import get_optional_user
+from backend.app.api.deps import get_current_user
+from backend.app.core.config import settings
 from backend.app.database.models import (
     Business,
     Product,
@@ -30,79 +31,143 @@ MERCHANT_SETTINGS_STORE: Dict[str, Dict[str, Any]] = {}
 
 
 # ==============================================================================
-# Helper: Resolve Merchant's Business
+# Helper & Dependency: Strict Merchant Authorization & Business Resolution
 # ==============================================================================
+def get_current_merchant_business(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    business_id: Optional[int] = Query(None),
+    x_merchant_id: Optional[str] = Header(None),
+    x_dev_bypass: Optional[str] = Header(None, alias="X-Dev-Merchant-Bypass"),
+) -> Business:
+    """
+    Enforces strict ownership authorization for merchant endpoints:
+    1. Rejects development bypass headers if in production mode or DEBUG=False.
+    2. Validates user authentication (get_current_user).
+    3. If a target business is requested by ID or slug (business_id or x_merchant_id),
+       strictly verifies that target business is owned by the authenticated user (or user is admin).
+       If owned by another user -> raises HTTP 403 Forbidden.
+       If not found -> raises HTTP 404 Not Found.
+    4. If no specific business is requested, resolves the business owned by this user.
+    5. If the user owns no business:
+       - In production (or DEBUG=False): raises HTTP 404 Not Found.
+       - In development mode (and DEBUG=True): auto-provisions a fresh, isolated business
+         explicitly owned by this user (owner_id = user.id). Never falls back to another user's business!
+    """
+    is_production = (settings.APP_ENV or "").strip().lower() in ("production", "prod") or not settings.DEBUG
+
+    # Reject dev bypass header in production
+    if x_dev_bypass and is_production:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Development bypass headers are strictly forbidden in production mode.",
+        )
+
+    # 1. If explicit business_id query param is supplied:
+    if business_id is not None:
+        biz = db.query(Business).filter(Business.id == business_id).first()
+        if not biz:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Business with ID {business_id} not found.",
+            )
+        if biz.owner_id != user.id and user.role != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Forbidden: You do not have permission to access or manage this business.",
+            )
+        return biz
+
+    # 2. If explicit x_merchant_id header is supplied:
+    if x_merchant_id:
+        clean_id = x_merchant_id.strip()
+        biz = db.query(Business).filter(
+            or_(
+                Business.slug == clean_id,
+                Business.id == int(clean_id) if clean_id.isdigit() else False,
+            )
+        ).first()
+        if not biz:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Business not found.",
+            )
+        if biz.owner_id != user.id and user.role != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Forbidden: You do not have permission to access or manage this business.",
+            )
+        return biz
+
+    # 3. Default to the business owned by this authenticated user
+    user_biz = db.query(Business).filter(Business.owner_id == user.id).first()
+    if user_biz:
+        return user_biz
+
+    # 4. If user owns no business yet:
+    if is_production:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No business registered for this merchant account. Please complete merchant onboarding.",
+        )
+
+    # In development mode only: auto-provision an isolated business owned by user.id
+    dev_biz = Business(
+        name=f"{user.full_name or 'My'} Storefront",
+        slug=f"storefront-u{user.id}-{int(datetime.datetime.utcnow().timestamp())}",
+        owner_id=user.id,
+        category="Retail & Services",
+        description="Verified local merchant storefront serving neighborhood residents.",
+        address="Commercial Market, Local Area",
+        locality="Local Area",
+        city="Delhi NCR",
+        state="Delhi NCR",
+        latitude=28.6139,
+        longitude=77.2090,
+        phone=user.phone or "+91 98110 24024",
+        email=user.email,
+        opening_time="09:00",
+        closing_time="21:30",
+        days_open="Mon-Sun",
+        is_verified=True,
+        status="active",
+        rating=5.0,
+        review_count=0,
+        view_count=0,
+        call_clicks=0,
+        direction_clicks=0,
+    )
+    db.add(dev_biz)
+    db.commit()
+    db.refresh(dev_biz)
+    return dev_biz
+
+
 def resolve_merchant_business(
     db: Session,
     user: Optional[User] = None,
-    x_merchant_phone: Optional[str] = None,
-    x_merchant_id: Optional[str] = None,
     business_id: Optional[int] = None,
-    phone: Optional[str] = None,
+    **kwargs: Any,
 ) -> Business:
     """
-    Deterministically resolves the merchant's business entity in the database
-    from user JWT, headers, query parameters, or creates/returns a default active business.
+    Backwards-compatible helper that strictly enforces ownership and never falls back
+    to returning another merchant's business.
     """
-    biz = None
-
-    if business_id:
-        biz = db.query(Business).filter(Business.id == business_id).first()
-
-    if not biz and user:
-        biz = db.query(Business).filter(Business.owner_id == user.id).first()
-
-    target_phone = phone or x_merchant_phone or (user.phone if user else None)
-    if not biz and target_phone:
-        clean_phone = target_phone.replace(" ", "").replace("+91", "").strip()
-        biz = db.query(Business).filter(
-            or_(
-                Business.phone == target_phone,
-                Business.phone.contains(clean_phone) if clean_phone else False,
-            )
-        ).first()
-
-    if not biz and x_merchant_id:
-        biz = db.query(Business).filter(
-            or_(
-                Business.slug == x_merchant_id,
-                Business.id == int(x_merchant_id) if x_merchant_id.isdigit() else False,
-            )
-        ).first()
-
-    if not biz:
-        # Fall back to first available business or seed a default merchant business
-        biz = db.query(Business).first()
-
-    if not biz:
-        # Create a baseline merchant business if database is completely fresh
-        biz = Business(
-            name="My Storefront",
-            slug=f"storefront-{int(datetime.datetime.utcnow().timestamp())}",
-            category="Retail & Services",
-            description="Verified local merchant storefront serving neighborhood residents.",
-            address="Commercial Market, Local Area",
-            locality="Local Area",
-            city="Delhi NCR",
-            state="Delhi NCR",
-            latitude=28.6139,
-            longitude=77.2090,
-            phone="+91 98110 24024",
-            opening_time="09:00",
-            closing_time="21:30",
-            days_open="Mon-Sun",
-            is_verified=True,
-            status="active",
-            rating=5.0,
-            review_count=0,
-            view_count=0,
-            call_clicks=0,
-            direction_clicks=0,
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required to resolve merchant business.",
         )
-        db.add(biz)
-        db.commit()
-        db.refresh(biz)
-
+    if business_id is not None:
+        biz = db.query(Business).filter(Business.id == business_id).first()
+        if not biz:
+            raise HTTPException(status_code=404, detail="Business not found.")
+        if biz.owner_id != user.id and user.role != "admin":
+            raise HTTPException(status_code=403, detail="Forbidden: You do not own this business.")
+        return biz
+    biz = db.query(Business).filter(Business.owner_id == user.id).first()
+    if not biz:
+        raise HTTPException(status_code=404, detail="No business registered for this user.")
     return biz
 
 
@@ -195,7 +260,6 @@ class MerchantEventCreateRequest(BaseModel):
     description: Optional[str] = None
 
 
-
 class OrderStatusUpdateRequest(BaseModel):
     status: str  # 'confirmed', 'preparing', 'out_for_delivery', 'delivered', 'cancelled'
 
@@ -214,19 +278,11 @@ class ReviewReplyRequest(BaseModel):
 @router.get("/storefront", response_model=Dict[str, Any])
 def get_storefront_profile(
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
-    x_merchant_phone: Optional[str] = Header(None),
-    x_merchant_id: Optional[str] = Header(None),
-    phone: Optional[str] = Query(None),
-    business_id: Optional[int] = Query(None),
+    biz: Business = Depends(get_current_merchant_business),
 ):
     """
-    Fetches the active merchant's storefront details, verification status, and telemetry.
+    Fetches the authenticated merchant's storefront details, verification status, and telemetry.
     """
-    biz = resolve_merchant_business(
-        db, user, x_merchant_phone, x_merchant_id, business_id, phone
-    )
-
     prod_count = db.query(func.count(Product.id)).filter(Product.business_id == biz.id).scalar() or 0
     offer_count = db.query(func.count(Offer.id)).filter(Offer.business_id == biz.id).scalar() or 0
     orders_count = db.query(func.count(Order.id)).filter(Order.business_id == biz.id).scalar() or 0
@@ -279,15 +335,12 @@ def get_storefront_profile(
 def update_storefront_profile(
     body: StorefrontUpdateRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
-    x_merchant_phone: Optional[str] = Header(None),
-    x_merchant_id: Optional[str] = Header(None),
+    biz: Business = Depends(get_current_merchant_business),
 ):
     """
     Updates merchant storefront details (name, address, hours, contact info).
+    Strictly restricted to the business owned by the authenticated merchant.
     """
-    biz = resolve_merchant_business(db, user, x_merchant_phone, x_merchant_id)
-
     if body.name:
         biz.name = body.name.strip()
     if body.category:
@@ -343,15 +396,11 @@ def update_storefront_profile(
 # ==============================================================================
 @router.get("/settings", response_model=Dict[str, Any])
 def get_merchant_settings(
-    db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
-    x_merchant_phone: Optional[str] = Header(None),
-    x_merchant_id: Optional[str] = Header(None),
+    biz: Business = Depends(get_current_merchant_business),
 ):
     """
     Returns merchant notifications, preferences, security, and connected integrations.
     """
-    biz = resolve_merchant_business(db, user, x_merchant_phone, x_merchant_id)
     key = str(biz.id)
     settings_data = MERCHANT_SETTINGS_STORE.get(
         key,
@@ -388,17 +437,12 @@ def get_merchant_settings(
 @router.put("/settings", response_model=Dict[str, Any])
 def update_merchant_settings(
     body: MerchantSettingsUpdateRequest,
-    db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
-    x_merchant_phone: Optional[str] = Header(None),
-    x_merchant_id: Optional[str] = Header(None),
+    biz: Business = Depends(get_current_merchant_business),
 ):
     """
     Persists merchant notification toggles, language, currency, and integration states.
     """
-    biz = resolve_merchant_business(db, user, x_merchant_phone, x_merchant_id)
     key = str(biz.id)
-
     curr = MERCHANT_SETTINGS_STORE.get(
         key,
         {
@@ -452,12 +496,11 @@ def update_merchant_settings(
 @router.post("/security/password", response_model=Dict[str, Any])
 def change_merchant_password(
     body: PasswordChangeRequest,
-    db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
-    x_merchant_phone: Optional[str] = Header(None),
+    user: User = Depends(get_current_user),
+    biz: Business = Depends(get_current_merchant_business),
 ):
     """
-    Changes or updates the merchant portal login PIN / password.
+    Changes or updates the merchant portal login PIN / password for the authenticated user.
     """
     if len(body.new_pin) < 4:
         raise HTTPException(
@@ -465,7 +508,6 @@ def change_merchant_password(
             detail="PIN / Password must be at least 4 characters long.",
         )
 
-    biz = resolve_merchant_business(db, user, x_merchant_phone)
     key = str(biz.id)
     if key in MERCHANT_SETTINGS_STORE:
         MERCHANT_SETTINGS_STORE[key]["security"]["lastPasswordChange"] = "Just now"
@@ -480,14 +522,11 @@ def change_merchant_password(
 @router.post("/security/2fa", response_model=Dict[str, Any])
 def toggle_two_factor_auth(
     body: TwoFactorToggleRequest,
-    db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
-    x_merchant_phone: Optional[str] = Header(None),
+    biz: Business = Depends(get_current_merchant_business),
 ):
     """
     Enables or disables Two-Factor Authentication (2FA) for the merchant portal.
     """
-    biz = resolve_merchant_business(db, user, x_merchant_phone)
     key = str(biz.id)
     if key not in MERCHANT_SETTINGS_STORE:
         MERCHANT_SETTINGS_STORE[key] = {
@@ -512,15 +551,12 @@ def toggle_two_factor_auth(
 @router.get("/export-data", response_model=Dict[str, Any])
 def export_merchant_data(
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
-    x_merchant_phone: Optional[str] = Header(None),
-    x_merchant_id: Optional[str] = Header(None),
+    biz: Business = Depends(get_current_merchant_business),
 ):
     """
     Generates a full JSON export archive of all merchant data (storefront, products, orders, enquiries).
+    Strictly isolated to records belonging to this authenticated merchant's business.
     """
-    biz = resolve_merchant_business(db, user, x_merchant_phone, x_merchant_id)
-
     prods = db.query(Product).filter(Product.business_id == biz.id).all()
     offers = db.query(Offer).filter(Offer.business_id == biz.id).all()
     orders = db.query(Order).filter(Order.business_id == biz.id).all()
@@ -582,13 +618,11 @@ def export_merchant_data(
 @router.post("/account/deactivate", response_model=Dict[str, Any])
 def deactivate_merchant_account(
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
-    x_merchant_phone: Optional[str] = Header(None),
+    biz: Business = Depends(get_current_merchant_business),
 ):
     """
     Deactivates merchant storefront (sets status to 'suspended').
     """
-    biz = resolve_merchant_business(db, user, x_merchant_phone)
     biz.status = "suspended"
     db.commit()
 
@@ -601,13 +635,12 @@ def deactivate_merchant_account(
 @router.delete("/account", response_model=Dict[str, Any])
 def delete_merchant_account_permanently(
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
-    x_merchant_phone: Optional[str] = Header(None),
+    biz: Business = Depends(get_current_merchant_business),
 ):
     """
     Permanently deletes merchant storefront and all associated catalog items and orders.
+    Strictly isolated to this authenticated merchant's business.
     """
-    biz = resolve_merchant_business(db, user, x_merchant_phone)
     biz_name = biz.name
 
     # Cascade delete all products, offers, orders, enquiries
@@ -630,11 +663,8 @@ def delete_merchant_account_permanently(
 @router.get("/products", response_model=Dict[str, Any])
 def list_merchant_products(
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
-    x_merchant_phone: Optional[str] = Header(None),
-    x_merchant_id: Optional[str] = Header(None),
+    biz: Business = Depends(get_current_merchant_business),
 ):
-    biz = resolve_merchant_business(db, user, x_merchant_phone, x_merchant_id)
     prods = db.query(Product).filter(Product.business_id == biz.id).order_by(Product.id.desc()).all()
 
     return {
@@ -664,12 +694,8 @@ def list_merchant_products(
 def create_merchant_product(
     body: MerchantProductCreateRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
-    x_merchant_phone: Optional[str] = Header(None),
-    x_merchant_id: Optional[str] = Header(None),
+    biz: Business = Depends(get_current_merchant_business),
 ):
-    biz = resolve_merchant_business(db, user, x_merchant_phone, x_merchant_id)
-
     new_p = Product(
         business_id=biz.id,
         name=body.name.strip(),
@@ -707,13 +733,17 @@ def update_merchant_product(
     product_id: int,
     body: Dict[str, Any],
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
-    x_merchant_phone: Optional[str] = Header(None),
+    user: User = Depends(get_current_user),
+    biz: Business = Depends(get_current_merchant_business),
 ):
-    biz = resolve_merchant_business(db, user, x_merchant_phone)
-    p = db.query(Product).filter(Product.id == product_id, Product.business_id == biz.id).first()
+    p = db.query(Product).filter(Product.id == product_id).first()
     if not p:
-        raise HTTPException(status_code=404, detail="Product not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found.")
+    if p.business_id != biz.id and user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: You do not have permission to modify this product.",
+        )
 
     if "name" in body:
         p.name = body["name"]
@@ -737,13 +767,17 @@ def update_merchant_product(
 def delete_merchant_product(
     product_id: int,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
-    x_merchant_phone: Optional[str] = Header(None),
+    user: User = Depends(get_current_user),
+    biz: Business = Depends(get_current_merchant_business),
 ):
-    biz = resolve_merchant_business(db, user, x_merchant_phone)
-    p = db.query(Product).filter(Product.id == product_id, Product.business_id == biz.id).first()
+    p = db.query(Product).filter(Product.id == product_id).first()
     if not p:
-        raise HTTPException(status_code=404, detail="Product not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found.")
+    if p.business_id != biz.id and user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: You do not have permission to delete this product.",
+        )
 
     db.delete(p)
     db.commit()
@@ -756,11 +790,8 @@ def delete_merchant_product(
 @router.get("/orders", response_model=Dict[str, Any])
 def list_merchant_orders(
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
-    x_merchant_phone: Optional[str] = Header(None),
-    x_merchant_id: Optional[str] = Header(None),
+    biz: Business = Depends(get_current_merchant_business),
 ):
-    biz = resolve_merchant_business(db, user, x_merchant_phone, x_merchant_id)
     orders = db.query(Order).filter(Order.business_id == biz.id).order_by(Order.id.desc()).all()
 
     return {
@@ -775,8 +806,8 @@ def list_merchant_orders(
                 "deliveryAddress": o.delivery_address,
                 "items": [
                     {
-                        "name": item.item_name,
-                        "quantity": item.quantity,
+                        "name": item.item_name if hasattr(item, 'item_name') else getattr(item, 'product_name', 'Item'),
+                        "quantity": item.quantity if hasattr(item, 'quantity') else 1,
                         "price": item.unit_price,
                     }
                     for item in o.items
@@ -799,13 +830,17 @@ def update_merchant_order_status(
     order_id: int,
     body: OrderStatusUpdateRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
-    x_merchant_phone: Optional[str] = Header(None),
+    user: User = Depends(get_current_user),
+    biz: Business = Depends(get_current_merchant_business),
 ):
-    biz = resolve_merchant_business(db, user, x_merchant_phone)
-    o = db.query(Order).filter(Order.id == order_id, Order.business_id == biz.id).first()
+    o = db.query(Order).filter(Order.id == order_id).first()
     if not o:
-        raise HTTPException(status_code=404, detail="Order not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found.")
+    if o.business_id != biz.id and user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: You do not have permission to modify this order.",
+        )
 
     o.status = body.status
     o.updated_at = datetime.datetime.utcnow()
@@ -820,11 +855,8 @@ def update_merchant_order_status(
 @router.get("/leads", response_model=Dict[str, Any])
 def list_merchant_leads(
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
-    x_merchant_phone: Optional[str] = Header(None),
-    x_merchant_id: Optional[str] = Header(None),
+    biz: Business = Depends(get_current_merchant_business),
 ):
-    biz = resolve_merchant_business(db, user, x_merchant_phone, x_merchant_id)
     enquiries = db.query(CustomerEnquiry).filter(CustomerEnquiry.business_id == biz.id).order_by(CustomerEnquiry.id.desc()).all()
 
     return {
@@ -850,13 +882,17 @@ def update_lead_status(
     lead_id: int,
     body: LeadStatusUpdateRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
-    x_merchant_phone: Optional[str] = Header(None),
+    user: User = Depends(get_current_user),
+    biz: Business = Depends(get_current_merchant_business),
 ):
-    biz = resolve_merchant_business(db, user, x_merchant_phone)
-    e = db.query(CustomerEnquiry).filter(CustomerEnquiry.id == lead_id, CustomerEnquiry.business_id == biz.id).first()
+    e = db.query(CustomerEnquiry).filter(CustomerEnquiry.id == lead_id).first()
     if not e:
-        raise HTTPException(status_code=404, detail="Enquiry not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Enquiry not found.")
+    if e.business_id != biz.id and user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: You do not have permission to modify this enquiry.",
+        )
 
     mapped_status = "pending" if body.status == "New" else "contacted" if body.status == "Contacted" else "resolved"
     e.status = mapped_status
@@ -871,17 +907,12 @@ def update_lead_status(
 @router.get("/overview", response_model=Dict[str, Any])
 def get_merchant_overview(
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
-    x_merchant_phone: Optional[str] = Header(None),
-    x_merchant_id: Optional[str] = Header(None),
-    phone: Optional[str] = Query(None),
-    business_id: Optional[int] = Query(None),
+    biz: Business = Depends(get_current_merchant_business),
 ):
     """
     Computes deterministic, real counts for the merchant dashboard (zero hardcoded mock data).
+    Strictly isolated to the authenticated merchant's business.
     """
-    biz = resolve_merchant_business(db, user, x_merchant_phone, x_merchant_id, business_id, phone)
-
     active_products = db.query(func.count(Product.id)).filter(
         Product.business_id == biz.id,
         Product.availability_status == "in_stock"
@@ -947,7 +978,7 @@ def get_merchant_overview(
             "directionClicks": biz.direction_clicks or 0,
             "callClicks": biz.call_clicks or 0,
             "totalInteractions": total_orders + total_leads + (biz.review_count or 0),
-        }
+        },
     }
 
 
@@ -957,11 +988,8 @@ def get_merchant_overview(
 @router.get("/services", response_model=Dict[str, Any])
 def list_merchant_services(
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
-    x_merchant_phone: Optional[str] = Header(None),
-    x_merchant_id: Optional[str] = Header(None),
+    biz: Business = Depends(get_current_merchant_business),
 ):
-    biz = resolve_merchant_business(db, user, x_merchant_phone, x_merchant_id)
     services = db.query(ServiceListing).filter(ServiceListing.business_id == biz.id).order_by(ServiceListing.id.desc()).all()
 
     return {
@@ -990,17 +1018,15 @@ def list_merchant_services(
 def create_merchant_service(
     body: MerchantServiceCreateRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
-    x_merchant_phone: Optional[str] = Header(None),
-    x_merchant_id: Optional[str] = Header(None),
+    user: User = Depends(get_current_user),
+    biz: Business = Depends(get_current_merchant_business),
 ):
-    biz = resolve_merchant_business(db, user, x_merchant_phone, x_merchant_id)
     svc_name = (body.name or body.title or f"{biz.name} Service").strip()
     price = body.price_starting_at or body.price_starting or 500.0
 
     new_s = ServiceListing(
         business_id=biz.id,
-        user_id=user.id if user else None,
+        user_id=user.id,
         provider_name=svc_name,
         category=body.category.strip(),
         description=body.description or f"Professional service by {biz.name}",
@@ -1042,13 +1068,17 @@ def create_merchant_service(
 def delete_merchant_service(
     service_id: int,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
-    x_merchant_phone: Optional[str] = Header(None),
+    user: User = Depends(get_current_user),
+    biz: Business = Depends(get_current_merchant_business),
 ):
-    biz = resolve_merchant_business(db, user, x_merchant_phone)
-    s = db.query(ServiceListing).filter(ServiceListing.id == service_id, ServiceListing.business_id == biz.id).first()
+    s = db.query(ServiceListing).filter(ServiceListing.id == service_id).first()
     if not s:
-        raise HTTPException(status_code=404, detail="Service listing not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Service listing not found.")
+    if s.business_id != biz.id and user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: You do not have permission to delete this service.",
+        )
     db.delete(s)
     db.commit()
     return {"status": "success", "message": "Service listing deleted successfully."}
@@ -1060,11 +1090,8 @@ def delete_merchant_service(
 @router.get("/offers", response_model=Dict[str, Any])
 def list_merchant_offers(
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
-    x_merchant_phone: Optional[str] = Header(None),
-    x_merchant_id: Optional[str] = Header(None),
+    biz: Business = Depends(get_current_merchant_business),
 ):
-    biz = resolve_merchant_business(db, user, x_merchant_phone, x_merchant_id)
     offers = db.query(Offer).filter(Offer.business_id == biz.id).order_by(Offer.id.desc()).all()
 
     return {
@@ -1091,11 +1118,8 @@ def list_merchant_offers(
 def create_merchant_offer(
     body: MerchantOfferCreateRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
-    x_merchant_phone: Optional[str] = Header(None),
-    x_merchant_id: Optional[str] = Header(None),
+    biz: Business = Depends(get_current_merchant_business),
 ):
-    biz = resolve_merchant_business(db, user, x_merchant_phone, x_merchant_id)
     discount = (body.discount_text or body.discountText or "Special Discount").strip()
     coupon = (body.coupon_code or body.code or f"DEAL{int(datetime.datetime.utcnow().timestamp()) % 1000}").upper().strip()
 
@@ -1140,13 +1164,17 @@ def create_merchant_offer(
 def delete_merchant_offer(
     offer_id: int,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
-    x_merchant_phone: Optional[str] = Header(None),
+    user: User = Depends(get_current_user),
+    biz: Business = Depends(get_current_merchant_business),
 ):
-    biz = resolve_merchant_business(db, user, x_merchant_phone)
-    o = db.query(Offer).filter(Offer.id == offer_id, Offer.business_id == biz.id).first()
+    o = db.query(Offer).filter(Offer.id == offer_id).first()
     if not o:
-        raise HTTPException(status_code=404, detail="Offer not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Offer not found.")
+    if o.business_id != biz.id and user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: You do not have permission to delete this offer.",
+        )
     db.delete(o)
     db.commit()
     return {"status": "success", "message": "Offer deleted successfully."}
@@ -1158,15 +1186,12 @@ def delete_merchant_offer(
 @router.get("/events", response_model=Dict[str, Any])
 def list_merchant_events(
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
-    x_merchant_phone: Optional[str] = Header(None),
-    x_merchant_id: Optional[str] = Header(None),
+    biz: Business = Depends(get_current_merchant_business),
 ):
-    biz = resolve_merchant_business(db, user, x_merchant_phone, x_merchant_id)
     events = db.query(Event).filter(
         or_(
             Event.organizer == biz.name,
-            Event.locality == biz.locality,
+            Event.source == f"Merchant: {biz.name}",
         )
     ).order_by(Event.id.desc()).all()
 
@@ -1193,11 +1218,8 @@ def list_merchant_events(
 def create_merchant_event(
     body: MerchantEventCreateRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
-    x_merchant_phone: Optional[str] = Header(None),
-    x_merchant_id: Optional[str] = Header(None),
+    biz: Business = Depends(get_current_merchant_business),
 ):
-    biz = resolve_merchant_business(db, user, x_merchant_phone, x_merchant_id)
     venue = (body.venue_name or body.venue or biz.address).strip()
     organizer = (body.organizer or biz.name).strip()
 
@@ -1250,13 +1272,24 @@ def create_merchant_event(
 def delete_merchant_event(
     event_id: int,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
-    x_merchant_phone: Optional[str] = Header(None),
+    user: User = Depends(get_current_user),
+    biz: Business = Depends(get_current_merchant_business),
 ):
     e = db.query(Event).filter(Event.id == event_id).first()
     if not e:
-        raise HTTPException(status_code=404, detail="Event not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found.")
+
+    is_owner = (
+        e.organizer == biz.name
+        or e.source == f"Merchant: {biz.name}"
+        or (biz.address and e.address == biz.address)
+    )
+    if not is_owner and user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: You do not have permission to delete this event.",
+        )
+
     db.delete(e)
     db.commit()
     return {"status": "success", "message": "Event deleted successfully."}
-
