@@ -7,7 +7,6 @@ import { LiveAreaIntelligence } from '../services/liveIntelligence';
 import { UserLocation } from '../components/LocationPickerModal';
 import {
   LiveCommunityMarketplaceState,
-  useLiveCommunityMarketplace,
 } from '../services/communityMarketplaceService';
 import {
   MapPin,
@@ -70,6 +69,22 @@ export interface DashboardCommonProps {
   onOpenMerchantRegistration?: () => void;
 }
 
+const EMPTY_MARKETPLACE: LiveCommunityMarketplaceState = {
+  loading: false,
+  businesses: [],
+  products: [],
+  services: [],
+  offers: [],
+  events: [],
+  emergencyFacilities: [],
+  addBusiness: async () => ({} as any),
+  addProduct: async () => ({} as any),
+  addService: async () => ({} as any),
+  addOffer: async () => ({} as any),
+  addEvent: async () => ({} as any),
+  refreshMarketplace: () => {},
+};
+
 /* ============================================================================
    1. HOME DASHBOARD (Page 2 Desktop) — 100% LIVE SIGNALS + MANDI & FUEL WIDGET
    ============================================================================ */
@@ -84,8 +99,7 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
   marketplace: propMarketplace,
   onOpenLocationPicker,
 }) => {
-  const fallbackMarketplace = useLiveCommunityMarketplace(liveIntel);
-  const marketplace = propMarketplace || fallbackMarketplace;
+  const marketplace = propMarketplace || EMPTY_MARKETPLACE;
 
   const { weather, airQuality, traffic, mandiRates, fuelRates, alerts } = liveIntel;
   const shortArea = selectedArea.split(',')[0]?.trim() || selectedArea;
@@ -856,8 +870,7 @@ export const BusinessesDashboard: React.FC<DashboardCommonProps> = ({
   liveIntel,
   marketplace: propMarketplace,
 }) => {
-  const fallbackMarketplace = useLiveCommunityMarketplace(liveIntel);
-  const marketplace = propMarketplace || fallbackMarketplace;
+  const marketplace = propMarketplace || EMPTY_MARKETPLACE;
 
   const [searchParams, setSearchParams] = useSearchParams();
   const urlCat = searchParams.get('cat') || 'All';
@@ -1279,8 +1292,7 @@ export const ProductsDashboard: React.FC<DashboardCommonProps> = ({
   marketplace: propMarketplace,
   onAddToCart,
 }) => {
-  const fallbackMarketplace = useLiveCommunityMarketplace(liveIntel);
-  const marketplace = propMarketplace || fallbackMarketplace;
+  const marketplace = propMarketplace || EMPTY_MARKETPLACE;
 
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -1693,8 +1705,7 @@ export const ServicesDashboard: React.FC<DashboardCommonProps> = ({
   marketplace: propMarketplace,
   onBookService,
 }) => {
-  const fallbackMarketplace = useLiveCommunityMarketplace(liveIntel);
-  const marketplace = propMarketplace || fallbackMarketplace;
+  const marketplace = propMarketplace || EMPTY_MARKETPLACE;
 
   const [selectedCat, setSelectedCat] = useState('All');
   const shortArea = selectedArea.split(',')[0]?.trim() || selectedArea;
@@ -1955,8 +1966,7 @@ export const OffersDashboard: React.FC<DashboardCommonProps> = ({
   liveIntel,
   marketplace: propMarketplace,
 }) => {
-  const fallbackMarketplace = useLiveCommunityMarketplace(liveIntel);
-  const marketplace = propMarketplace || fallbackMarketplace;
+  const marketplace = propMarketplace || EMPTY_MARKETPLACE;
 
   const [selectedCat, setSelectedCat] = useState('All Offers');
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
@@ -2204,8 +2214,7 @@ export const EventsDashboard: React.FC<DashboardCommonProps> = ({
   liveIntel,
   marketplace: propMarketplace,
 }) => {
-  const fallbackMarketplace = useLiveCommunityMarketplace(liveIntel);
-  const marketplace = propMarketplace || fallbackMarketplace;
+  const marketplace = propMarketplace || EMPTY_MARKETPLACE;
 
   const [selectedCat, setSelectedCat] = useState('All Events');
   const [selectedDay, setSelectedDay] = useState(16);

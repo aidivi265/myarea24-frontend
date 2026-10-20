@@ -1030,7 +1030,7 @@ export function useLiveCommunityMarketplace(
     return () => {
       cancelled = true;
     };
-  }, [lat, lng, localityShort, cityShort, refreshTick, liveIntel]);
+  }, [lat, lng, localityShort, cityShort, refreshTick]);
 
   // CRUD Actions
   const addBusiness = async (biz: Partial<LiveBusinessItem>): Promise<LiveBusinessItem> => {

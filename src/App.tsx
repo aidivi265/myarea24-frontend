@@ -227,7 +227,25 @@ function MobileLoadingSkeleton() {
   );
 }
 
+function useIsDesktop(): boolean {
+  const [isDesktop, setIsDesktop] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= 1024 : true
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mql = window.matchMedia('(min-width: 1024px)');
+    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    setIsDesktop(mql.matches);
+    mql.addEventListener('change', handler);
+    return () => mql.removeEventListener('change', handler);
+  }, []);
+
+  return isDesktop;
+}
+
 export function App() {
+  const isDesktop = useIsDesktop();
   // Merchant Registration Profile (Startup Verification State)
   const [merchantProfile, setMerchantProfile] = useState<MerchantRegistrationProfile | null>(() => {
     return getStoredMerchantProfile();
@@ -784,52 +802,55 @@ export function App() {
       )}
 
       {/* =====================================================================
-          1. PHONE APP UI (< lg) — Automatically renders on mobile viewports!
+          1. PHONE APP UI (< lg) — Conditionally rendered only on mobile viewports!
           Uses the dedicated MobileAppView with fixed 5-button footer
           (Home, Map, Explore, Alerts, More) & Blinkit/Uber Location Selector.
           ===================================================================== */}
-      <div className="lg:hidden flex-1 flex flex-col">
-        <ErrorBoundary
-          level="dashboard"
-          fallbackTitle="Mobile App Interface Notice"
-          onReset={() => handleNavigate('home')}
-        >
-          <React.Suspense fallback={<MobileLoadingSkeleton />}>
-            <MobileAppView
-              activeDashboard={activeDashboard}
-              onNavigate={handleNavigate}
-              onOpenModal={setModalData}
-              onAskAi={handleAskAi}
-              savedIds={savedIds}
-              savedEntries={savedEntries}
-              onToggleSave={handleToggleSave}
-              selectedArea={selectedArea}
-              currentLocation={currentLocation}
-              liveIntel={liveIntel}
-              marketplace={marketplace}
-              onOpenLocationPicker={() => setLocationModalOpen(true)}
-              onOpenNotifications={() => {
-                setNotificationsOpen((v) => !v);
-                setProfileMenuOpen(false);
-              }}
-              onOpenProfile={() => {
-                setProfileMenuOpen((v) => !v);
-                setNotificationsOpen(false);
-              }}
-              onSwitchToMerchant={handleSwitchToMerchant}
-              onAddToCart={handleAddToCart}
-              onBookService={handleBookService}
-              onOpenCart={() => setCartDrawerOpen(true)}
-              cartCount={cartItems.reduce((acc, it) => acc + it.quantity, 0)}
-            />
-          </React.Suspense>
-        </ErrorBoundary>
-      </div>
+      {!isDesktop && (
+        <div className="flex-1 flex flex-col">
+          <ErrorBoundary
+            level="dashboard"
+            fallbackTitle="Mobile App Interface Notice"
+            onReset={() => handleNavigate('home')}
+          >
+            <React.Suspense fallback={<MobileLoadingSkeleton />}>
+              <MobileAppView
+                activeDashboard={activeDashboard}
+                onNavigate={handleNavigate}
+                onOpenModal={setModalData}
+                onAskAi={handleAskAi}
+                savedIds={savedIds}
+                savedEntries={savedEntries}
+                onToggleSave={handleToggleSave}
+                selectedArea={selectedArea}
+                currentLocation={currentLocation}
+                liveIntel={liveIntel}
+                marketplace={marketplace}
+                onOpenLocationPicker={() => setLocationModalOpen(true)}
+                onOpenNotifications={() => {
+                  setNotificationsOpen((v) => !v);
+                  setProfileMenuOpen(false);
+                }}
+                onOpenProfile={() => {
+                  setProfileMenuOpen((v) => !v);
+                  setNotificationsOpen(false);
+                }}
+                onSwitchToMerchant={handleSwitchToMerchant}
+                onAddToCart={handleAddToCart}
+                onBookService={handleBookService}
+                onOpenCart={() => setCartDrawerOpen(true)}
+                cartCount={cartItems.reduce((acc, it) => acc + it.quantity, 0)}
+              />
+            </React.Suspense>
+          </ErrorBoundary>
+        </div>
+      )}
 
       {/* =====================================================================
           2. DESKTOP WEBSITE UI (>= lg) — Left Sidebar + Top Header + Main Body
          ===================================================================== */}
-      <div className="hidden lg:flex flex-1 min-h-0">
+      {isDesktop && (
+        <div className="flex flex-1 min-h-0">
         {/* LEFT SIDEBAR (Exact 235px Desktop Navigation) */}
         <aside className="w-[235px] shrink-0 bg-white border-r border-slate-200/80 flex flex-col justify-between select-none sticky top-0 h-screen">
           <div className="p-3.5 overflow-y-auto no-scrollbar">
@@ -1154,6 +1175,7 @@ export function App() {
           </main>
         </div>
       </div>
+    )}
 
       {/* =====================================================================
           NOTIFICATIONS POPOVER (Bell Icon Click on Desktop or Mobile)

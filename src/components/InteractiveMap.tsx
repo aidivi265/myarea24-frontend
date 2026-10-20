@@ -155,6 +155,28 @@ function createUserCenterIcon(label: string): L.DivIcon {
   });
 }
 
+// Memoized Icon Caches to prevent thrashing DOM and leaflet recreateIcon loops
+const customPinIconCache = new Map<string, L.DivIcon>();
+function getCachedCustomPinIcon(color: string, iconType?: string): L.DivIcon {
+  const key = `${color}:${iconType || ''}`;
+  let icon = customPinIconCache.get(key);
+  if (!icon) {
+    icon = createCustomPinIcon(color, iconType);
+    customPinIconCache.set(key, icon);
+  }
+  return icon;
+}
+
+const userCenterIconCache = new Map<string, L.DivIcon>();
+function getCachedUserCenterIcon(label: string): L.DivIcon {
+  let icon = userCenterIconCache.get(label);
+  if (!icon) {
+    icon = createUserCenterIcon(label);
+    userCenterIconCache.set(label, icon);
+  }
+  return icon;
+}
+
 // Map Controller for synchronized view setting and capturing map instance
 function MapController({
   center,
@@ -172,7 +194,16 @@ function MapController({
   }, [map, onMapReady]);
 
   useEffect(() => {
-    map.setView(center, zoom, { animate: true });
+    // Only set view if map container has valid dimensions
+    try {
+      const size = map.getSize();
+      if (size.x > 0 && size.y > 0) {
+        map.setView(center, zoom, { animate: false });
+        map.invalidateSize();
+      }
+    } catch {
+      // ignore dimension calculation errors in detached or transitioning containers
+    }
   }, [center[0], center[1], zoom, map]);
 
   return null;
@@ -472,7 +503,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
           {/* User Current Locality Center Marker */}
           <Marker
             position={[centerLat, centerLng]}
-            icon={createUserCenterIcon(centerLabel)}
+            icon={getCachedUserCenterIcon(centerLabel)}
             title={`Current Center: ${centerLabel}`}
             alt={`Current Center: ${centerLabel}`}
           >
@@ -521,7 +552,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
             <Marker
               key={pin.id}
               position={[pin.lat!, pin.lng!]}
-              icon={createCustomPinIcon(pin.color, pin.icon)}
+              icon={getCachedCustomPinIcon(pin.color, pin.icon)}
               title={pin.label || 'Neighborhood Location'}
               alt={pin.label || 'Neighborhood Location'}
               eventHandlers={{

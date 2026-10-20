@@ -77,7 +77,12 @@
               l.pathname.slice(0, -1) + decoded + l.hash
           );
         }
-      }(window.location))
+      }(window.location));
+
+      // Automatic fresh asset recovery on deployment updates
+      window.addEventListener('vite:preloadError', function() {
+        window.location.reload();
+      });
     </script>
   </head>
   <body class="bg-[#F4F6FB] text-slate-900 antialiased selection:bg-indigo-600 selection:text-white">
