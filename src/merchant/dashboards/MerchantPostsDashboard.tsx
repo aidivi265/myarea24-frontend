@@ -33,6 +33,7 @@ export function MerchantPostsDashboard({
 }: MerchantPostsDashboardProps) {
   const [activeTab, setActiveTab] = useState<'all' | 'published' | 'scheduled' | 'drafts' | 'archived'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'Latest First' | 'Oldest First'>('Latest First');
 
   const totalPosts = posts.length;
   const publishedPosts = posts.filter((p) => p.status === 'Published').length;
@@ -179,9 +180,10 @@ export function MerchantPostsDashboard({
               </div>
               <button
                 type="button"
+                onClick={() => setSortBy((prev) => (prev === 'Latest First' ? 'Oldest First' : 'Latest First'))}
                 className="px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 hover:bg-slate-100 text-xs font-bold text-slate-700 flex items-center gap-1 cursor-pointer"
               >
-                <span>Latest First</span>
+                <span>{sortBy}</span>
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
               </button>
             </div>

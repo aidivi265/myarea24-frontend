@@ -132,21 +132,31 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
         {(bottomPills || primaryCta) && (
           <div className="mt-4 pt-3 border-t border-white/10 flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2">
-              {bottomPills?.map((pill, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={pill.onClick}
-                  className={`px-3.5 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition shadow-sm ${
-                    pill.active
-                      ? 'bg-blue-600 text-white ring-2 ring-blue-300/50'
-                      : 'bg-white/95 hover:bg-white text-slate-800'
-                  }`}
-                >
-                  {pill.icon}
-                  <span>{pill.label}</span>
-                </button>
-              ))}
+              {bottomPills?.map((pill, idx) =>
+                pill.onClick ? (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={pill.onClick}
+                    className={`px-3.5 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
+                      pill.active
+                        ? 'bg-blue-600 text-white ring-2 ring-blue-300/50'
+                        : 'bg-white/95 hover:bg-white text-slate-800'
+                    }`}
+                  >
+                    {pill.icon}
+                    <span>{pill.label}</span>
+                  </button>
+                ) : (
+                  <span
+                    key={idx}
+                    className="px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 bg-white/10 text-blue-100 border border-white/15 select-none"
+                  >
+                    {pill.icon}
+                    <span>{pill.label}</span>
+                  </span>
+                )
+              )}
             </div>
             {primaryCta && (
               <button

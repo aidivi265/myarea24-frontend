@@ -241,8 +241,9 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
           </div>
           <button
             type="button"
+            aria-label="Close location selector"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition"
+            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>

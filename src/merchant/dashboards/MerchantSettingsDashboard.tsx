@@ -255,7 +255,7 @@ export function MerchantSettingsDashboard({
     if (ok) {
       const res = await deleteMerchantAccountPermanently();
       alert(res.message);
-      window.location.href = '/';
+      window.location.reload();
     }
   };
 

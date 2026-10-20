@@ -11,17 +11,17 @@ export function getApiBaseUrl(): string | null {
     return configured.trim().replace(/\/+$/, '');
   }
 
-  // If running locally in development or test, Vite proxy or local FastAPI is available
+  // If running locally in Vite dev mode (default port 5173), Vite dev proxy forwards /api to http://127.0.0.1:8000
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
-    if (host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0') {
+    const port = window.location.port;
+    if ((host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0') && port === '5173') {
       return ''; // Uses local Vite dev proxy to http://127.0.0.1:8000
     }
   }
 
-  // On remote hosting (e.g. aidivi265.github.io) without configured VITE_API_BASE_URL:
-  // Return null to prevent sending failing relative requests to GitHub Pages (which 404s)
-  // or insecure HTTP requests to 127.0.0.1 (blocked as mixed-content by browsers).
+  // When no backend URL is configured (static preview or GitHub Pages without backend):
+  // Return null to prevent spamming 503s/404s or insecure mixed-content requests.
   return null;
 }
 
@@ -70,22 +70,6 @@ export async function requestBackendJson<T>(
     return null;
   } catch {
     clearTimeout(timer);
-    // In local dev, if proxy fails, try direct 127.0.0.1:8000 as secondary attempt
-    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-      if (baseUrl === '') {
-        try {
-          const directRes = await fetch(`http://127.0.0.1:8000${cleanPath}`, {
-            ...options,
-            headers,
-          });
-          if (directRes.ok) {
-            return (await directRes.json()) as T;
-          }
-        } catch {
-          return null;
-        }
-      }
-    }
     return null;
   }
 }

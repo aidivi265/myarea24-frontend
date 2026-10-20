@@ -29,6 +29,7 @@ export function MerchantEventsDashboard({
 }: MerchantEventsDashboardProps) {
   const [activeTab, setActiveTab] = useState<'all' | 'upcoming' | 'ongoing' | 'past' | 'drafts'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [calendarMonth, setCalendarMonth] = useState('May 2025');
 
   const totalEvents = events.length;
   const publishedEvents = events.filter((e) => e.status === 'Published').length;
@@ -149,7 +150,8 @@ export function MerchantEventsDashboard({
             </h3>
             <button
               type="button"
-              className="text-xs font-bold text-purple-600 hover:text-purple-700"
+              onClick={() => setActiveTab('all')}
+              className="text-xs font-bold text-purple-600 hover:text-purple-700 cursor-pointer"
             >
               View All &gt;
             </button>
@@ -270,10 +272,11 @@ export function MerchantEventsDashboard({
               </div>
               <button
                 type="button"
+                onClick={() => setActiveTab((prev) => (prev === 'all' ? 'upcoming' : prev === 'upcoming' ? 'past' : 'all'))}
                 className="px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 hover:bg-slate-100 text-xs font-bold text-slate-700 flex items-center gap-1 cursor-pointer"
               >
                 <Filter className="w-3.5 h-3.5 text-slate-500" />
-                <span>Filter</span>
+                <span>{activeTab === 'all' ? 'All' : activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}</span>
               </button>
             </div>
           </div>
@@ -352,12 +355,22 @@ export function MerchantEventsDashboard({
           {/* Calendar Widget */}
           <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs">
             <div className="flex items-center justify-between mb-3">
-              <h4 className="text-xs font-extrabold text-slate-900">May 2025</h4>
+              <h4 className="text-xs font-extrabold text-slate-900">{calendarMonth}</h4>
               <div className="flex items-center gap-1">
-                <button type="button" className="p-1 hover:bg-slate-100 rounded-lg text-slate-500">
+                <button
+                  type="button"
+                  onClick={() => setCalendarMonth((prev) => (prev === 'May 2025' ? 'April 2025' : 'May 2025'))}
+                  className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 cursor-pointer"
+                  title="Previous month"
+                >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
-                <button type="button" className="p-1 hover:bg-slate-100 rounded-lg text-slate-500">
+                <button
+                  type="button"
+                  onClick={() => setCalendarMonth((prev) => (prev === 'May 2025' ? 'June 2025' : 'May 2025'))}
+                  className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 cursor-pointer"
+                  title="Next month"
+                >
                   <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
@@ -444,9 +457,10 @@ export function MerchantEventsDashboard({
               <h4 className="text-xs font-extrabold text-slate-900">Event Categories</h4>
               <button
                 type="button"
-                className="text-xs font-bold text-purple-600 hover:text-purple-700"
+                onClick={onOpenCreateEventModal}
+                className="text-xs font-bold text-purple-600 hover:text-purple-700 cursor-pointer"
               >
-                Manage
+                + Add / Manage
               </button>
             </div>
 

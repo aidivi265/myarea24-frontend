@@ -202,7 +202,7 @@ export function MerchantMobileAppView(props: MerchantMobileAppViewProps) {
                 {props.business.verificationStatus}
               </span>
             </div>
-            <p className="text-[10px] text-slate-500 mt-0.5">Submitted on {props.business.submissionDate} • Tap to view details</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">Submitted on {props.business.submissionDate || 'Recently'} • Tap to view details</p>
           </div>
         </div>
         <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
@@ -1995,38 +1995,57 @@ export function MerchantMobileAppView(props: MerchantMobileAppViewProps) {
                 <p className="text-[10px] font-extrabold uppercase text-slate-400 mb-1.5 px-1">
                   Customer Relations
                 </p>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleTabClick('reviews')}
-                    className="p-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-center flex flex-col items-center gap-1 cursor-pointer"
-                  >
-                    <Star className="w-4 h-4 text-amber-500 fill-amber-400" />
-                    <span className="text-[11px] font-bold text-slate-800">Reviews</span>
-                    <span className="text-[9px] text-amber-600 font-extrabold">4.6 ★</span>
-                  </button>
+                {(() => {
+                  const drawerAvgRating =
+                    props.reviews.length > 0
+                      ? (props.reviews.reduce((a, r) => a + r.rating, 0) / props.reviews.length).toFixed(1)
+                      : props.business.rating
+                      ? props.business.rating.toFixed(1)
+                      : '5.0';
+                  const drawerUnreadMsgs = props.conversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
+                  const drawerNewLeads = props.leads.filter((l) => l.status === 'New').length;
 
-                  <button
-                    type="button"
-                    onClick={() => handleTabClick('messages')}
-                    className="p-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-center flex flex-col items-center gap-1 cursor-pointer relative"
-                  >
-                    <span className="w-2 h-2 rounded-full bg-rose-500 absolute top-2 right-2" />
-                    <MessageSquare className="w-4 h-4 text-purple-600" />
-                    <span className="text-[11px] font-bold text-slate-800">Messages</span>
-                    <span className="text-[9px] text-purple-600 font-extrabold">3 New</span>
-                  </button>
+                  return (
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleTabClick('reviews')}
+                        className="p-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-center flex flex-col items-center gap-1 cursor-pointer"
+                      >
+                        <Star className="w-4 h-4 text-amber-500 fill-amber-400" />
+                        <span className="text-[11px] font-bold text-slate-800">Reviews</span>
+                        <span className="text-[9px] text-amber-600 font-extrabold">{drawerAvgRating} ★</span>
+                      </button>
 
-                  <button
-                    type="button"
-                    onClick={() => handleTabClick('leads')}
-                    className="p-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-center flex flex-col items-center gap-1 cursor-pointer"
-                  >
-                    <Users className="w-4 h-4 text-indigo-600" />
-                    <span className="text-[11px] font-bold text-slate-800">Leads CRM</span>
-                    <span className="text-[9px] text-indigo-600 font-extrabold">5 New</span>
-                  </button>
-                </div>
+                      <button
+                        type="button"
+                        onClick={() => handleTabClick('messages')}
+                        className="p-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-center flex flex-col items-center gap-1 cursor-pointer relative"
+                      >
+                        {drawerUnreadMsgs > 0 && (
+                          <span className="w-2 h-2 rounded-full bg-rose-500 absolute top-2 right-2 ring-1 ring-white animate-pulse" />
+                        )}
+                        <MessageSquare className="w-4 h-4 text-purple-600" />
+                        <span className="text-[11px] font-bold text-slate-800">Messages</span>
+                        <span className="text-[9px] text-purple-600 font-extrabold">
+                          {drawerUnreadMsgs > 0 ? `${drawerUnreadMsgs} New` : `${props.conversations.length} Active`}
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleTabClick('leads')}
+                        className="p-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-center flex flex-col items-center gap-1 cursor-pointer"
+                      >
+                        <Users className="w-4 h-4 text-indigo-600" />
+                        <span className="text-[11px] font-bold text-slate-800">Leads CRM</span>
+                        <span className="text-[9px] text-indigo-600 font-extrabold">
+                          {drawerNewLeads > 0 ? `${drawerNewLeads} New` : `${props.leads.length} Total`}
+                        </span>
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div>

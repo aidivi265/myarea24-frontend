@@ -324,6 +324,7 @@ export const EmergencyDashboard: React.FC<DashboardCommonProps> = ({
       title: `Emergency Dispatch: ${serviceName} (${number})`,
       category: 'Priority Emergency SOS',
       badge: '24/7 Active',
+      phone: number,
       location: `${selectedArea} (${location.lat.toFixed(4)}°N, ${location.lng.toFixed(4)}°E)`,
       description: `Connecting immediately to ${serviceName} (${number}). Your live GPS coordinates (${location.lat.toFixed(
         4

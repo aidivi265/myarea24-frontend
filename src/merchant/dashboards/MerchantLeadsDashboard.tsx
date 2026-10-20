@@ -385,10 +385,15 @@ export function MerchantLeadsDashboard({
               </div>
               <button
                 type="button"
+                onClick={() =>
+                  setActiveTab((prev) =>
+                    prev === 'all' ? 'new' : prev === 'new' ? 'in progress' : prev === 'in progress' ? 'converted' : 'all'
+                  )
+                }
                 className="px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 hover:bg-slate-100 text-xs font-bold text-slate-700 flex items-center gap-1 cursor-pointer"
               >
                 <Filter className="w-3.5 h-3.5 text-slate-500" />
-                <span>Filter</span>
+                <span>{activeTab === 'all' ? 'All' : activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}</span>
               </button>
             </div>
           </div>

@@ -2,6 +2,7 @@ import React from 'react';
 import {
   MerchantBusinessInfo,
   MerchantProductItem,
+  MerchantServiceItem,
   MerchantOfferItem,
   MerchantPostItem,
   MerchantReviewItem,
@@ -37,6 +38,7 @@ interface MerchantHomeDashboardProps {
   onNavigate: (tab: MerchantDashboardId) => void;
   onOpenQuickAction: (actionType: string) => void;
   products: MerchantProductItem[];
+  services?: MerchantServiceItem[];
   offers: MerchantOfferItem[];
   posts: MerchantPostItem[];
   reviews: MerchantReviewItem[];
@@ -50,6 +52,7 @@ export function MerchantHomeDashboard({
   onNavigate,
   onOpenQuickAction,
   products = [],
+  services = [],
   offers = [],
   posts = [],
   reviews = [],
@@ -59,6 +62,8 @@ export function MerchantHomeDashboard({
 }: MerchantHomeDashboardProps) {
   // Dynamic store metrics
   const activeProductsCount = products.filter((p) => p.status === 'Active').length;
+  const activeServicesCount = services.filter((s) => s.status === 'Active').length;
+  const activeOffersCount = offers.filter((o) => o.status === 'Active' || (o as any).active).length;
   const totalOrdersCount = orders.length;
   const totalViews = (business as any).viewCount || (business as any).views || products.reduce((acc, p) => acc + (p.views || 0), 0);
   const totalInteractions = totalOrdersCount + leads.length + conversations.length + reviews.length;
@@ -71,8 +76,8 @@ export function MerchantHomeDashboard({
   if (business.name && business.name !== 'My Storefront') completion += 15;
   if (business.phone) completion += 15;
   if (business.fullAddress && business.fullAddress !== 'Local Commercial Address') completion += 15;
-  if (products.length > 0) completion += 15;
-  if (offers.length > 0) completion += 10;
+  if (products.length > 0 || services.length > 0) completion += 15;
+  if (activeOffersCount > 0 || offers.length > 0) completion += 10;
   if (business.logo) completion += 10;
   const profileCompletionPercent = Math.min(100, completion);
 
@@ -96,6 +101,16 @@ export function MerchantHomeDashboard({
       subtitle: `Active at ₹${p.price}`,
       timeAgo: 'Recently',
       color: 'bg-blue-600',
+    });
+  }
+  if (services.length > 0) {
+    const s = services[0];
+    recentActivities.push({
+      id: `act-serv-${s.id}`,
+      title: `Service Listed: ${s.name}`,
+      subtitle: `Starting at ₹${s.startingPrice} • ${s.category}`,
+      timeAgo: 'Recently',
+      color: 'bg-indigo-600',
     });
   }
   if (offers.length > 0) {
@@ -577,9 +592,15 @@ export function MerchantHomeDashboard({
                 <span className="text-slate-600">Active Products</span>
                 <span className="font-bold text-slate-900">{activeProductsCount}</span>
               </div>
+              {services.length > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600">Active Services</span>
+                  <span className="font-bold text-slate-900">{activeServicesCount}</span>
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <span className="text-slate-600">Active Offers</span>
-                <span className="font-bold text-slate-900">{offers.length}</span>
+                <span className="font-bold text-slate-900">{activeOffersCount}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-600">Customer Inquiries</span>

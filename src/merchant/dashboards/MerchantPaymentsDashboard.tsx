@@ -402,7 +402,11 @@ export function MerchantPaymentsDashboard({
           <div>
             <div className="flex items-center justify-between mb-3">
               <h4 className="text-xs font-extrabold text-slate-900">Billing Information</h4>
-              <button type="button" className="text-xs font-bold text-purple-600 hover:text-purple-700">
+              <button
+                type="button"
+                onClick={onOpenUpgradePlanModal}
+                className="text-xs font-bold text-purple-600 hover:text-purple-700 cursor-pointer"
+              >
                 Edit
               </button>
             </div>

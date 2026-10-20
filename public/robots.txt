@@ -1,0 +1,7 @@
+# https://www.robotstxt.org/robotstxt.html
+User-agent: *
+Allow: /
+Disallow: /merchant
+Disallow: /api/
+
+Sitemap: https://aidivi265.github.io/myarea24-frontend/sitemap.xml

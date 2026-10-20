@@ -1106,6 +1106,7 @@ export const TrafficDashboard: React.FC<DashboardCommonProps> = ({
   liveIntel,
 }) => {
   const [forecastTab, setForecastTab] = useState('Next 1 Hour');
+  const [trafficMapFilter, setTrafficMapFilter] = useState<'Live Traffic' | 'Incidents' | 'Corridors'>('Live Traffic');
   const { traffic, location } = liveIntel;
   const shortArea = selectedArea.split(',')[0]?.trim() || selectedArea;
   const cctvImages = [
@@ -1209,12 +1210,13 @@ export const TrafficDashboard: React.FC<DashboardCommonProps> = ({
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-extrabold text-slate-900">Live Traffic Map ({shortArea})</h3>
               <div className="flex gap-1.5">
-                {['Live Traffic', 'Incidents', 'Corridors'].map((b, i) => (
+                {(['Live Traffic', 'Incidents', 'Corridors'] as const).map((b) => (
                   <button
                     key={b}
                     type="button"
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold ${
-                      i === 0 ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'
+                    onClick={() => setTrafficMapFilter(b)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      trafficMapFilter === b ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
                     }`}
                   >
                     {b}

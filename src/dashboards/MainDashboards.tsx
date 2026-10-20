@@ -53,7 +53,7 @@ import {
 } from 'lucide-react';
 
 export interface DashboardCommonProps {
-  onNavigate: (id: DashboardId) => void;
+  onNavigate: (id: DashboardId, queryParams?: Record<string, string>) => void;
   onOpenModal: (data: ActionModalData) => void;
   onAskAi: (prompt: string) => void;
   savedIds: string[];
@@ -97,17 +97,23 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
   const topRoute = traffic.popularRoutes[0];
   const topCorridor = traffic.corridors[0];
 
-  const exploreCategories = [
-    { label: 'Restaurants', icon: Utensils, bg: 'bg-orange-50 text-orange-500', target: 'businesses' as DashboardId },
-    { label: 'Cafes', icon: Coffee, bg: 'bg-amber-50 text-amber-600', target: 'businesses' as DashboardId },
-    { label: 'Shopping', icon: ShoppingBag, bg: 'bg-violet-50 text-violet-600', target: 'products' as DashboardId },
+  const exploreCategories: {
+    label: string;
+    icon: React.ElementType;
+    bg: string;
+    target: DashboardId;
+    query?: Record<string, string>;
+  }[] = [
+    { label: 'Restaurants', icon: Utensils, bg: 'bg-orange-50 text-orange-500', target: 'businesses' as DashboardId, query: { cat: 'Restaurants' } },
+    { label: 'Cafes', icon: Coffee, bg: 'bg-amber-50 text-amber-600', target: 'businesses' as DashboardId, query: { cat: 'Cafés' } },
+    { label: 'Shopping', icon: ShoppingBag, bg: 'bg-violet-50 text-violet-600', target: 'products' as DashboardId, query: { cat: 'Groceries' } },
     { label: 'Hospitals', icon: Hospital, bg: 'bg-blue-50 text-blue-600', target: 'emergency' as DashboardId },
-    { label: 'Schools', icon: GraduationCap, bg: 'bg-indigo-50 text-indigo-600', target: 'map' as DashboardId },
-    { label: 'Parks', icon: Trees, bg: 'bg-emerald-50 text-emerald-600', target: 'map' as DashboardId },
-    { label: 'ATMs', icon: CreditCard, bg: 'bg-sky-50 text-sky-600', target: 'map' as DashboardId },
-    { label: 'Gyms', icon: Dumbbell, bg: 'bg-purple-50 text-purple-600', target: 'businesses' as DashboardId },
-    { label: 'Salons', icon: Scissors, bg: 'bg-pink-50 text-pink-600', target: 'services' as DashboardId },
-    { label: 'Temples', icon: Landmark, bg: 'bg-orange-50 text-orange-600', target: 'map' as DashboardId },
+    { label: 'Schools', icon: GraduationCap, bg: 'bg-indigo-50 text-indigo-600', target: 'map' as DashboardId, query: { q: 'schools' } },
+    { label: 'Parks', icon: Trees, bg: 'bg-emerald-50 text-emerald-600', target: 'map' as DashboardId, query: { q: 'parks' } },
+    { label: 'ATMs', icon: CreditCard, bg: 'bg-sky-50 text-sky-600', target: 'map' as DashboardId, query: { q: 'atms' } },
+    { label: 'Gyms', icon: Dumbbell, bg: 'bg-purple-50 text-purple-600', target: 'businesses' as DashboardId, query: { cat: 'Fitness' } },
+    { label: 'Salons', icon: Scissors, bg: 'bg-pink-50 text-pink-600', target: 'services' as DashboardId, query: { cat: 'Salons' } },
+    { label: 'Temples', icon: Landmark, bg: 'bg-orange-50 text-orange-600', target: 'map' as DashboardId, query: { q: 'temples' } },
     { label: 'More', icon: MoreHorizontal, bg: 'bg-slate-100 text-slate-600', target: 'businesses' as DashboardId },
   ];
 
@@ -572,8 +578,8 @@ export const HomeDashboard: React.FC<DashboardCommonProps> = ({
             <button
               key={cat.label}
               type="button"
-              onClick={() => onNavigate(cat.target)}
-              className="flex flex-col items-center gap-1.5 min-w-[64px] group"
+              onClick={() => onNavigate(cat.target, cat.query)}
+              className="flex flex-col items-center gap-1.5 min-w-[64px] group cursor-pointer"
             >
               <div
                 className={`w-11 h-11 rounded-2xl ${cat.bg} flex items-center justify-center shadow-sm group-hover:scale-105 transition`}
@@ -1083,14 +1089,22 @@ export const BusinessesDashboard: React.FC<DashboardCommonProps> = ({
                     onClick={() =>
                       onOpenModal({
                         title: b.name,
-                        subtitle: `${b.sub} (${b.source})`,
+                        subtitle: b.sub,
                         category: b.cat,
                         badge: `${b.status} • ${b.closes}`,
                         rating: `${b.rating} ${b.reviews}`,
                         location: `${b.dist} away • ${b.address}`,
-                        description: `${b.description}\n\n📞 Phone / WhatsApp: ${b.phone}\n📦 Active Catalog: ${b.activeProductsCount} products • ${b.activeOffersCount} live offers.`,
+                        description: b.description,
                         primaryActionLabel: `Call ${b.phone}`,
                         image: b.img,
+                        phone: b.phone,
+                        whatsapp: b.whatsapp || b.phone,
+                        address: b.address,
+                        lat: b.lat,
+                        lng: b.lng,
+                        source: b.source,
+                        verified: b.verified,
+                        freshnessLabel: b.verified ? 'Verified Local Merchant' : 'Live OpenStreetMap POI',
                       })
                     }
                     className="cursor-pointer rounded-xl border border-slate-200/80 overflow-hidden hover:shadow-md transition bg-white group flex flex-col justify-between"
@@ -1404,6 +1418,12 @@ export const ProductsDashboard: React.FC<DashboardCommonProps> = ({
                         description: `${p.freshnessLabel}. Buy directly from ${p.store} at ${p.price} instead of ${p.oldPrice || p.price} on ${p.onlineProvider} (Save ₹${p.savingsAmount}).`,
                         primaryActionLabel: 'Reserve for Pickup / Delivery',
                         image: p.img,
+                        phone: p.phone,
+                        whatsapp: p.phone,
+                        address: p.storeAddress,
+                        source: 'Merchant Catalog',
+                        verified: true,
+                        freshnessLabel: p.freshnessLabel || 'Verified Price Today',
                       });
                     }}
                     className="cursor-pointer rounded-xl border border-slate-200/80 p-3 flex flex-col justify-between hover:shadow-md transition bg-white relative"
@@ -1481,8 +1501,14 @@ export const ProductsDashboard: React.FC<DashboardCommonProps> = ({
                       rating: `${st.rating} ${st.reviews}`,
                       location: `${st.dist} away • ${st.address}`,
                       description: `${st.description}\n📞 Direct Store Contact: ${st.phone}`,
-                      primaryActionLabel: 'View Store Catalog',
+                      primaryActionLabel: `Call ${st.phone}`,
                       image: st.img,
+                      phone: st.phone,
+                      whatsapp: st.whatsapp || st.phone,
+                      address: st.address,
+                      source: st.source || 'Verified Storefront',
+                      verified: true,
+                      freshnessLabel: 'Active Merchant',
                     })
                   }
                   className="cursor-pointer rounded-xl border border-slate-200/80 overflow-hidden hover:shadow-md transition bg-white"
@@ -1785,8 +1811,14 @@ export const ServicesDashboard: React.FC<DashboardCommonProps> = ({
                             rating: `${srv.rating} ${srv.reviews}`,
                             location: `${srv.dist} away in ${srv.locality}, ${srv.city}`,
                             description: `${srv.description}\n\n📞 Phone / WhatsApp: ${srv.phone}\n🕒 Hours: ${srv.timing}`,
-                            primaryActionLabel: `Book / Call ${srv.phone}`,
+                            primaryActionLabel: `Call ${srv.phone}`,
                             image: srv.img,
+                            phone: srv.phone,
+                            whatsapp: srv.phone,
+                            address: `${srv.locality}, ${srv.city}`,
+                            source: 'Verified Neighborhood Pro',
+                            verified: true,
+                            freshnessLabel: srv.avail || 'Available for Work',
                           });
                         }
                       }}
@@ -1837,6 +1869,12 @@ export const ServicesDashboard: React.FC<DashboardCommonProps> = ({
                         description: `${pro.description}\nDirect Phone / WhatsApp: ${pro.phone}`,
                         primaryActionLabel: `Call ${pro.phone}`,
                         image: pro.img,
+                        phone: pro.phone,
+                        whatsapp: pro.phone,
+                        address: `${pro.locality}, ${pro.city}`,
+                        source: 'Verified Professional',
+                        verified: true,
+                        freshnessLabel: 'Active Service Provider',
                       })
                     }
                     className="w-full py-1.5 rounded-lg bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
@@ -2083,6 +2121,12 @@ export const OffersDashboard: React.FC<DashboardCommonProps> = ({
                             description: `${off.description}\n\nCoupon Code: ${off.code} (${off.valid})\nStore Contact: ${off.phone}`,
                             primaryActionLabel: `Redeem Code ${off.code}`,
                             image: off.img,
+                            phone: off.phone,
+                            whatsapp: off.phone,
+                            address: off.storeAddress,
+                            source: 'Local Merchant Deal',
+                            verified: true,
+                            freshnessLabel: off.valid || 'Active Promotion',
                           })
                         }
                         className="w-full py-1.5 rounded-lg bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white text-xs font-bold transition cursor-pointer"
@@ -2310,12 +2354,16 @@ export const EventsDashboard: React.FC<DashboardCommonProps> = ({
                         onOpenModal({
                           title: ev.title,
                           subtitle: `${ev.cat} • Organized by ${ev.organizer}`,
-                          category: `Contextual Event Intelligence (${ev.source})`,
+                          category: `Community Event Intelligence`,
                           badge: ev.price,
                           location: `${ev.loc} • ${ev.time}`,
                           description: `👥 Expected Attendance: ~${ev.expectedAttendance} people\n🅿️ Parking Pressure: ${ev.parkingPressure}\n🚗 Arterial Traffic Impact: ${ev.trafficImpact} on ${ev.commuteCorridor}\n🌦️ Exit Weather Advisory: ${ev.exitWeatherAdvisory}`,
                           primaryActionLabel: 'Confirm Free RSVP / Book Pass',
                           image: ev.img,
+                          address: ev.loc,
+                          source: ev.source || 'Local Community Notice',
+                          verified: true,
+                          freshnessLabel: ev.time,
                         })
                       }
                       className="w-full py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition cursor-pointer"

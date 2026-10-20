@@ -791,6 +791,7 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
             onNavigate={handleNavigate}
             onOpenQuickAction={setModalType}
             products={products}
+            services={services}
             offers={offers}
             posts={posts}
             reviews={reviews}
@@ -1411,90 +1412,168 @@ export function MerchantPortal({ onSwitchToCitizen, marketplace, currentLocation
                   <span>28°C</span>
                 </span>
 
-                <button
-                  type="button"
-                  onClick={() => setNotificationsOpen((v) => !v)}
-                  className="w-9 h-9 rounded-full bg-slate-50 hover:bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600 relative cursor-pointer"
-                >
-                  <Bell className="w-4 h-4" />
-                  <span className="w-2 h-2 rounded-full bg-rose-500 absolute top-2 right-2 ring-2 ring-white" />
-                </button>
+                {(() => {
+                  const placedOrdersList = orders.filter((o) => o.status === 'placed');
+                  const unreadConvs = conversations.filter((c) => (c.unreadCount || 0) > 0);
+                  const newLeadsList = leads.filter((l) => l.status === 'New');
+                  const totalUnread = placedOrdersList.length + unreadConvs.length + newLeadsList.length;
+                  const ownerInitials = (currentBusiness.ownerName || 'Merchant')
+                    .trim()
+                    .split(/\s+/)
+                    .map((w: string) => w[0])
+                    .slice(0, 2)
+                    .join('')
+                    .toUpperCase();
 
-                {/* User Pill */}
-                <button
-                  type="button"
-                  onClick={() => setProfileMenuOpen((v) => !v)}
-                  className="flex items-center gap-2 pl-1.5 pr-3 py-1 rounded-full bg-slate-50 hover:bg-slate-100 border border-slate-200 transition cursor-pointer"
-                >
-                  <span className="w-7 h-7 rounded-full bg-purple-600 text-white font-extrabold text-xs flex items-center justify-center">
-                    RS
-                  </span>
-                  <div className="text-left hidden xl:block">
-                    <p className="text-xs font-bold text-slate-800 leading-none">
-                      {currentBusiness.ownerName}
-                    </p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">
-                      {currentBusiness.ownerRole} • {currentBusiness.name}
-                    </p>
-                  </div>
-                  <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-                </button>
+                  return (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setNotificationsOpen((v) => !v)}
+                        className="w-9 h-9 rounded-full bg-slate-50 hover:bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600 relative cursor-pointer"
+                        title="Storefront notifications"
+                      >
+                        <Bell className="w-4 h-4" />
+                        {totalUnread > 0 && (
+                          <span className="w-2.5 h-2.5 rounded-full bg-rose-500 absolute top-1.5 right-1.5 ring-2 ring-white animate-pulse" />
+                        )}
+                      </button>
+
+                      {/* User Pill */}
+                      <button
+                        type="button"
+                        onClick={() => setProfileMenuOpen((v) => !v)}
+                        className="flex items-center gap-2 pl-1.5 pr-3 py-1 rounded-full bg-slate-50 hover:bg-slate-100 border border-slate-200 transition cursor-pointer"
+                      >
+                        <span className="w-7 h-7 rounded-full bg-purple-600 text-white font-extrabold text-xs flex items-center justify-center">
+                          {ownerInitials || 'MP'}
+                        </span>
+                        <div className="text-left hidden xl:block">
+                          <p className="text-xs font-bold text-slate-800 leading-none">
+                            {currentBusiness.ownerName}
+                          </p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            {currentBusiness.ownerRole} • {currentBusiness.name}
+                          </p>
+                        </div>
+                        <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                      </button>
+
+                      {/* Notifications Popover */}
+                      {notificationsOpen && (
+                        <div
+                          onClick={() => setNotificationsOpen(false)}
+                          className="fixed inset-0 z-50 flex items-start justify-end pt-28 px-6 bg-black/20"
+                        >
+                          <div
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-84 p-3 space-y-2 animate-in zoom-in-95 duration-100"
+                          >
+                            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                              <span className="text-xs font-extrabold text-slate-900">
+                                Storefront Notifications
+                              </span>
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                  totalUnread > 0
+                                    ? 'text-rose-600 bg-rose-50'
+                                    : 'text-emerald-700 bg-emerald-50'
+                                }`}
+                              >
+                                {totalUnread > 0 ? `${totalUnread} New` : 'All Caught Up'}
+                              </span>
+                            </div>
+
+                            <div className="space-y-2 text-xs max-h-72 overflow-y-auto">
+                              {placedOrdersList.length > 0 && (
+                                <div
+                                  onClick={() => {
+                                    setNotificationsOpen(false);
+                                    handleNavigate('orders');
+                                  }}
+                                  className="p-2.5 rounded-xl bg-rose-50/80 hover:bg-rose-100/80 border border-rose-100 cursor-pointer transition"
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <p className="font-bold text-rose-950">
+                                      New Order #{placedOrdersList[0].orderNumber}
+                                    </p>
+                                    <span className="text-[10px] font-black text-rose-700">₹{placedOrdersList[0].finalPayable}</span>
+                                  </div>
+                                  <p className="text-[11px] text-rose-800 mt-0.5">
+                                    From {placedOrdersList[0].customerName} • Tap to view orders
+                                  </p>
+                                </div>
+                              )}
+
+                              {unreadConvs.length > 0 && (
+                                <div
+                                  onClick={() => {
+                                    setNotificationsOpen(false);
+                                    handleNavigate('messages');
+                                  }}
+                                  className="p-2.5 rounded-xl bg-purple-50/80 hover:bg-purple-100/80 border border-purple-100 cursor-pointer transition"
+                                >
+                                  <p className="font-bold text-purple-950">
+                                    Message from {unreadConvs[0].customerName}
+                                  </p>
+                                  <p className="text-[11px] text-purple-800 line-clamp-1 mt-0.5">
+                                    "{unreadConvs[0].lastMessage}"
+                                  </p>
+                                </div>
+                              )}
+
+                              {newLeadsList.length > 0 && (
+                                <div
+                                  onClick={() => {
+                                    setNotificationsOpen(false);
+                                    handleNavigate('leads');
+                                  }}
+                                  className="p-2.5 rounded-xl bg-indigo-50/80 hover:bg-indigo-100/80 border border-indigo-100 cursor-pointer transition"
+                                >
+                                  <p className="font-bold text-indigo-950">
+                                    Inquiry for {newLeadsList[0].interestedCategory}
+                                  </p>
+                                  <p className="text-[11px] text-indigo-800 mt-0.5">
+                                    From {newLeadsList[0].customerName} • Tap to manage leads
+                                  </p>
+                                </div>
+                              )}
+
+                              {reviews.length > 0 && totalUnread === 0 && (
+                                <div
+                                  onClick={() => {
+                                    setNotificationsOpen(false);
+                                    handleNavigate('reviews');
+                                  }}
+                                  className="p-2.5 rounded-xl bg-amber-50/80 hover:bg-amber-100/80 border border-amber-100 cursor-pointer transition"
+                                >
+                                  <p className="font-bold text-amber-950">
+                                    {reviews[0].rating} ★ Review Received
+                                  </p>
+                                  <p className="text-[11px] text-amber-800 line-clamp-1 mt-0.5">
+                                    "{reviews[0].comment}"
+                                  </p>
+                                </div>
+                              )}
+
+                              {totalUnread === 0 && reviews.length === 0 && (
+                                <div className="py-6 text-center text-slate-400">
+                                  <Bell className="w-6 h-6 text-slate-300 mx-auto mb-1.5" />
+                                  <p className="text-xs font-bold text-slate-600">No new alerts</p>
+                                  <p className="text-[10px] text-slate-400 mt-0.5">
+                                    Incoming orders and neighborhood inquiries will pop up here in real time.
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </header>
-
-            {/* Notifications Popover */}
-            {notificationsOpen && (
-              <div
-                onClick={() => setNotificationsOpen(false)}
-                className="fixed inset-0 z-50 flex items-start justify-end pt-28 px-6 bg-black/20"
-              >
-                <div
-                  onClick={(e) => e.stopPropagation()}
-                  className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-80 p-3 space-y-2 animate-in zoom-in-95 duration-100"
-                >
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                    <span className="text-xs font-extrabold text-slate-900">
-                      Storefront Notifications
-                    </span>
-                    <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full">
-                      3 New
-                    </span>
-                  </div>
-                  <div className="space-y-2 text-xs">
-                    <div
-                      onClick={() => {
-                        setNotificationsOpen(false);
-                        handleNavigate('messages');
-                      }}
-                      className="p-2 rounded-xl bg-purple-50/70 hover:bg-purple-100 cursor-pointer"
-                    >
-                      <p className="font-bold text-purple-900">New Message from Priya Mehta</p>
-                      <p className="text-[11px] text-purple-700">"Hi! Do you have any weekend offers...?"</p>
-                    </div>
-                    <div
-                      onClick={() => {
-                        setNotificationsOpen(false);
-                        handleNavigate('leads');
-                      }}
-                      className="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 cursor-pointer"
-                    >
-                      <p className="font-bold text-slate-900">New Enquiry for Table Booking</p>
-                      <p className="text-[11px] text-slate-500">Amit Kumar requested table for 8</p>
-                    </div>
-                    <div
-                      onClick={() => {
-                        setNotificationsOpen(false);
-                        handleNavigate('reviews');
-                      }}
-                      className="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 cursor-pointer"
-                    >
-                      <p className="font-bold text-slate-900">5 ★ Review received</p>
-                      <p className="text-[11px] text-slate-500">"Amazing coffee and great staff!"</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* Profile Menu Popover */}
             {profileMenuOpen && (

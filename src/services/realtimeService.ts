@@ -528,20 +528,21 @@ class RealtimePushService {
   private scheduleReconnect() {
     if (this.reconnectTimer) return;
     this.reconnectAttempts++;
-    // Exponential backoff: 1.5s, 3s, 6s, 12s, capped at 15s + jitter
+    if (this.reconnectAttempts > 3) {
+      // Avoid infinite retry loops when backend is offline
+      this.setStatus('disconnected');
+      return;
+    }
+
+    // Exponential backoff: 1.5s, 3s, 6s
     const delay = Math.min(
       this.maxReconnectDelay,
-      1500 * Math.pow(2, this.reconnectAttempts - 1) + Math.random() * 1000
+      1500 * Math.pow(2, this.reconnectAttempts - 1) + Math.random() * 500
     );
 
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
-      if (this.reconnectAttempts > 4) {
-        // Fallback to SSE after repeated WS failure
-        this.startSseFallback();
-      } else {
-        this.initWebSocket();
-      }
+      this.initWebSocket();
     }, delay);
   }
 
@@ -563,6 +564,7 @@ class RealtimePushService {
     const channels = ['civic', `merchant:${this.options.businessId || 'biz-daily-brew'}`].join(',');
     const sseUrl = `${rawBackend.replace(/\/+$/, '')}/api/v1/ws/sse?channels=${encodeURIComponent(channels)}`;
 
+    let sseErrorCount = 0;
     try {
       this.sseSource = new EventSource(sseUrl);
       this.sseSource.onopen = () => {
@@ -575,7 +577,16 @@ class RealtimePushService {
         } catch {}
       };
       this.sseSource.onerror = () => {
-        this.setStatus('reconnecting');
+        sseErrorCount++;
+        if (sseErrorCount > 2) {
+          if (this.sseSource) {
+            this.sseSource.close();
+            this.sseSource = null;
+          }
+          this.setStatus('disconnected');
+        } else {
+          this.setStatus('reconnecting');
+        }
       };
     } catch (e) {
       console.warn('[sse] fallback could not connect', e);

@@ -57,6 +57,15 @@ export interface ActionModalData {
   secondaryActionLabel?: string;
   image?: string;
   extraDetails?: { label: string; value: string }[];
+  phone?: string;
+  whatsapp?: string;
+  address?: string;
+  lat?: number;
+  lng?: number;
+  source?: string;
+  verified?: boolean;
+  freshnessLabel?: string;
+  onPrimaryAction?: () => void;
 }
 
 export interface UserLocation {

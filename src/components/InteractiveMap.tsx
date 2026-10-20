@@ -473,6 +473,8 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
           <Marker
             position={[centerLat, centerLng]}
             icon={createUserCenterIcon(centerLabel)}
+            title={`Current Center: ${centerLabel}`}
+            alt={`Current Center: ${centerLabel}`}
           >
             <Popup>
               <div className="p-1 min-w-[160px] text-center">
@@ -520,6 +522,8 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
               key={pin.id}
               position={[pin.lat!, pin.lng!]}
               icon={createCustomPinIcon(pin.color, pin.icon)}
+              title={pin.label || 'Neighborhood Location'}
+              alt={pin.label || 'Neighborhood Location'}
               eventHandlers={{
                 click: () => onPinClick?.(pin),
               }}

@@ -36,6 +36,7 @@ export interface CartDrawerProps {
   onClearCart: () => void;
   currentLocation: UserLocation;
   onNavigateToMap?: () => void;
+  onNavigateToProducts?: () => void;
 }
 
 type CheckoutStep = 'review' | 'address' | 'payment' | 'tracking';
@@ -49,6 +50,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onClearCart,
   currentLocation,
   onNavigateToMap,
+  onNavigateToProducts,
 }) => {
   const [step, setStep] = useState<CheckoutStep>('review');
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
@@ -296,8 +298,11 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     </p>
                     <button
                       type="button"
-                      onClick={onClose}
-                      className="px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition"
+                      onClick={() => {
+                        onClose();
+                        onNavigateToProducts?.();
+                      }}
+                      className="px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition cursor-pointer"
                     >
                       Explore Products
                     </button>

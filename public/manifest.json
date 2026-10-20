@@ -1,0 +1,16 @@
+{
+  "short_name": "MyArea24",
+  "name": "MyArea24 — Local Intelligence Network",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any"
+    }
+  ],
+  "start_url": "./",
+  "background_color": "#F4F6FB",
+  "theme_color": "#4F46E5",
+  "display": "standalone",
+  "orientation": "portrait"
+}

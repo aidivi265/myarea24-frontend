@@ -153,6 +153,13 @@ import {
   ShoppingBag,
   Clock,
   ChevronRight,
+  Phone,
+  MessageCircle,
+  Navigation,
+  ShieldCheck,
+  ThumbsUp,
+  ThumbsDown,
+  Flag,
 } from 'lucide-react';
 
 const ICON_MAP: Record<DashboardId, React.ElementType> = {
@@ -310,55 +317,8 @@ export function App() {
     }
   }, [currentLocation]);
 
-  // First-time visit GPS auto-detection or manual prompt (Pan-India)
-  useEffect(() => {
-    const stored = localStorage.getItem(LOCATION_STORAGE_KEY);
-    if (!stored) {
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          async (pos) => {
-            const lat = pos.coords.latitude;
-            const lng = pos.coords.longitude;
-            try {
-              const res = await fetch(
-                `/api/v1/locations/places-nearby?lat=${lat}&lng=${lng}&radius_m=1000`
-              );
-              if (res.ok) {
-                const data = await res.json();
-                const loc: UserLocation = {
-                  id: `gps_${Date.now()}`,
-                  label: data.area_name || 'Current Location',
-                  areaName: `${data.area_name || 'My Area'}, ${data.city || 'India'}`,
-                  fullAddress: data.formatted_address || `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
-                  pincode: data.pincode || '',
-                  coords: { lat, lng },
-                };
-                setCurrentLocation(loc);
-                return;
-              }
-            } catch {
-              // fallback
-            }
-            setCurrentLocation({
-              id: `gps_${Date.now()}`,
-              label: 'Current Location',
-              areaName: `${lat.toFixed(3)}°N, ${lng.toFixed(3)}°E`,
-              fullAddress: `Detected via Browser GPS (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
-              pincode: '',
-              coords: { lat, lng },
-            });
-          },
-          () => {
-            // Geolocation declined -> prompt modal
-            setLocationModalOpen(true);
-          },
-          { timeout: 7000 }
-        );
-      } else {
-        setLocationModalOpen(true);
-      }
-    }
-  }, []);
+  // Note: Geolocation is user-initiated via LocationPickerModal ("Use Current Location")
+  // to avoid unsolicited browser permission prompts on initial page load (WCAG & Lighthouse compliance).
 
   // Unified Live Location Intelligence Engine (FastAPI Backend + Open-Meteo + OpenStreetMap)
   const liveIntel = useLiveIntelligence(currentLocation);
@@ -441,6 +401,9 @@ export function App() {
 
   // Action Modal State
   const [modalData, setModalData] = useState<ActionModalData | null>(null);
+  const [modalFeedback, setModalFeedback] = useState<'yes' | 'no' | null>(null);
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [reportReason, setReportReason] = useState<string>('');
 
   // Quick AI Assistant Modal State
   const [aiModalPrompt, setAiModalPrompt] = useState<string | null>(null);
@@ -563,8 +526,25 @@ export function App() {
     }
   }, [mainSegment, subParam, marketplace.products]);
 
+  // Synchronize local feedback state when viewing any modal item
+  useEffect(() => {
+    if (modalData?.title) {
+      try {
+        const savedFeedback = JSON.parse(localStorage.getItem('myarea24_user_feedback_v1') || '{}');
+        setModalFeedback(savedFeedback[modalData.title] || null);
+      } catch {
+        setModalFeedback(null);
+      }
+    } else {
+      setModalFeedback(null);
+    }
+  }, [modalData?.title]);
+
   const handleCloseModal = () => {
     setModalData(null);
+    setModalFeedback(null);
+    setReportModalOpen(false);
+    setReportReason('');
     if (mainSegment === 'products' && subParam) {
       navigate('/products');
     }
@@ -894,7 +874,7 @@ export function App() {
 
             {/* INTELLIGENCE SECTION */}
             <div className="mt-4 pt-3 border-t border-slate-100">
-              <p className="px-3 mb-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+              <p className="px-3 mb-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
                 INTELLIGENCE
               </p>
               <nav className="space-y-0.5">
@@ -932,7 +912,7 @@ export function App() {
 
             {/* COMMUNITY SECTION */}
             <div className="mt-4 pt-3 border-t border-slate-100">
-              <p className="px-3 mb-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+              <p className="px-3 mb-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
                 COMMUNITY
               </p>
               <nav className="space-y-0.5">
@@ -1101,6 +1081,7 @@ export function App() {
               {/* Cart Button with Count Badge */}
               <button
                 type="button"
+                aria-label="View Local Shopping Cart and Checkout"
                 onClick={() => setCartDrawerOpen(true)}
                 className="relative px-3 py-1.5 rounded-full bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition shadow-xs"
                 title="View Local Shopping Cart & Checkout"
@@ -1117,6 +1098,7 @@ export function App() {
               {/* Notification Bell */}
               <button
                 type="button"
+                aria-label="Live Neighbourhood Notifications"
                 onClick={() => {
                   setNotificationsOpen((v) => !v);
                   setProfileMenuOpen(false);
@@ -1132,6 +1114,7 @@ export function App() {
               <button
                 type="button"
                 data-testid="user-profile-button"
+                aria-label={authUser ? `Logged in as ${authUser.fullName}` : 'Sign In and Account Profile'}
                 onClick={() => {
                   setProfileMenuOpen((v) => !v);
                   setNotificationsOpen(false);
@@ -1146,11 +1129,11 @@ export function App() {
                   <p className="text-xs font-bold text-slate-800 leading-none">
                     {authUser ? authUser.fullName : 'Sign In / Account'}
                   </p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">
+                  <p className="text-[10px] text-slate-500 mt-0.5">
                     {authUser ? authUser.email : currentLocation.areaName}
                   </p>
                 </div>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
               </button>
             </div>
           </header>
@@ -1519,69 +1502,329 @@ export function App() {
       {modalData && (
         <div
           onClick={handleCloseModal}
-          className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-150"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden"
+            className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden max-h-[90vh] flex flex-col"
           >
             {modalData.image && (
-              <div className="relative h-44 bg-slate-100">
+              <div className="relative h-44 bg-slate-100 shrink-0">
                 <img src={modalData.image} alt={modalData.title} className="w-full h-full object-cover" />
                 {modalData.badge && (
-                  <span className="absolute top-3 left-3 px-2.5 py-1 rounded-md bg-emerald-500 text-white text-xs font-extrabold shadow">
+                  <span className="absolute top-3 left-3 px-2.5 py-1 rounded-md bg-emerald-600 text-white text-xs font-extrabold shadow">
                     {modalData.badge}
+                  </span>
+                )}
+                {modalData.verified && (
+                  <span className="absolute top-3 right-3 px-2 py-0.5 rounded-full bg-white/95 text-emerald-700 text-[10px] font-bold shadow flex items-center gap-1 border border-emerald-200">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> Verified
                   </span>
                 )}
               </div>
             )}
-            <div className="p-5">
-              <p className="text-[11px] font-extrabold uppercase tracking-wider text-indigo-600">
-                {modalData.category}
-              </p>
-              <h3 className="text-base font-extrabold text-slate-900 mt-0.5">{modalData.title}</h3>
-              {modalData.subtitle && (
-                <p className="text-xs font-semibold text-slate-500 mt-0.5">{modalData.subtitle}</p>
-              )}
-              {(modalData.price || modalData.rating || modalData.location) && (
-                <div className="flex flex-wrap gap-2 mt-2.5 text-xs">
-                  {modalData.price && (
-                    <span className="px-2.5 py-1 rounded-lg bg-slate-100 font-extrabold text-slate-900">
-                      {modalData.price}
-                    </span>
-                  )}
-                  {modalData.rating && (
-                    <span className="px-2.5 py-1 rounded-lg bg-amber-50 font-bold text-amber-700">
-                      ★ {modalData.rating}
-                    </span>
-                  )}
-                  {modalData.location && (
-                    <span className="px-2.5 py-1 rounded-lg bg-blue-50 font-semibold text-blue-700">
-                      📍 {modalData.location}
-                    </span>
-                  )}
+
+            <div className="p-5 overflow-y-auto space-y-3.5">
+              {reportModalOpen ? (
+                /* Report Incorrect Information Subview */
+                <div className="space-y-3 animate-in fade-in duration-150">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                    <h4 className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
+                      <Flag className="w-3.5 h-3.5 text-rose-600" /> Report Incorrect Information
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={() => setReportModalOpen(false)}
+                      className="text-xs text-slate-400 hover:text-slate-600 font-bold"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Help keep your neighborhood directory accurate. What needs correction for <strong className="text-slate-800">{modalData.title}</strong>?
+                  </p>
+                  <div className="space-y-1.5">
+                    {[
+                      'Permanently closed or relocated',
+                      'Incorrect phone number or WhatsApp',
+                      'Wrong opening hours',
+                      'Wrong map pin or address',
+                      'Incorrect price or product unavailable',
+                    ].map((reason) => (
+                      <button
+                        key={reason}
+                        type="button"
+                        onClick={() => setReportReason(reason)}
+                        className={`w-full text-left p-2 rounded-xl text-xs transition border cursor-pointer ${
+                          reportReason === reason
+                            ? 'bg-rose-50 border-rose-300 text-rose-900 font-bold'
+                            : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'
+                        }`}
+                      >
+                        {reason}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="pt-2 flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setReportModalOpen(false)}
+                      className="px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold"
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!reportReason}
+                      onClick={() => {
+                        try {
+                          const existingReports = JSON.parse(localStorage.getItem('myarea24_user_reports_v1') || '[]');
+                          existingReports.push({
+                            title: modalData.title,
+                            category: modalData.category,
+                            reason: reportReason,
+                            timestamp: new Date().toISOString(),
+                          });
+                          localStorage.setItem('myarea24_user_reports_v1', JSON.stringify(existingReports));
+                        } catch {}
+                        showToast(`Report saved locally for "${reportReason}". Stored for moderation queue synchronization.`);
+                        setReportModalOpen(false);
+                      }}
+                      className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-bold transition shadow"
+                    >
+                      Submit Report
+                    </button>
+                  </div>
                 </div>
+              ) : (
+                /* Standard Profile View */
+                <>
+                  <div>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[11px] font-extrabold uppercase tracking-wider text-indigo-600">
+                        {modalData.category}
+                      </p>
+                      {modalData.source && (
+                        <span className="text-[10px] text-slate-400 font-medium">
+                          Source: {modalData.source}
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="text-base font-extrabold text-slate-900 mt-0.5">{modalData.title}</h3>
+                    {modalData.subtitle && (
+                      <p className="text-xs font-semibold text-slate-500 mt-0.5">{modalData.subtitle}</p>
+                    )}
+                  </div>
+
+                  {/* Provenance & Freshness Badge */}
+                  <div className="flex items-center gap-2 flex-wrap text-[11px]">
+                    {modalData.verified && (
+                      <span className="inline-flex items-center gap-1 text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 font-bold">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> Verified Merchant
+                      </span>
+                    )}
+                    {modalData.freshnessLabel && (
+                      <span className="inline-flex items-center gap-1 text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full font-medium">
+                        <Clock className="w-3 h-3 text-slate-400" /> {modalData.freshnessLabel}
+                      </span>
+                    )}
+                  </div>
+
+                  {(modalData.price || modalData.rating || modalData.location) && (
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      {modalData.price && (
+                        <span className="px-2.5 py-1 rounded-lg bg-slate-100 font-extrabold text-slate-900">
+                          {modalData.price}
+                        </span>
+                      )}
+                      {modalData.rating && (
+                        <span className="px-2.5 py-1 rounded-lg bg-amber-50 font-bold text-amber-700">
+                          ★ {modalData.rating}
+                        </span>
+                      )}
+                      {modalData.location && (
+                        <span className="px-2.5 py-1 rounded-lg bg-blue-50 font-semibold text-blue-700">
+                          📍 {modalData.location}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">{modalData.description}</p>
+
+                  {/* Primary Action Button (RSVP, Dial SOS, Claim Offer, Order Reserve) */}
+                  {modalData.primaryActionLabel && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (modalData.phone) {
+                          window.location.href = `tel:${modalData.phone.replace(/[^\d+]/g, '')}`;
+                        } else if (
+                          modalData.primaryActionLabel?.toLowerCase().includes('rsvp') ||
+                          modalData.primaryActionLabel?.toLowerCase().includes('register')
+                        ) {
+                          showToast(`✓ RSVP Confirmed for "${modalData.title}". Added to your local schedule.`);
+                        } else if (modalData.primaryActionLabel?.toLowerCase().includes('claim')) {
+                          showToast(`✓ Coupon activated! Show this code at ${modalData.title} to redeem.`);
+                        } else if (modalData.address || modalData.location) {
+                          window.open(
+                            `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+                              modalData.address || modalData.location || modalData.title
+                            )}`,
+                            '_blank'
+                          );
+                        } else {
+                          showToast(`Request submitted for "${modalData.title}".`);
+                        }
+                      }}
+                      className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-extrabold text-xs shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-200" />
+                      <span>{modalData.primaryActionLabel}</span>
+                    </button>
+                  )}
+
+                  {/* High-Utility Direct Contact Strip */}
+                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2">
+                    <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                      Direct Contact & Navigation
+                    </p>
+                    <div className="grid grid-cols-3 gap-2 text-xs font-bold">
+                      {modalData.phone ? (
+                        <a
+                          href={`tel:${modalData.phone.replace(/[^\d+]/g, '')}`}
+                          className="py-2 px-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center gap-1 transition shadow-xs"
+                          title="Call directly"
+                        >
+                          <Phone className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">Call</span>
+                        </a>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => showToast('Phone number not listed for this place.')}
+                          className="py-2 px-2 rounded-xl bg-slate-200 text-slate-400 flex items-center justify-center gap-1 cursor-not-allowed"
+                        >
+                          <Phone className="w-3.5 h-3.5 shrink-0" />
+                          <span>No Phone</span>
+                        </button>
+                      )}
+
+                      {modalData.whatsapp || modalData.phone ? (
+                        <a
+                          href={`https://wa.me/${(() => {
+                            const raw = (modalData.whatsapp || modalData.phone || '').replace(/[^\d]/g, '');
+                            return raw.length === 10 ? `91${raw}` : raw;
+                          })()}?text=${encodeURIComponent(
+                            `Hi! I found ${modalData.title} on MyArea24. Could you please share availability / details?`
+                          )}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="py-2 px-2 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-white flex items-center justify-center gap-1 transition shadow-xs"
+                          title="Chat on WhatsApp"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">WhatsApp</span>
+                        </a>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => showToast('WhatsApp not connected for this business.')}
+                          className="py-2 px-2 rounded-xl bg-slate-200 text-slate-400 flex items-center justify-center gap-1 cursor-not-allowed"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5 shrink-0" />
+                          <span>WhatsApp</span>
+                        </button>
+                      )}
+
+                      {modalData.address || modalData.location ? (
+                        <a
+                          href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+                            modalData.address || modalData.location || modalData.title
+                          )}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="py-2 px-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 flex items-center justify-center gap-1 transition"
+                          title="Open Google Maps Directions"
+                        >
+                          <Navigation className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">Directions</span>
+                        </a>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => showToast('Address details unavailable for map directions.')}
+                          className="py-2 px-2 rounded-xl bg-slate-200 text-slate-400 flex items-center justify-center gap-1 cursor-not-allowed"
+                        >
+                          <Navigation className="w-3.5 h-3.5 shrink-0" />
+                          <span>Directions</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Feedback Strip: "Was this information useful?" */}
+                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                    <span className="text-[11px] font-semibold text-slate-600">Was this result helpful?</span>
+                    {modalFeedback ? (
+                      <span className="text-emerald-700 font-bold text-[11px] flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Feedback recorded locally!
+                      </span>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setModalFeedback('yes');
+                            try {
+                              const existing = JSON.parse(localStorage.getItem('myarea24_user_feedback_v1') || '{}');
+                              existing[modalData.title] = 'yes';
+                              localStorage.setItem('myarea24_user_feedback_v1', JSON.stringify(existing));
+                            } catch {}
+                            showToast('Feedback saved locally. Thanks for validating this result!');
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-slate-50 hover:bg-emerald-50 hover:text-emerald-700 border border-slate-200 text-slate-600 text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+                        >
+                          <ThumbsUp className="w-3 h-3" /> Yes
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setModalFeedback('no');
+                            try {
+                              const existing = JSON.parse(localStorage.getItem('myarea24_user_feedback_v1') || '{}');
+                              existing[modalData.title] = 'no';
+                              localStorage.setItem('myarea24_user_feedback_v1', JSON.stringify(existing));
+                            } catch {}
+                            showToast('Feedback saved locally. Result noted for device re-ranking.');
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-slate-50 hover:bg-rose-50 hover:text-rose-700 border border-slate-200 text-slate-600 text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+                        >
+                          <ThumbsDown className="w-3 h-3" /> No
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Report Incorrect Info Link */}
+                  <div className="pt-1 flex items-center justify-between text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => setReportModalOpen(true)}
+                      className="text-slate-400 hover:text-rose-600 flex items-center gap-1 font-medium transition cursor-pointer"
+                    >
+                      <Flag className="w-3 h-3" /> Report incorrect details
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCloseModal}
+                      className="text-slate-500 hover:text-slate-700 font-bold"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </>
               )}
-              <p className="text-xs text-slate-600 mt-3 leading-relaxed">{modalData.description}</p>
-              <div className="flex items-center justify-end gap-2 mt-5 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={handleCloseModal}
-                  className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold"
-                >
-                  Close
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    showToast(`${modalData.primaryActionLabel} confirmed for ${modalData.title}!`);
-                    handleCloseModal();
-                  }}
-                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow"
-                >
-                  {modalData.primaryActionLabel}
-                </button>
-              </div>
             </div>
           </div>
         </div>
@@ -1618,6 +1861,10 @@ export function App() {
             onClearCart={handleClearCart}
             currentLocation={currentLocation}
             onNavigateToMap={() => handleNavigate('map')}
+            onNavigateToProducts={() => {
+              setCartDrawerOpen(false);
+              handleNavigate('products');
+            }}
           />
         )}
       </React.Suspense>

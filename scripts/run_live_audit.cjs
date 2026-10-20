@@ -21,7 +21,7 @@ async function runLiveAudit() {
   });
 
   const page = await browser.newPage();
-  
+
   const consoleErrors = [];
   const consoleWarnings = [];
   const networkErrors = [];
@@ -152,11 +152,11 @@ async function runLiveAudit() {
   await testStep('MERCHANT-001', 'Merchant Portal Access', 'Open Profile dropdown and click Switch to Merchant Portal', async () => {
     await page.goto(LIVE_URL, { waitUntil: 'domcontentloaded', timeout: 20000 });
     await new Promise((resolve) => setTimeout(resolve, 1500));
-    
+
     // Look for user profile button or dropdown and click it
     const profileOpened = await page.evaluate(() => {
-      const btn = document.querySelector('[data-testid="user-profile-button"]') || 
-                  Array.from(document.querySelectorAll('button')).find(b => 
+      const btn = document.querySelector('[data-testid="user-profile-button"]') ||
+                  Array.from(document.querySelectorAll('button')).find(b =>
                     b.innerHTML.includes('rounded-full') && (b.innerText.includes('Alex') || b.querySelector('svg'))
                   );
       if (btn) {
@@ -171,7 +171,7 @@ async function runLiveAudit() {
     // Look for Switch to Merchant button in dropdown
     const clickedMerchant = await page.evaluate(() => {
       const btn = document.querySelector('[data-testid="switch-to-merchant-button"]') ||
-                  Array.from(document.querySelectorAll('button')).find(b => 
+                  Array.from(document.querySelectorAll('button')).find(b =>
                     b.innerText.includes('Switch to Merchant') || b.innerText.includes('Register as Merchant')
                   );
       if (btn) {
@@ -205,7 +205,7 @@ async function runLiveAudit() {
     await page.setViewport({ width: vp.width, height: vp.height });
     await page.goto(LIVE_URL, { waitUntil: 'domcontentloaded', timeout: 20000 });
     await new Promise((resolve) => setTimeout(resolve, 800));
-    
+
     // Check horizontal scrollbar
     const overflow = await page.evaluate(() => {
       return document.documentElement.scrollWidth > window.innerWidth;
