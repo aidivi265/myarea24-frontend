@@ -3,18 +3,19 @@ import hashlib
 import hmac
 import os
 import random
+import secrets
 import string
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
-from backend.app.api.deps import get_current_user_optional
+from backend.app.api.deps import get_current_user_optional, get_current_user
 from backend.app.core.config import settings
 from backend.app.core.logging import logger
 from backend.app.core.websocket_manager import ws_manager
-from backend.app.database.models import Order, OrderItem, Product, ServiceBooking, User
+from backend.app.database.models import Order, OrderItem, Product, ServiceBooking, User, Business
 from backend.app.database.session import get_db
 
 router = APIRouter(prefix="/api/v1", tags=["E-Commerce Orders & Service Bookings"])
@@ -63,6 +64,7 @@ class PaymentVerificationRequest(BaseModel):
     razorpay_payment_id: Optional[str] = None
     razorpay_order_id: Optional[str] = None
     razorpay_signature: Optional[str] = None
+    amount: Optional[float] = None
 
 
 class ServiceBookingCreateRequest(BaseModel):
@@ -121,6 +123,9 @@ async def create_order(
     # Determine initial payment status
     payment_status = "cod" if req.payment_method == "cod" else "pending"
 
+    # Cryptographic tracking token for secure guest access without exposing private data
+    guest_tracking_token = secrets.token_urlsafe(24)
+
     order = Order(
         order_number=order_num,
         user_id=current_user.id if current_user else None,
@@ -134,6 +139,7 @@ async def create_order(
         final_payable=round(final_payable, 2),
         payment_method=req.payment_method,
         payment_status=payment_status,
+        tracking_token=guest_tracking_token,
         customer_name=req.customer_name,
         customer_phone=req.customer_phone,
         delivery_address=req.delivery_address,
@@ -149,6 +155,22 @@ async def create_order(
 
     order_items_list = []
     for item in req.items:
+        # Inventory stock validation & transactional decrement
+        if item.product_id:
+            db_prod = db.query(Product).filter(Product.id == item.product_id).first()
+            if db_prod and db_prod.stock_quantity is not None:
+                if db_prod.stock_quantity < item.quantity:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Insufficient inventory for '{db_prod.name}'. Only {db_prod.stock_quantity} available, but {item.quantity} requested.",
+                    )
+                db_prod.stock_quantity = max(0, db_prod.stock_quantity - item.quantity)
+                if db_prod.stock_quantity == 0:
+                    db_prod.availability_status = "out_of_stock"
+                elif db_prod.stock_quantity < 5:
+                    db_prod.availability_status = "low_stock"
+                db_prod.updated_at = datetime.datetime.utcnow()
+
         oi = OrderItem(
             order_id=order.id,
             product_id=item.product_id,
@@ -161,20 +183,6 @@ async def create_order(
         )
         db.add(oi)
         order_items_list.append(oi)
-
-        # Inventory stock decrement & status update
-        if item.product_id:
-            try:
-                db_prod = db.query(Product).filter(Product.id == item.product_id).first()
-                if db_prod and db_prod.stock_quantity is not None:
-                    db_prod.stock_quantity = max(0, db_prod.stock_quantity - item.quantity)
-                    if db_prod.stock_quantity == 0:
-                        db_prod.availability_status = "out_of_stock"
-                    elif db_prod.stock_quantity < 5:
-                        db_prod.availability_status = "low_stock"
-                    db_prod.updated_at = datetime.datetime.utcnow()
-            except Exception as e:
-                logger.warning(f"[inventory] Failed to decrement stock for product {item.product_id}: {e}")
 
     db.commit()
     db.refresh(order)
@@ -243,6 +251,7 @@ async def create_order(
             "final_payable": order.final_payable,
             "payment_method": order.payment_method,
             "payment_status": order.payment_status,
+            "tracking_token": order.tracking_token,
             "customer_name": order.customer_name,
             "customer_phone": order.customer_phone,
             "delivery_address": order.delivery_address,
@@ -263,17 +272,46 @@ async def create_order(
 
 @router.get("/orders")
 def list_orders(
-    phone: Optional[str] = Query(None),
     status_filter: Optional[str] = Query(None, alias="status"),
     limit: int = Query(20, le=100),
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user_optional),
 ):
+    """
+    Retrieves orders strictly scoped to the authenticated caller.
+    Unauthenticated callers receive an empty list to prevent user account enumeration
+    and arbitrary phone data harvesting.
+    """
+    if not current_user:
+        return {
+            "status": "success",
+            "count": 0,
+            "orders": [],
+            "message": "Authentication required to access order history. Please sign in to view your orders.",
+        }
+
     query = db.query(Order)
-    if current_user:
-        query = query.filter((Order.user_id == current_user.id) | (Order.customer_phone == current_user.phone))
-    elif phone:
-        query = query.filter(Order.customer_phone == phone)
+    if current_user.role == "admin":
+        pass  # Platform administrator can inspect orders
+    elif current_user.role == "merchant":
+        merchant_biz_ids = [b[0] for b in db.query(Business.id).filter(Business.owner_id == current_user.id).all()]
+        if merchant_biz_ids:
+            query = query.filter(
+                (Order.user_id == current_user.id)
+                | (current_user.phone and Order.customer_phone == current_user.phone)
+                | (Order.business_id.in_(merchant_biz_ids))
+            )
+        else:
+            query = query.filter(
+                (Order.user_id == current_user.id)
+                | (current_user.phone and Order.customer_phone == current_user.phone)
+            )
+    else:
+        # Resident can only view their own authenticated orders
+        query = query.filter(
+            (Order.user_id == current_user.id)
+            | (current_user.phone and Order.customer_phone == current_user.phone)
+        )
 
     if status_filter:
         query = query.filter(Order.status == status_filter)
@@ -289,12 +327,19 @@ def list_orders(
                 "order_number": o.order_number,
                 "business_name": o.business_name,
                 "status": o.status,
+                "total_amount": o.total_amount,
+                "delivery_fee": o.delivery_fee,
+                "platform_fee": o.platform_fee,
+                "discount_amount": o.discount_amount,
                 "final_payable": o.final_payable,
                 "payment_method": o.payment_method,
                 "payment_status": o.payment_status,
+                "transaction_id": o.transaction_id,
                 "customer_name": o.customer_name,
                 "customer_phone": o.customer_phone,
                 "delivery_address": o.delivery_address,
+                "delivery_landmark": o.delivery_landmark,
+                "delivery_pincode": o.delivery_pincode,
                 "estimated_delivery_mins": o.estimated_delivery_mins,
                 "created_at": o.created_at.isoformat(),
                 "items_count": len(o.items),
@@ -316,7 +361,21 @@ def list_orders(
 
 
 @router.get("/orders/{order_identifier}")
-def get_order_details(order_identifier: str, db: Session = Depends(get_db)):
+def get_order_details(
+    order_identifier: str,
+    token: Optional[str] = Query(None, description="Cryptographic tracking token issued at checkout"),
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """
+    Retrieves full details of a single order.
+    Enforces authorization:
+      - Authenticated customer owner (user_id / verified phone)
+      - Store merchant owner (owns order.business_id)
+      - Platform administrator (role == 'admin')
+      - Guest with verified cryptographic tracking token issued at checkout.
+    Arbitrary unverified phone numbers are strictly rejected.
+    """
     if order_identifier.isdigit():
         order = db.query(Order).filter(Order.id == int(order_identifier)).first()
     else:
@@ -324,6 +383,30 @@ def get_order_details(order_identifier: str, db: Session = Depends(get_db)):
 
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
+
+    # Authorization Check
+    authorized = False
+    if current_user:
+        if current_user.role == "admin":
+            authorized = True
+        elif order.user_id == current_user.id:
+            authorized = True
+        elif current_user.phone and order.customer_phone and current_user.phone.endswith(order.customer_phone[-10:]):
+            authorized = True
+        elif order.business_id:
+            biz = db.query(Business).filter(Business.id == order.business_id).first()
+            if biz and biz.owner_id == current_user.id:
+                authorized = True
+    elif token and order.tracking_token:
+        # Secure cryptographic guest tracking token comparison
+        if secrets.compare_digest(order.tracking_token, token.strip()):
+            authorized = True
+
+    if not authorized:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Authentication or valid cryptographic order tracking token required.",
+        )
 
     # Dynamic status lifecycle description
     status_descriptions = {
@@ -349,6 +432,7 @@ def get_order_details(order_identifier: str, db: Session = Depends(get_db)):
             "final_payable": order.final_payable,
             "payment_method": order.payment_method,
             "payment_status": order.payment_status,
+            "transaction_id": order.transaction_id,
             "customer_name": order.customer_name,
             "customer_phone": order.customer_phone,
             "delivery_address": order.delivery_address,
@@ -379,7 +463,20 @@ async def update_order_status(
     order_identifier: str,
     payload: OrderStatusUpdateRequest,
     db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
 ):
+    """
+    Updates the lifecycle status of an order.
+    Enforces authorization:
+      - Admins & store merchants can update to confirmed, out_for_delivery, delivered, cancelled.
+      - Customers can only cancel their own order while it is in 'placed' state.
+    """
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required to modify order status.",
+        )
+
     if order_identifier.isdigit():
         order = db.query(Order).filter(Order.id == int(order_identifier)).first()
     else:
@@ -391,6 +488,50 @@ async def update_order_status(
     valid_statuses = ["placed", "confirmed", "out_for_delivery", "delivered", "cancelled"]
     if payload.status not in valid_statuses:
         raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of {valid_statuses}")
+
+    # Determine caller permissions
+    is_admin = current_user.role == "admin"
+    is_merchant = False
+    if order.business_id:
+        biz = db.query(Business).filter(Business.id == order.business_id).first()
+        if biz and biz.owner_id == current_user.id:
+            is_merchant = True
+
+    is_customer = (
+        order.user_id == current_user.id
+        or (current_user.phone and order.customer_phone and current_user.phone.endswith(order.customer_phone[-10:]))
+    )
+
+    if not (is_admin or is_merchant or is_customer):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: You do not have permission to modify this order.",
+        )
+
+    # Terminal state checks
+    if order.status == "cancelled":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot modify an order that is already cancelled.",
+        )
+    if order.status == "delivered" and payload.status != "delivered":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot modify a delivered order.",
+        )
+
+    # If customer is modifying, they can ONLY cancel an order that is still in 'placed' stage
+    if is_customer and not (is_admin or is_merchant):
+        if payload.status != "cancelled":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Customers can only cancel orders.",
+            )
+        if order.status not in ("placed",):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot cancel order: Order is already in progress or completed.",
+            )
 
     old_status = order.status
     order.status = payload.status
@@ -451,6 +592,13 @@ async def verify_payment(
     payload: PaymentVerificationRequest,
     db: Session = Depends(get_db),
 ):
+    """
+    Verifies payment for an order and transitions payment_status to 'paid'.
+    Enforces:
+      - Rejection of payments on cancelled orders.
+      - Idempotent handling for re-submitted transactions.
+      - Cryptographic HMAC-SHA256 signature verification for Razorpay.
+    """
     if order_identifier.isdigit():
         order = db.query(Order).filter(Order.id == int(order_identifier)).first()
     else:
@@ -459,10 +607,59 @@ async def verify_payment(
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
+    if order.status == "cancelled":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot verify payment for a cancelled order.",
+        )
+
+    # Validate amount if provided in payload to prevent underpayment exploits
+    if payload.amount is not None:
+        if abs(payload.amount - order.final_payable) > 0.05:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Amount mismatch. Expected ₹{order.final_payable:.2f}, received ₹{payload.amount:.2f}.",
+            )
+
+    incoming_txn = (
+        payload.transaction_id
+        or payload.upi_ref_id
+        or payload.razorpay_payment_id
+        or f"TXN_{int(datetime.datetime.utcnow().timestamp())}"
+    )
+
+    # Idempotency check: if order is already paid with this transaction ID
+    if order.payment_status == "paid":
+        if order.transaction_id and order.transaction_id == incoming_txn:
+            return {
+                "status": "success",
+                "message": "Payment already verified (idempotent confirmation).",
+                "transaction_id": order.transaction_id,
+                "order_number": order.order_number,
+                "order_status": order.status,
+            }
+        elif order.transaction_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Order has already been paid and settled with a different transaction ID.",
+            )
+
     # Cryptographic HMAC-SHA256 signature verification for Razorpay
-    if payload.payment_method == "razorpay" and payload.razorpay_signature:
+    if payload.payment_method == "razorpay":
         razorpay_secret = settings.RAZORPAY_KEY_SECRET or os.getenv("RAZORPAY_KEY_SECRET", "")
-        if razorpay_secret:
+        if not razorpay_secret:
+            if settings.APP_ENV in ("production", "prod", "staging"):
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Razorpay gateway secret is not configured on server.",
+                )
+            logger.warning("[razorpay] RAZORPAY_KEY_SECRET is unset; skipping signature check in development mode.")
+        else:
+            if not payload.razorpay_signature:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Cryptographic razorpay_signature is required when Razorpay gateway is configured.",
+                )
             order_id_to_check = payload.razorpay_order_id or f"rzp_order_{order.order_number.replace('-', '_')}"
             payment_id_to_check = payload.razorpay_payment_id or payload.transaction_id or ""
             expected_payload = f"{order_id_to_check}|{payment_id_to_check}".encode("utf-8")
@@ -477,9 +674,8 @@ async def verify_payment(
                     detail="Cryptographic payment signature verification failed. Untrusted payload.",
                 )
 
-    txn_id = payload.transaction_id or payload.upi_ref_id or payload.razorpay_payment_id or f"TXN_{int(datetime.datetime.utcnow().timestamp())}"
     order.payment_status = "paid"
-    order.transaction_id = txn_id
+    order.transaction_id = incoming_txn
     order.status = "confirmed"  # Auto advance to confirmed once paid
     order.updated_at = datetime.datetime.utcnow()
 
@@ -493,7 +689,7 @@ async def verify_payment(
             "order_number": order.order_number,
             "status": order.status,
             "payment_status": order.payment_status,
-            "transaction_id": txn_id,
+            "transaction_id": incoming_txn,
             "updated_at": order.updated_at.isoformat(),
         }
         await ws_manager.broadcast_order_update(order.order_number, order.status, status_msg)
@@ -505,10 +701,162 @@ async def verify_payment(
     return {
         "status": "success",
         "message": "Payment verified successfully!",
-        "transaction_id": txn_id,
+        "transaction_id": incoming_txn,
         "order_number": order.order_number,
         "order_status": order.status,
     }
+
+
+@router.post("/orders/webhook/razorpay")
+async def razorpay_webhook(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """
+    Direct server-to-server webhook from Razorpay for payment status synchronization.
+    Verifies raw body signature using configured RAZORPAY_KEY_SECRET.
+    """
+    raw_body = await request.body()
+    received_signature = request.headers.get("X-Razorpay-Signature")
+
+    razorpay_secret = settings.RAZORPAY_KEY_SECRET or os.getenv("RAZORPAY_KEY_SECRET", "")
+    if not razorpay_secret and settings.APP_ENV in ("production", "prod", "staging"):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Razorpay webhook secret is not configured on server.",
+        )
+    if razorpay_secret:
+        if not received_signature:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Missing X-Razorpay-Signature header.",
+            )
+        computed_sig = hmac.new(
+            razorpay_secret.encode("utf-8"),
+            raw_body,
+            hashlib.sha256,
+        ).hexdigest()
+        if not hmac.compare_digest(computed_sig, received_signature):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid webhook signature.",
+            )
+
+    try:
+        import json as _json
+        event_payload = _json.loads(raw_body.decode("utf-8"))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload in webhook body.")
+
+    event_type = event_payload.get("event", "")
+    payment_entity = event_payload.get("payload", {}).get("payment", {}).get("entity", {})
+    refund_entity = event_payload.get("payload", {}).get("refund", {}).get("entity", {})
+    order_id = payment_entity.get("order_id", "")
+    payment_id = payment_entity.get("id", "") or refund_entity.get("payment_id", "")
+    notes = payment_entity.get("notes", {}) or refund_entity.get("notes", {})
+    order_number = notes.get("order_number") or notes.get("tr")
+
+    if not order_number and order_id and order_id.startswith("rzp_order_MA24_ORD_"):
+        order_number = order_id.replace("rzp_order_", "").replace("_", "-")
+
+    order = None
+    if order_number:
+        order = db.query(Order).filter(Order.order_number == order_number).first()
+    elif payment_id:
+        order = db.query(Order).filter(Order.transaction_id == payment_id).first()
+
+    if order:
+        if event_type in ("payment.captured", "order.paid"):
+            # Currency validation: only INR is accepted
+            currency = payment_entity.get("currency")
+            if currency and currency.upper() != "INR":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Unsupported currency '{currency}'. Only INR transactions are accepted.",
+                )
+
+            # Idempotent duplicate event check
+            if order.payment_status == "paid":
+                if order.transaction_id == payment_id:
+                    return {"status": "ok", "message": "Duplicate payment event ignored (idempotent)."}
+                else:
+                    logger.warning(
+                        f"[webhook] Payment ID conflict for order {order.order_number}: "
+                        f"existing={order.transaction_id}, incoming={payment_id}"
+                    )
+                    return {"status": "ignored", "detail": "Order already settled with another payment ID."}
+
+            # Underpayment protection: Razorpay reports amount in paise
+            paid_amount_paise = payment_entity.get("amount")
+            if paid_amount_paise is not None:
+                expected_paise = int(round(order.final_payable * 100))
+                if abs(paid_amount_paise - expected_paise) > 5:
+                    logger.warning(
+                        f"[webhook] Amount mismatch on order {order.order_number}: "
+                        f"expected {expected_paise} paise, received {paid_amount_paise} paise."
+                    )
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Paid amount mismatch against order final payable.",
+                    )
+
+            # Check if order was already cancelled before webhook arrived
+            if order.status == "cancelled":
+                order.payment_status = "refund_pending"
+                order.notes = (order.notes or "") + f" [Webhook: payment captured after cancellation, refund pending for {payment_id}]"
+                order.updated_at = datetime.datetime.utcnow()
+                db.commit()
+            else:
+                order.payment_status = "paid"
+                order.transaction_id = payment_id or order.transaction_id
+                order.status = "confirmed"
+                order.updated_at = datetime.datetime.utcnow()
+                db.commit()
+
+                # Broadcast
+                try:
+                    status_msg = {
+                        "type": "ORDER_STATUS_UPDATE",
+                        "order_number": order.order_number,
+                        "status": order.status,
+                        "payment_status": "paid",
+                        "transaction_id": order.transaction_id,
+                        "updated_at": order.updated_at.isoformat(),
+                    }
+                    await ws_manager.broadcast_order_update(order.order_number, order.status, status_msg)
+                except Exception:
+                    pass
+
+        elif event_type == "payment.failed":
+            if order.payment_status != "paid":
+                order.payment_status = "failed"
+                order.updated_at = datetime.datetime.utcnow()
+                db.commit()
+
+        elif event_type in ("refund.processed", "refund.created"):
+            refund_id_str = refund_entity.get("id", "REFUND")
+            refund_amount_paise = refund_entity.get("amount", 0)
+            order.payment_status = "refunded"
+            if order.status != "cancelled":
+                order.status = "cancelled"
+            order.notes = (order.notes or "") + f" [Refund: {refund_id_str} processed for ₹{refund_amount_paise / 100:.2f}]"
+            order.updated_at = datetime.datetime.utcnow()
+            db.commit()
+
+            try:
+                status_msg = {
+                    "type": "ORDER_STATUS_UPDATE",
+                    "order_number": order.order_number,
+                    "status": order.status,
+                    "payment_status": "refunded",
+                    "transaction_id": order.transaction_id,
+                    "updated_at": order.updated_at.isoformat(),
+                }
+                await ws_manager.broadcast_order_update(order.order_number, order.status, status_msg)
+            except Exception:
+                pass
+
+    return {"status": "ok", "event": event_type}
 
 
 # ---------------------------------------------------------
@@ -585,16 +933,38 @@ async def create_service_booking(
 
 @router.get("/services/bookings")
 def list_service_bookings(
-    phone: Optional[str] = Query(None),
     limit: int = Query(20, le=100),
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user_optional),
 ):
+    """
+    Retrieves service bookings strictly scoped to the authenticated caller.
+    Unauthenticated callers receive an empty list to prevent user account enumeration
+    and arbitrary phone data harvesting.
+    """
+    if not current_user:
+        return {
+            "status": "success",
+            "count": 0,
+            "bookings": [],
+            "message": "Authentication required to access service bookings. Please sign in.",
+        }
+
     query = db.query(ServiceBooking)
-    if current_user:
-        query = query.filter((ServiceBooking.user_id == current_user.id) | (ServiceBooking.customer_phone == current_user.phone))
-    elif phone:
-        query = query.filter(ServiceBooking.customer_phone == phone)
+    if current_user.role == "admin":
+        pass  # Platform administrator can inspect all bookings
+    elif current_user.role in ("merchant", "provider"):
+        query = query.filter(
+            (ServiceBooking.user_id == current_user.id)
+            | (current_user.phone and ServiceBooking.customer_phone == current_user.phone)
+            | (current_user.phone and ServiceBooking.provider_phone == current_user.phone)
+        )
+    else:
+        # Resident customer can only view their own bookings
+        query = query.filter(
+            (ServiceBooking.user_id == current_user.id)
+            | (current_user.phone and ServiceBooking.customer_phone == current_user.phone)
+        )
 
     bookings = query.order_by(desc(ServiceBooking.created_at)).limit(limit).all()
 
@@ -624,12 +994,83 @@ def list_service_bookings(
     }
 
 
+@router.get("/services/bookings/{booking_identifier}")
+def get_service_booking_details(
+    booking_identifier: str,
+    otp: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """
+    Retrieves details for a specific service booking.
+    Access is authorized only if:
+      - Authenticated user is the customer, assigned provider, or an admin.
+      - OR unauthenticated guest presents the secret booking verification OTP.
+    """
+    if booking_identifier.isdigit():
+        booking = db.query(ServiceBooking).filter(ServiceBooking.id == int(booking_identifier)).first()
+    else:
+        booking = db.query(ServiceBooking).filter(ServiceBooking.booking_number == booking_identifier).first()
+
+    if not booking:
+        raise HTTPException(status_code=404, detail="Service booking not found")
+
+    authorized = False
+    if current_user:
+        if current_user.role == "admin":
+            authorized = True
+        elif booking.user_id == current_user.id or (current_user.phone and booking.customer_phone == current_user.phone):
+            authorized = True
+        elif current_user.role in ("merchant", "provider") and (current_user.phone and booking.provider_phone == current_user.phone):
+            authorized = True
+    elif otp and booking.otp_code:
+        if secrets.compare_digest(booking.otp_code.strip(), otp.strip()):
+            authorized = True
+
+    if not authorized:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Authentication or valid booking verification OTP required.",
+        )
+
+    return {
+        "status": "success",
+        "booking": {
+            "id": booking.id,
+            "booking_number": booking.booking_number,
+            "service_title": booking.service_title,
+            "category": booking.category,
+            "provider_name": booking.provider_name,
+            "provider_phone": booking.provider_phone,
+            "customer_name": booking.customer_name,
+            "customer_phone": booking.customer_phone,
+            "service_address": booking.service_address,
+            "scheduled_date": booking.scheduled_date,
+            "scheduled_slot": booking.scheduled_slot,
+            "status": booking.status,
+            "estimated_cost": booking.estimated_cost,
+            "payment_status": booking.payment_status,
+            "otp_code": booking.otp_code,
+            "notes": booking.notes,
+            "created_at": booking.created_at.isoformat(),
+            "updated_at": booking.updated_at.isoformat(),
+        },
+    }
+
+
 @router.patch("/services/bookings/{booking_identifier}/status")
 async def update_service_booking_status(
     booking_identifier: str,
     payload: ServiceBookingStatusUpdateRequest,
     db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
 ):
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required to modify service booking status.",
+        )
+
     if booking_identifier.isdigit():
         booking = db.query(ServiceBooking).filter(ServiceBooking.id == int(booking_identifier)).first()
     else:
@@ -641,6 +1082,33 @@ async def update_service_booking_status(
     valid_statuses = ["requested", "confirmed", "in_progress", "completed", "cancelled"]
     if payload.status not in valid_statuses:
         raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of {valid_statuses}")
+
+    # Determine caller permissions
+    is_admin = current_user.role == "admin"
+    is_customer = (
+        booking.user_id == current_user.id
+        or (current_user.phone and booking.customer_phone and current_user.phone.endswith(booking.customer_phone[-10:]))
+    )
+    is_provider = current_user.role in ("merchant", "provider")
+
+    if not (is_admin or is_customer or is_provider):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: You do not have permission to modify this booking.",
+        )
+
+    # Customer can only cancel
+    if is_customer and not (is_admin or is_provider):
+        if payload.status != "cancelled":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Customers can only cancel bookings.",
+            )
+        if booking.status not in ("requested",):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot cancel booking once confirmed or in progress.",
+            )
 
     booking.status = payload.status
     if payload.notes:

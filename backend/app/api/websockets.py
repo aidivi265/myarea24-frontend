@@ -4,7 +4,7 @@ import json
 import random
 import uuid
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -12,9 +12,11 @@ from sqlalchemy.orm import Session
 def random_digits(k: int = 4) -> str:
     return "".join(random.choices("0123456789", k=k))
 
+from backend.app.api.deps import get_current_user
+from backend.app.core.config import settings
 from backend.app.core.logging import logger
 from backend.app.core.websocket_manager import ws_manager
-from backend.app.database.models import GovernmentNotice, CustomerEnquiry, Business
+from backend.app.database.models import GovernmentNotice, CustomerEnquiry, Business, User
 from backend.app.database.session import get_db
 
 router = APIRouter(tags=["Real-Time WebSockets & Push Notifications"])
@@ -161,96 +163,105 @@ async def websocket_live_endpoint(
                             {"type": "UNSUBSCRIBED", "channel": channel}, websocket
                         )
 
-                elif mtype == "SIMULATE_LEAD":
-                    # Instant test frame from client
-                    biz = msg.get("business_id", business_id or "biz-daily-brew")
-                    await ws_manager.send_merchant_event(
-                        biz,
-                        "MERCHANT_LEAD",
-                        {
-                            "id": f"lead-{int(datetime.datetime.utcnow().timestamp() * 1000)}",
-                            "customerName": msg.get("customerName", "Priya Sharma"),
-                            "phone": msg.get("phone", "+91 98711 22345"),
-                            "email": msg.get("email", "priya.sharma@example.com"),
-                            "topic": msg.get("topic", "Corporate Catering Inquiry"),
-                            "message": msg.get("message", "Need pricing for 25 artisanal coffee combos"),
-                            "locality": area or "Rohini Sector 10",
-                            "timeAgo": "Just now",
-                            "status": "New",
-                            "source": "WhatsApp / MyArea24 Live Lead",
-                        },
-                    )
+                elif mtype in ("SIMULATE_LEAD", "SIMULATE_CIVIC_ALERT", "SIMULATE_ORDER", "SIMULATE_ORDER_STATUS"):
+                    # Simulation commands strictly prohibited in production mode
+                    if (settings.APP_ENV or "").strip().lower() in ("production", "prod"):
+                        await ws_manager.send_personal_message(
+                            {"type": "ERROR", "message": "Simulation commands are strictly disabled in production."},
+                            websocket,
+                        )
+                        continue
 
-                elif mtype == "SIMULATE_CIVIC_ALERT":
-                    await ws_manager.broadcast_civic_alert(
-                        {
-                            "id": f"alert-{int(datetime.datetime.utcnow().timestamp())}",
-                            "title": msg.get("title", "🚨 Flash Flood Advisory — NDMA SACHET"),
-                            "description": msg.get(
-                                "description",
-                                "Severe water-logging reported under flyovers in Rohini. Municipal pumps deployed.",
-                            ),
-                            "severity": msg.get("severity", "Critical"),
-                            "category": "Disaster / Weather",
-                            "sender": "NDMA SACHET (CAP v1.2)",
-                            "instruction": "Avoid low-lying underpasses. Dial 1077 for emergency assistance.",
-                            "timeAgo": "Just now",
-                        },
-                        target_area=area,
-                    )
+                    if mtype == "SIMULATE_LEAD":
+                        # Instant test frame from client
+                        biz = msg.get("business_id", business_id or "biz-daily-brew")
+                        await ws_manager.send_merchant_event(
+                            biz,
+                            "MERCHANT_LEAD",
+                            {
+                                "id": f"lead-{int(datetime.datetime.utcnow().timestamp() * 1000)}",
+                                "customerName": msg.get("customerName", "Priya Sharma"),
+                                "phone": msg.get("phone", "+91 98711 22345"),
+                                "email": msg.get("email", "priya.sharma@example.com"),
+                                "topic": msg.get("topic", "Corporate Catering Inquiry"),
+                                "message": msg.get("message", "Need pricing for 25 artisanal coffee combos"),
+                                "locality": area or "Rohini Sector 10",
+                                "timeAgo": "Just now",
+                                "status": "New",
+                                "source": "WhatsApp / MyArea24 Live Lead",
+                            },
+                        )
 
-                elif mtype == "SIMULATE_ORDER":
-                    biz = msg.get("business_id", business_id or "biz-daily-brew")
-                    order_num = msg.get("order_number", f"MA24-ORD-{random_digits()}")
-                    order_payload = {
-                        "id": f"ord-{int(datetime.datetime.utcnow().timestamp() * 1000)}",
-                        "order_number": order_num,
-                        "business_id": biz,
-                        "business_name": "The Daily Brew (Rohini)",
-                        "customer_name": msg.get("customer_name", "Sneha Kapoor"),
-                        "customer_phone": msg.get("customer_phone", "+91 98711 55667"),
-                        "delivery_address": msg.get("delivery_address", "Flat 402, Tower B, Rohini Sector 9"),
-                        "final_payable": float(msg.get("final_payable", 380.0)),
-                        "payment_method": msg.get("payment_method", "upi_qr"),
-                        "payment_status": msg.get("payment_status", "paid"),
-                        "status": "placed",
-                        "estimated_delivery_mins": 20,
-                        "created_at": datetime.datetime.utcnow().isoformat(),
-                        "items": msg.get("items", [
-                            {"product_name": "Caramel Macchiato (Large)", "unit_price": 190.0, "quantity": 1, "total_price": 190.0},
-                            {"product_name": "Fresh Blueberry Muffin", "unit_price": 190.0, "quantity": 1, "total_price": 190.0},
-                        ]),
-                    }
-                    await ws_manager.send_merchant_event(biz, "MERCHANT_ORDER", order_payload)
-                    await ws_manager.broadcast_to_channel(f"order:{order_num.lower()}", {
-                        "type": "ORDER_STATUS_UPDATE",
-                        "order_number": order_num,
-                        "status": "placed",
-                        "payment_status": "paid",
-                        "updated_at": datetime.datetime.utcnow().isoformat(),
-                    })
-                    await ws_manager.broadcast_to_channel("broadcast", {
-                        "type": "ORDER_STATUS_UPDATE",
-                        "order_number": order_num,
-                        "status": "placed",
-                        "payment_status": "paid",
-                        "updated_at": datetime.datetime.utcnow().isoformat(),
-                    })
+                    elif mtype == "SIMULATE_CIVIC_ALERT":
+                        await ws_manager.broadcast_civic_alert(
+                            {
+                                "id": f"alert-{int(datetime.datetime.utcnow().timestamp())}",
+                                "title": msg.get("title", "🚨 Flash Flood Advisory — NDMA SACHET"),
+                                "description": msg.get(
+                                    "description",
+                                    "Severe water-logging reported under flyovers in Rohini. Municipal pumps deployed.",
+                                ),
+                                "severity": msg.get("severity", "Critical"),
+                                "category": "Disaster / Weather",
+                                "sender": "NDMA SACHET (CAP v1.2)",
+                                "instruction": "Avoid low-lying underpasses. Dial 1077 for emergency assistance.",
+                                "timeAgo": "Just now",
+                            },
+                            target_area=area,
+                        )
 
-                elif mtype == "SIMULATE_ORDER_STATUS":
-                    order_num = msg.get("order_number", "MA24-ORD-8821")
-                    new_status = msg.get("status", "confirmed")
-                    update_data = {
-                        "type": "ORDER_STATUS_UPDATE",
-                        "order_number": order_num,
-                        "status": new_status,
-                        "payment_status": msg.get("payment_status", "paid"),
-                        "notes": msg.get("notes", "Order status transitioned"),
-                        "updated_at": datetime.datetime.utcnow().isoformat(),
-                    }
-                    await ws_manager.broadcast_order_update(order_num, new_status, update_data)
-                    biz = msg.get("business_id", business_id or "biz-daily-brew")
-                    await ws_manager.send_merchant_event(biz, "ORDER_STATUS_UPDATE", update_data)
+                    elif mtype == "SIMULATE_ORDER":
+                        biz = msg.get("business_id", business_id or "biz-daily-brew")
+                        order_num = msg.get("order_number", f"MA24-ORD-{random_digits()}")
+                        order_payload = {
+                            "id": f"ord-{int(datetime.datetime.utcnow().timestamp() * 1000)}",
+                            "order_number": order_num,
+                            "business_id": biz,
+                            "business_name": "The Daily Brew (Rohini)",
+                            "customer_name": msg.get("customer_name", "Sneha Kapoor"),
+                            "customer_phone": msg.get("customer_phone", "+91 98711 55667"),
+                            "delivery_address": msg.get("delivery_address", "Flat 402, Tower B, Rohini Sector 9"),
+                            "final_payable": float(msg.get("final_payable", 380.0)),
+                            "payment_method": msg.get("payment_method", "upi_qr"),
+                            "payment_status": msg.get("payment_status", "paid"),
+                            "status": "placed",
+                            "estimated_delivery_mins": 20,
+                            "created_at": datetime.datetime.utcnow().isoformat(),
+                            "items": msg.get("items", [
+                                {"product_name": "Caramel Macchiato (Large)", "unit_price": 190.0, "quantity": 1, "total_price": 190.0},
+                                {"product_name": "Fresh Blueberry Muffin", "unit_price": 190.0, "quantity": 1, "total_price": 190.0},
+                            ]),
+                        }
+                        await ws_manager.send_merchant_event(biz, "MERCHANT_ORDER", order_payload)
+                        await ws_manager.broadcast_to_channel(f"order:{order_num.lower()}", {
+                            "type": "ORDER_STATUS_UPDATE",
+                            "order_number": order_num,
+                            "status": "placed",
+                            "payment_status": "paid",
+                            "updated_at": datetime.datetime.utcnow().isoformat(),
+                        })
+                        await ws_manager.broadcast_to_channel("broadcast", {
+                            "type": "ORDER_STATUS_UPDATE",
+                            "order_number": order_num,
+                            "status": "placed",
+                            "payment_status": "paid",
+                            "updated_at": datetime.datetime.utcnow().isoformat(),
+                        })
+
+                    elif mtype == "SIMULATE_ORDER_STATUS":
+                        order_num = msg.get("order_number", "MA24-ORD-8821")
+                        new_status = msg.get("status", "confirmed")
+                        update_data = {
+                            "type": "ORDER_STATUS_UPDATE",
+                            "order_number": order_num,
+                            "status": new_status,
+                            "payment_status": msg.get("payment_status", "paid"),
+                            "notes": msg.get("notes", "Order status transitioned"),
+                            "updated_at": datetime.datetime.utcnow().isoformat(),
+                        }
+                        await ws_manager.broadcast_order_update(order_num, new_status, update_data)
+                        biz = msg.get("business_id", business_id or "biz-daily-brew")
+                        await ws_manager.send_merchant_event(biz, "ORDER_STATUS_UPDATE", update_data)
 
             except json.JSONDecodeError:
                 logger.warning(f"[ws] Received invalid non-JSON payload from {cid}: {data_text[:50]}")
@@ -267,10 +278,20 @@ async def websocket_live_endpoint(
 # ============================================================================
 
 @router.post("/api/v1/ws/trigger-civic-alert")
-async def trigger_civic_alert(req: TriggerAlertRequest):
+async def trigger_civic_alert(
+    req: TriggerAlertRequest,
+    current_user: User = Depends(get_current_user),
+):
     """
     Broadcasts an urgent NDMA SACHET or Civic Alert to all connected citizen and merchant sockets.
+    Restricted strictly to administrators to prevent unauthorized mass panic broadcasting.
     """
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Only platform administrators can trigger manual civic alerts.",
+        )
+
     alert_payload = {
         "id": f"alert-push-{int(datetime.datetime.utcnow().timestamp())}",
         "title": req.title,

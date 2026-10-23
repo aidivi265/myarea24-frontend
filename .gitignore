@@ -5,6 +5,9 @@ dist/
 .env
 .env.*
 !.env.example
+!.env.staging.example
+backups/*.db
+backups/*.json
 __pycache__/
 *.py[cod]
 .venv/

@@ -11,12 +11,24 @@ export function getApiBaseUrl(): string | null {
     return configured.trim().replace(/\/+$/, '');
   }
 
-  // If running locally in Vite dev mode (default port 5173), Vite dev proxy forwards /api to http://127.0.0.1:8000
+  // If running in a browser environment:
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
-    const port = window.location.port;
-    if ((host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0') && port === '5173') {
-      return ''; // Uses local Vite dev proxy to http://127.0.0.1:8000
+    // 1. Local development or preview mode on any localhost port (proxied to backend)
+    if (host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0') {
+      return '';
+    }
+    // 2. Staging or production domain served via Nginx reverse proxy (same-origin /api)
+    if (host.includes('myarea24.in')) {
+      return '';
+    }
+    // 3. GitHub Pages static showcase without backend attached
+    if (host.endsWith('github.io')) {
+      return null;
+    }
+    // 4. Default for custom web deployments with same-origin reverse proxy
+    if (window.location.protocol.startsWith('http')) {
+      return '';
     }
   }
 

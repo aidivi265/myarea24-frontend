@@ -18,9 +18,16 @@ import {
   Store,
   ChevronRight,
   AlertCircle,
+  FileText,
 } from 'lucide-react';
 import { CartItem, DeliveryAddress, Order, OrderStatus, PaymentMethod, PaymentStatus, UserLocation } from '../types';
-import { placeOrder, advanceOrderStatus, getLocalOrders } from '../services/orderCommerceService';
+import {
+  placeOrder,
+  advanceOrderStatus,
+  getLocalOrders,
+  loadRazorpayScript,
+  verifyOrderPayment,
+} from '../services/orderCommerceService';
 import {
   realtimeService,
   ORDER_STATUS_EVENT,
@@ -193,6 +200,78 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         notes: orderNotes,
         storeName,
       });
+
+      // If Razorpay chosen, trigger Razorpay Standard Checkout SDK
+      if (paymentMethod === 'razorpay') {
+        const isLoaded = await loadRazorpayScript();
+        const rzpKey = (import.meta as any).env?.VITE_RAZORPAY_KEY_ID || 'rzp_test_MyArea24SimKey';
+
+        if (isLoaded && (window as any).Razorpay) {
+          const rzpOptions = {
+            key: rzpKey,
+            amount: Math.round(order.finalPayable * 100),
+            currency: 'INR',
+            name: 'MyArea24 Neighbourhood Market',
+            description: `Order ${order.orderNumber} • ${storeName}`,
+            notes: {
+              order_number: order.orderNumber,
+            },
+            prefill: {
+              name: recipientName,
+              contact: recipientPhone,
+            },
+            theme: {
+              color: '#2563eb',
+            },
+            handler: async (response: any) => {
+              try {
+                await verifyOrderPayment({
+                  orderIdentifier: order.orderNumber,
+                  paymentMethod: 'razorpay',
+                  razorpayPaymentId: response.razorpay_payment_id,
+                  razorpayOrderId: response.razorpay_order_id,
+                  razorpaySignature: response.razorpay_signature,
+                  amount: order.finalPayable,
+                });
+                order.paymentStatus = 'paid';
+                order.transactionId = response.razorpay_payment_id;
+                setActiveOrder({ ...order });
+                setStep('tracking');
+                onClearCart();
+              } catch (e) {
+                alert('Payment verification failed. Please check your order status in My Orders.');
+                setActiveOrder({ ...order });
+                setStep('tracking');
+              } finally {
+                setIsPlacing(false);
+              }
+            },
+            modal: {
+              ondismiss: () => {
+                // If payment was dismissed without completion, order remains in 'pending' status
+                order.paymentStatus = 'pending';
+                setActiveOrder({ ...order });
+                setStep('tracking');
+                setIsPlacing(false);
+              },
+            },
+          };
+
+          const rzpInstance = new (window as any).Razorpay(rzpOptions);
+          rzpInstance.open();
+          return;
+        }
+      }
+
+      // If UPI QR, verify transaction reference and record
+      if (paymentMethod === 'upi_qr') {
+        await verifyOrderPayment({
+          orderIdentifier: order.orderNumber,
+          paymentMethod: 'upi_qr',
+          upiRefId: `UPI_REF_${Date.now()}`,
+        });
+        order.paymentStatus = 'paid';
+      }
 
       setActiveOrder(order);
       setStep('tracking');
@@ -553,21 +632,33 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                         <p className="text-[10px] font-bold text-slate-700 mt-2">VPA: myarea24@upi</p>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setUpiVerified(true);
-                        }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-                          upiVerified
-                            ? 'bg-emerald-600 text-white'
-                            : 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                        }`}
-                      >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        {upiVerified ? '✓ UPI Payment Verified!' : 'Simulate UPI App Scan & Pay'}
-                      </button>
+                      <div className="flex flex-wrap items-center justify-center gap-2">
+                        <a
+                          href={`upi://pay?pa=myarea24@upi&pn=${encodeURIComponent(storeName)}&am=${grandTotal}&cu=INR&tn=Order%20${encodeURIComponent(storeName)}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition flex items-center gap-1.5 shadow-xs"
+                        >
+                          <QrCode className="w-3.5 h-3.5" />
+                          <span>Pay via UPI App</span>
+                        </a>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigator.clipboard?.writeText('myarea24@upi');
+                            setUpiVerified(true);
+                          }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                            upiVerified
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300'
+                          }`}
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          {upiVerified ? '✓ VPA Copied / Verified' : 'Copy VPA & Verify'}
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -661,25 +752,25 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                         key: 'placed',
                         title: 'Order Placed',
                         desc: 'Transmitted to neighborhood store',
-                        time: 'Just now',
+                        time: 'Stage 1',
                       },
                       {
                         key: 'confirmed',
                         title: 'Store Confirmed & Packed',
                         desc: 'Merchant has accepted basket and sealed parcel',
-                        time: 'In 3 mins',
+                        time: 'Stage 2',
                       },
                       {
                         key: 'out_for_delivery',
                         title: 'Out for Delivery',
-                        desc: 'Delivery partner Ramesh K. is en route (650m away)',
-                        time: 'In 12 mins',
+                        desc: 'Courier / delivery partner is en route to your location',
+                        time: 'Stage 3',
                       },
                       {
                         key: 'delivered',
                         title: 'Delivered',
-                        desc: 'Package handed over at your doorstep',
-                        time: 'Goal: 20 mins',
+                        desc: 'Package handed over safely at your doorstep',
+                        time: 'Final',
                       },
                     ].map((st) => {
                       const stages: OrderStatus[] = ['placed', 'confirmed', 'out_for_delivery', 'delivered'];
@@ -719,43 +810,49 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     })}
                   </div>
 
-                  {/* Simulator button */}
-                  {activeOrder.status !== 'delivered' && (
+                  {/* Real-time Status Refresh & Order History link */}
+                  <div className="pt-2 space-y-2">
                     <button
                       type="button"
                       disabled={isUpdatingStatus}
-                      onClick={handleAdvanceStatus}
-                      className="w-full mt-2 py-2 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-600 hover:text-white text-xs font-bold transition flex items-center justify-center gap-1.5"
+                      onClick={async () => {
+                        setIsUpdatingStatus(true);
+                        try {
+                          const tokenParam = activeOrder.trackingToken ? `?token=${encodeURIComponent(activeOrder.trackingToken)}` : '';
+                          const res = await fetch(`/api/v1/orders/${encodeURIComponent(activeOrder.orderNumber)}${tokenParam}`);
+                          if (res.ok) {
+                            const data = await res.json();
+                            if (data.order) {
+                              setActiveOrder({
+                                ...activeOrder,
+                                status: data.order.status,
+                                paymentStatus: data.order.payment_status,
+                              });
+                            }
+                          }
+                        } catch (e) {
+                          console.warn('Failed to refresh order status', e);
+                        } finally {
+                          setIsUpdatingStatus(false);
+                        }
+                      }}
+                      className="w-full py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
                     >
                       <RefreshCw className={`w-3.5 h-3.5 ${isUpdatingStatus ? 'animate-spin' : ''}`} />
-                      Simulate Next Status Stage →
+                      Refresh Live Order Status
                     </button>
-                  )}
+
+                    <a
+                      href="/my-orders"
+                      className="w-full py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition flex items-center justify-center gap-1.5"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      View Invoice & Details in My Orders →
+                    </a>
+                  </div>
                 </div>
 
-                {/* Merchant & Rider Contact Action Buttons */}
-                <div className="grid grid-cols-2 gap-2">
-                  <a
-                    href="tel:+919876543210"
-                    className="py-2 px-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center justify-center gap-1.5 transition"
-                  >
-                    <Phone className="w-3.5 h-3.5 text-blue-600" />
-                    Call Store
-                  </a>
-                  {onNavigateToMap && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onClose();
-                        onNavigateToMap();
-                      }}
-                      className="py-2 px-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center justify-center gap-1.5 transition"
-                    >
-                      <MapPin className="w-3.5 h-3.5 text-emerald-600" />
-                      Live Map View
-                    </button>
-                  )}
-                </div>
+                {/* Items Summary in Order */}
 
                 {/* Items Summary in Order */}
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5">

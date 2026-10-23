@@ -110,6 +110,13 @@ export const NAV_ITEMS: NavItem[] = [
     searchPlaceholder: 'Search your saved places, fuel stations, properties & items...',
     appSearchPlaceholder: 'Search your saved items...',
   },
+  {
+    id: 'my-orders',
+    label: 'My Orders',
+    section: 'community',
+    searchPlaceholder: 'Search your store orders and service bookings...',
+    appSearchPlaceholder: 'Track your orders and bookings...',
+  },
 ];
 
 export const INITIAL_SAVED_ITEMS: SavedEntry[] = [];

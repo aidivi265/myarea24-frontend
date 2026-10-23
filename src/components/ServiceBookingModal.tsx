@@ -28,6 +28,7 @@ export interface ServiceData {
   locality?: string;
   city?: string;
   phone?: string;
+  whatsapp?: string;
   timing?: string;
   img?: string;
   description?: string;
@@ -371,38 +372,76 @@ export const ServiceBookingModal: React.FC<ServiceBookingModalProps> = ({
                     })}
                   </div>
 
-                  {/* Simulator button */}
-                  {activeBooking.status !== 'completed' && (
+                  {/* Actions & Refresh */}
+                  <div className="pt-2 space-y-2">
                     <button
                       type="button"
                       disabled={isUpdatingStatus}
-                      onClick={handleAdvanceStatus}
-                      className="w-full mt-2 py-2 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-600 hover:text-white text-xs font-bold transition flex items-center justify-center gap-1.5"
+                      onClick={async () => {
+                        setIsUpdatingStatus(true);
+                        try {
+                          const otpParam = activeBooking.otpCode ? `?otp=${encodeURIComponent(activeBooking.otpCode)}` : '';
+                          const res = await fetch(`/api/v1/services/bookings/${encodeURIComponent(activeBooking.bookingNumber)}${otpParam}`);
+                          if (res.ok) {
+                            const data = await res.json();
+                            if (data.booking) {
+                              setActiveBooking({
+                                ...activeBooking,
+                                status: data.booking.status,
+                              });
+                            }
+                          }
+                        } catch (e) {
+                          console.warn('Failed to refresh booking status', e);
+                        } finally {
+                          setIsUpdatingStatus(false);
+                        }
+                      }}
+                      className="w-full py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
                     >
                       <RefreshCw className={`w-3.5 h-3.5 ${isUpdatingStatus ? 'animate-spin' : ''}`} />
-                      Simulate Next Service Stage →
+                      Refresh Booking Status
                     </button>
-                  )}
+
+                    <a
+                      href="/my-bookings"
+                      className="w-full py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition flex items-center justify-center gap-1.5"
+                    >
+                      View in My Bookings →
+                    </a>
+                  </div>
                 </div>
 
                 {/* Direct Contact Buttons */}
                 <div className="grid grid-cols-2 gap-2">
-                  <a
-                    href={`tel:${service.phone || '+919811234567'}`}
-                    className="py-2.5 px-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold flex items-center justify-center gap-1.5 transition"
-                  >
-                    <Phone className="w-3.5 h-3.5 text-blue-600" />
-                    Call Technician
-                  </a>
-                  <a
-                    href={`https://wa.me/919811234567?text=Hi%20${encodeURIComponent(service.name)},%20I%20have%20booked%20slot%20${activeBooking.bookingNumber}%20on%20MyArea24`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="py-2.5 px-3 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold flex items-center justify-center gap-1.5 transition"
-                  >
-                    <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
-                    WhatsApp
-                  </a>
+                  {service.phone ? (
+                    <a
+                      href={`tel:${service.phone}`}
+                      className="py-2.5 px-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold flex items-center justify-center gap-1.5 transition"
+                    >
+                      <Phone className="w-3.5 h-3.5 text-blue-600" />
+                      Call Technician
+                    </a>
+                  ) : (
+                    <div className="py-2.5 px-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-400 text-xs font-medium flex items-center justify-center">
+                      Phone unlisted
+                    </div>
+                  )}
+                  {service.whatsapp || service.phone ? (
+                    <a
+                      href={`https://wa.me/${service.whatsapp || service.phone}?text=Hi%20${encodeURIComponent(service.name)},%20I%20have%20booked%20slot%20${activeBooking.bookingNumber}%20on%20MyArea24`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="py-2.5 px-3 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold flex items-center justify-center gap-1.5 transition"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
+                      WhatsApp
+                    </a>
+                  ) : (
+                    <div className="py-2.5 px-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-400 text-xs font-medium flex items-center justify-center">
+                      WhatsApp unlisted
+                    </div>
+                  )}
                 </div>
               </div>
             )

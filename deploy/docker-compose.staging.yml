@@ -1,0 +1,103 @@
+networks:
+  staging_net:
+    driver: bridge
+
+volumes:
+  staging_postgres_data:
+    driver: local
+  staging_certbot_certs:
+    driver: local
+  staging_certbot_www:
+    driver: local
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. Staging Database (PostgreSQL 16 + PostGIS Extension)
+  # ----------------------------------------------------------------------------
+  postgres_staging:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: myarea24_postgres_staging
+    restart: unless-stopped
+    networks:
+      - staging_net
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-myarea24_staging}
+      POSTGRES_USER: ${POSTGRES_USER:-myarea24_staging}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_in_staging_env}
+    ports:
+      # Bound strictly to 127.0.0.1 (host loopback only, NOT exposed to public internet)
+      # Enables host-based migration and backup scripts without container exec overhead
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - staging_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-myarea24_staging} -d $${POSTGRES_DB:-myarea24_staging}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ----------------------------------------------------------------------------
+  # 2. FastAPI Staging Application Service
+  # ----------------------------------------------------------------------------
+  backend_staging:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    container_name: myarea24_backend_staging
+    restart: unless-stopped
+    networks:
+      - staging_net
+    env_file:
+      - path: ../.env.staging
+        required: false
+      - path: ../.env
+        required: false
+    environment:
+      - APP_ENV=staging
+      - DEBUG=false
+      - DATABASE_URL=${DATABASE_URL:-postgresql+psycopg2://${POSTGRES_USER:-myarea24_staging}:${POSTGRES_PASSWORD:-change_me_in_staging_env}@postgres_staging:5432/${POSTGRES_DB:-myarea24_staging}}
+    depends_on:
+      postgres_staging:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ----------------------------------------------------------------------------
+  # 3. Nginx Reverse Proxy & Static Asset Gateway
+  # ----------------------------------------------------------------------------
+  nginx_staging:
+    image: nginx:alpine
+    container_name: myarea24_nginx_staging
+    restart: unless-stopped
+    networks:
+      - staging_net
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ../dist:/usr/share/nginx/html:ro
+      - ./nginx/staging.conf:/etc/nginx/conf.d/default.conf:ro
+      - staging_certbot_certs:/etc/letsencrypt:ro
+      - staging_certbot_www:/var/www/certbot:ro
+    depends_on:
+      backend_staging:
+        condition: service_healthy
+
+  # ----------------------------------------------------------------------------
+  # 4. Optional Certbot SSL Certificate Renewal Service
+  # ----------------------------------------------------------------------------
+  certbot_staging:
+    image: certbot/certbot:latest
+    container_name: myarea24_certbot_staging
+    restart: unless-stopped
+    networks:
+      - staging_net
+    volumes:
+      - staging_certbot_certs:/etc/letsencrypt
+      - staging_certbot_www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done;'"

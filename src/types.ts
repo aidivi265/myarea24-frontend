@@ -16,7 +16,8 @@ export type DashboardId =
   | 'market-rates'
   | 'fuel-rates'
   | 'bulletins'
-  | 'saved';
+  | 'saved'
+  | 'my-orders';
 
 export type ViewDeviceMode = 'desktop' | 'app' | 'split';
 export type RenderFidelityMode = 'interactive' | 'visual-guide';
@@ -130,6 +131,7 @@ export interface Order {
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;
   transactionId?: string;
+  trackingToken?: string;
   customerName: string;
   customerPhone: string;
   deliveryAddress: DeliveryAddress | string;

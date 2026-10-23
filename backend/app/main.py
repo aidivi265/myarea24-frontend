@@ -40,14 +40,27 @@ async def lifespan(app: FastAPI):
     # Startup: Ensure tables exist
     logger.info(f"Starting {settings.APP_NAME} in [{settings.APP_ENV}] mode...")
 
-    # Production security validation
-    if (settings.APP_ENV or "").strip().lower() in ["production", "prod"]:
+    # Production & staging security validation
+    if (settings.APP_ENV or "").strip().lower() in ["production", "prod", "staging"]:
         default_insecure_key = "myarea24_local_development_secret_key_2026"
         if not settings.JWT_SECRET_KEY or default_insecure_key in settings.JWT_SECRET_KEY:
-            logger.critical("FATAL: Application cannot start in production with default JWT_SECRET_KEY!")
+            logger.critical(f"FATAL: Application cannot start in {settings.APP_ENV} with default JWT_SECRET_KEY!")
             raise RuntimeError(
-                "CRITICAL SECURITY CONFIGURATION ERROR: Default JWT_SECRET_KEY cannot be used in production mode!"
+                f"CRITICAL SECURITY CONFIGURATION ERROR: Default JWT_SECRET_KEY cannot be used in {settings.APP_ENV} mode!"
             )
+
+    # Initialize PostGIS spatial extensions if running against PostgreSQL
+    from backend.app.database.session import is_sqlite
+    if not is_sqlite:
+        from sqlalchemy import text
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis;"))
+                conn.commit()
+                logger.info("[main] PostGIS spatial extension verified on PostgreSQL.")
+        except Exception as e:
+            logger.warning(f"[main] PostGIS extension notice (non-fatal): {e}")
+
     Base.metadata.create_all(bind=engine)
 
     # Schema evolution: ensure newly added columns are present in existing SQLite databases
@@ -81,6 +94,25 @@ async def lifespan(app: FastAPI):
                     logger.info("[main] Migrated schema: added column is_available to service_listings table")
                 except Exception as e:
                     logger.warning(f"[main] Column migration notice for service_listings.is_available: {e}")
+
+        if inspector.has_table("orders"):
+            existing_order_cols = {c["name"] for c in inspector.get_columns("orders")}
+            if "tracking_token" not in existing_order_cols:
+                try:
+                    conn.execute(text("ALTER TABLE orders ADD COLUMN tracking_token VARCHAR(100)"))
+                    conn.commit()
+                    logger.info("[main] Migrated schema: added column tracking_token to orders table")
+                except Exception as e:
+                    logger.warning(f"[main] Column migration notice for orders.tracking_token: {e}")
+
+        # Ensure performance indexes for citizen orders and service bookings
+        try:
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_orders_user_id ON orders (user_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_orders_business_id ON orders (business_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_service_bookings_user_id ON service_bookings (user_id)"))
+            conn.commit()
+        except Exception as e:
+            logger.debug(f"[main] Index creation notice: {e}")
 
     # Start background ingestion worker scheduler if enabled
     if settings.INGESTION_ENABLED:
@@ -164,6 +196,7 @@ app.include_router(intelligence_router)
 app.include_router(auth_router)
 app.include_router(businesses_router)
 app.include_router(products_router)
+app.include_router(orders_router)  # Register before services_router to prevent /services/{service_id} shadowing /services/bookings
 app.include_router(services_router)
 app.include_router(offers_router)
 app.include_router(events_router)
@@ -172,7 +205,6 @@ app.include_router(market_router)
 app.include_router(locations_router)
 app.include_router(locations_plural_router)
 app.include_router(emergency_router)
-app.include_router(orders_router)
 app.include_router(merchant_router)
 app.include_router(websockets_router)
 

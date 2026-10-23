@@ -212,11 +212,11 @@ class Settings(BaseSettings):
     def validate_production_security(self) -> "Settings":
         env = (self.APP_ENV or "").strip().lower()
         default_insecure_key = "myarea24_local_development_secret_key_2026"
-        if env in ["production", "prod"]:
+        if env in ["production", "prod", "staging"]:
             if not self.JWT_SECRET_KEY or default_insecure_key in self.JWT_SECRET_KEY:
                 raise ValueError(
-                    "CRITICAL SECURITY CONFIGURATION ERROR: Default JWT_SECRET_KEY cannot be used "
-                    "when APP_ENV is set to 'production'. You must configure a secure, unique JWT_SECRET_KEY."
+                    f"CRITICAL SECURITY CONFIGURATION ERROR: Default JWT_SECRET_KEY cannot be used "
+                    f"when APP_ENV is set to '{self.APP_ENV}'. You must configure a secure, unique JWT_SECRET_KEY."
                 )
         return self
 

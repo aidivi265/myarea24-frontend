@@ -570,6 +570,7 @@ class Order(Base):
     payment_method = Column(String(50), default="upi_qr", nullable=False)  # 'upi_qr', 'razorpay', 'phonepe', 'cod'
     payment_status = Column(String(50), default="pending", nullable=False)  # 'pending', 'paid', 'cod', 'failed', 'refunded'
     transaction_id = Column(String(100), nullable=True)
+    tracking_token = Column(String(100), nullable=True, index=True)
     customer_name = Column(String(100), nullable=False)
     customer_phone = Column(String(50), nullable=False)
     delivery_address = Column(Text, nullable=False)
@@ -587,6 +588,8 @@ class Order(Base):
     __table_args__ = (
         Index("ix_orders_status_created", "status", "created_at"),
         Index("ix_orders_customer_phone", "customer_phone"),
+        Index("ix_orders_user_id", "user_id"),
+        Index("ix_orders_business_id", "business_id"),
     )
 
 
@@ -633,6 +636,7 @@ class ServiceBooking(Base):
     __table_args__ = (
         Index("ix_service_bookings_status", "status"),
         Index("ix_service_bookings_customer_phone", "customer_phone"),
+        Index("ix_service_bookings_user_id", "user_id"),
     )
 
 

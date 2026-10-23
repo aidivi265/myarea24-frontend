@@ -59,6 +59,7 @@ const ICON_MAP: Record<DashboardId, React.ElementType> = {
   'fuel-rates': Fuel,
   bulletins: FileText,
   saved: Heart,
+  'my-orders': ShoppingBag,
 };
 
 const EXPLORE_IDS: DashboardId[] = ['businesses', 'products', 'services', 'offers', 'events'];

@@ -112,6 +112,9 @@ const BulletinsDashboard = React.lazy(() =>
 const SavedDashboard = React.lazy(() =>
   import('./dashboards/CommunityDashboards').then((m) => ({ default: m.SavedDashboard }))
 );
+const MyOrdersDashboard = React.lazy(() =>
+  import('./dashboards/MyOrdersDashboard').then((m) => ({ default: m.MyOrdersDashboard }))
+);
 
 // Mobile App View & Location Modal (Code-split)
 const MobileAppView = React.lazy(() =>
@@ -181,6 +184,7 @@ const ICON_MAP: Record<DashboardId, React.ElementType> = {
   'fuel-rates': Fuel,
   bulletins: FileText,
   saved: Heart,
+  'my-orders': ShoppingBag,
 };
 
 const SAVED_STORAGE_KEY = 'myarea24_saved_items_v1';
@@ -285,6 +289,9 @@ export function App() {
     'fuel-rates': 'fuel-rates',
     bulletins: 'bulletins',
     saved: 'saved',
+    'my-orders': 'my-orders',
+    'my-bookings': 'my-orders',
+    orders: 'my-orders',
   };
 
   const activeDashboard: DashboardId = isMerchantPortal
@@ -734,6 +741,8 @@ export function App() {
         return <BulletinsDashboard {...commonProps} />;
       case 'saved':
         return <SavedDashboard {...commonProps} savedEntries={savedEntries} />;
+      case 'my-orders':
+        return <MyOrdersDashboard />;
       default:
         return <HomeDashboard {...commonProps} />;
     }
@@ -1313,6 +1322,19 @@ export function App() {
                 <span className="px-1.5 py-0.2 rounded-full bg-indigo-50 text-indigo-600 text-[10px] font-bold">
                   {savedEntries.length}
                 </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setProfileMenuOpen(false);
+                  handleNavigate('my-orders');
+                }}
+                className="w-full px-3 py-2 rounded-xl hover:bg-slate-50 flex items-center justify-between font-semibold text-slate-700"
+              >
+                <span className="flex items-center gap-2">
+                  <Package className="w-4 h-4 text-emerald-600" /> My Orders & Bookings
+                </span>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
               </button>
               <button
                 type="button"

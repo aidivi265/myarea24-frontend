@@ -87,6 +87,13 @@ export function clearAuthSession(): void {
  */
 import { getApiBaseUrl } from '../config/apiClient';
 
+interface PendingOtpRecord {
+  code: string;
+  expiresAt: number;
+}
+
+const pendingOtpStore = new Map<string, PendingOtpRecord>();
+
 function getAuthEndpoint(path: string): string | null {
   const base = getApiBaseUrl();
   if (base === null) return null;
@@ -113,6 +120,12 @@ export async function requestOtp(
 
       if (res.ok) {
         const data = await res.json();
+        if (data.dev_otp) {
+          pendingOtpStore.set(cleanEmail, {
+            code: String(data.dev_otp).trim(),
+            expiresAt: Date.now() + 10 * 60 * 1000,
+          });
+        }
         return {
           success: true,
           message: data.message || `Verification code sent to ${cleanEmail}`,
@@ -126,6 +139,11 @@ export async function requestOtp(
 
   // Fallback demo OTP when backend is offline
   const fallbackCode = String(Math.floor(100000 + Math.random() * 900000));
+  pendingOtpStore.set(cleanEmail, {
+    code: fallbackCode,
+    expiresAt: Date.now() + 10 * 60 * 1000,
+  });
+
   return {
     success: true,
     message: `Verification code sent to ${cleanEmail} (Valid for 10 minutes).`,
@@ -191,7 +209,34 @@ export async function verifyOtp(params: {
     }
   }
 
-  // Offline simulation fallback
+  // Offline verification validation
+  const pending = pendingOtpStore.get(cleanEmail);
+  if (!pending) {
+    return {
+      success: false,
+      error: 'No active OTP verification code found for this email. Please request a new code.',
+    };
+  }
+
+  if (Date.now() > pending.expiresAt) {
+    pendingOtpStore.delete(cleanEmail);
+    return {
+      success: false,
+      error: 'Verification code has expired. Please request a new code.',
+    };
+  }
+
+  if (pending.code !== code) {
+    return {
+      success: false,
+      error: 'Invalid verification code. Please enter the correct 6-digit code.',
+    };
+  }
+
+  // Clear matched OTP
+  pendingOtpStore.delete(cleanEmail);
+
+  // Authenticate verified session
   const fallbackProfile: AuthUserProfile = {
     id: Date.now(),
     email: cleanEmail,
@@ -199,8 +244,8 @@ export async function verifyOtp(params: {
     phone: params.phone || '+91 98765 43210',
     role: params.role || 'resident',
     isVerified: true,
-    token: `demo_jwt_${Date.now()}`,
-    refreshToken: `demo_refresh_${Date.now()}`,
+    token: `myarea24_token_${Date.now()}`,
+    refreshToken: `myarea24_refresh_${Date.now()}`,
   };
   setAuthSession(fallbackProfile.token!, fallbackProfile.refreshToken, fallbackProfile);
   return { success: true, user: fallbackProfile };

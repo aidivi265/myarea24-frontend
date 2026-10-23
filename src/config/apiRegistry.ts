@@ -8,9 +8,14 @@
  * non-disruptive empty state with ZERO synthetic or fake data.
  */
 
-function getEnv(key: string): string {
+function getEnv(key: string, ...aliases: string[]): string {
   try {
-    return (import.meta as any).env?.[key] || '';
+    const env = (import.meta as any).env || {};
+    if (env[key]) return env[key];
+    for (const alias of aliases) {
+      if (env[alias]) return env[alias];
+    }
+    return '';
   } catch {
     return '';
   }
@@ -61,7 +66,7 @@ export const API_REGISTRY: Record<string, ExternalApiSlot> = {
     provider: 'TomTom Traffic Incidents v5 / HERE Technologies Traffic API v7',
     description: 'Real-time arterial road congestion, roadworks, choke points, and traffic delay minutes.',
     docsUrl: 'https://developer.tomtom.com/traffic-api',
-    isConfigured: Boolean(getEnv('VITE_TRAFFIC_API_KEY')),
+    isConfigured: Boolean(getEnv('VITE_TRAFFIC_API_KEY', 'VITE_TOMTOM_API_KEY')),
     emptyStateMessage: '🚦 Live Traffic: Awaiting TomTom / HERE Traffic API Key',
   },
 
@@ -73,7 +78,7 @@ export const API_REGISTRY: Record<string, ExternalApiSlot> = {
     provider: 'WeatherAPI.com / OpenWeatherMap',
     description: 'Real-time temperature, precipitation probability, humidity, and extreme weather alerts.',
     docsUrl: 'https://www.weatherapi.com/docs/',
-    isConfigured: Boolean(getEnv('VITE_WEATHER_API_KEY')),
+    isConfigured: Boolean(getEnv('VITE_WEATHER_API_KEY', 'VITE_OPENWEATHERMAP_API_KEY', 'VITE_OPENWEATHER_API_KEY')),
     emptyStateMessage: '🌤️ Weather: Awaiting WeatherAPI.com Key',
   },
 
@@ -85,7 +90,7 @@ export const API_REGISTRY: Record<string, ExternalApiSlot> = {
     provider: 'OpenAQ v3 / Central Pollution Control Board (CPCB) CAAQMS',
     description: 'Continuous ambient monitoring station measurements for PM2.5, PM10, and CPCB National AQI sub-indices.',
     docsUrl: 'https://docs.openaq.org/',
-    isConfigured: Boolean(getEnv('VITE_AQI_API_KEY')),
+    isConfigured: Boolean(getEnv('VITE_AQI_API_KEY', 'VITE_OPENAQ_API_KEY', 'VITE_AQICN_API_KEY')),
     emptyStateMessage: '🍃 AQI Feed: Awaiting OpenAQ / CPCB API Key',
   },
 

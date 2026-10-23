@@ -63,10 +63,13 @@ def dispatch_email_otp(to_email: str, otp_code: str) -> bool:
 
 
 def dispatch_sms_otp(phone_number: str, otp_code: str) -> bool:
-    """Dispatches 6-digit OTP code to the recipient mobile number via Fast2SMS or fallback logger."""
+    """Dispatches 6-digit OTP code to the recipient mobile number via Fast2SMS or Twilio if configured."""
+    import logging
+    logger = logging.getLogger(__name__)
     clean_digits = re.sub(r"[^\d]", "", phone_number)[-10:]
 
-    if settings.FAST2SMS_API_KEY:
+    # 1. Fast2SMS Provider
+    if settings.FAST2SMS_API_KEY and not settings.FAST2SMS_API_KEY.startswith("your_"):
         try:
             import urllib.request
             import urllib.parse
@@ -90,10 +93,58 @@ def dispatch_sms_otp(phone_number: str, otp_code: str) -> bool:
             with urllib.request.urlopen(req, timeout=8) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 if data.get("return"):
+                    logger.info("[sms] Fast2SMS OTP dispatched successfully to +91-%s", clean_digits)
                     return True
-        except Exception:
-            pass
+                else:
+                    logger.warning("[sms] Fast2SMS returned error: %s", data.get("message"))
+        except Exception as e:
+            logger.error("[sms] Fast2SMS dispatch exception: %s", e)
 
+    # 2. Twilio SMS Provider
+    if (
+        settings.TWILIO_ACCOUNT_SID
+        and settings.TWILIO_AUTH_TOKEN
+        and settings.TWILIO_FROM_PHONE
+        and not settings.TWILIO_ACCOUNT_SID.startswith("your_")
+    ):
+        try:
+            import base64
+            import urllib.request
+            import urllib.parse
+
+            twilio_url = f"https://api.twilio.com/2010-04-01/Accounts/{settings.TWILIO_ACCOUNT_SID}/Messages.json"
+            formatted_to = f"+91{clean_digits}" if len(clean_digits) == 10 else f"+{clean_digits}"
+            payload = {
+                "To": formatted_to,
+                "From": settings.TWILIO_FROM_PHONE,
+                "Body": f"Your MyArea24 verification code is: {otp_code}. Valid for 10 minutes.",
+            }
+            auth_str = f"{settings.TWILIO_ACCOUNT_SID}:{settings.TWILIO_AUTH_TOKEN}"
+            auth_b64 = base64.b64encode(auth_str.encode("utf-8")).decode("ascii")
+
+            req = urllib.request.Request(
+                twilio_url,
+                data=urllib.parse.urlencode(payload).encode("utf-8"),
+                headers={
+                    "Authorization": f"Basic {auth_b64}",
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                if 200 <= resp.status < 300:
+                    logger.info("[sms] Twilio SMS OTP dispatched successfully to %s", formatted_to)
+                    return True
+        except Exception as e:
+            logger.error("[sms] Twilio dispatch exception: %s", e)
+
+    # Diagnostic notification if running in staging or production without SMS credentials
+    env = (settings.APP_ENV or "").strip().lower()
+    if env in ("production", "prod", "staging"):
+        logger.warning(
+            f"[sms] SMS OTP Provider unconfigured in {env} mode. "
+            "Neither FAST2SMS_API_KEY nor TWILIO credentials are configured. Real SMS was not dispatched."
+        )
     return True
 
 
@@ -176,8 +227,30 @@ def send_otp(req: SendOtpRequest, db: Session = Depends(get_db)):
     """
     Generates a secure 6-digit OTP, stores it in the database, and dispatches it
     via configured SMS/SMTP gateway or development logger.
+    Enforces a 60-second cooldown between resend requests.
     """
     clean_email = req.email.lower().strip()
+
+    # Rate limiting & resend cooldown check: 60 seconds
+    recent_otp = (
+        db.query(OtpToken)
+        .filter(
+            OtpToken.email == clean_email,
+            OtpToken.purpose == req.purpose,
+        )
+        .order_by(OtpToken.created_at.desc())
+        .first()
+    )
+    if recent_otp and recent_otp.created_at:
+        elapsed_seconds = (datetime.datetime.utcnow() - recent_otp.created_at).total_seconds()
+        if elapsed_seconds < 60:
+            retry_after = int(60 - elapsed_seconds)
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Please wait {retry_after} seconds before requesting a new verification code.",
+                headers={"Retry-After": str(retry_after)},
+            )
+
     otp_code = generate_otp_code(6)
     expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=10)
 
@@ -207,12 +280,16 @@ def send_otp(req: SendOtpRequest, db: Session = Depends(get_db)):
         dispatch_email_otp(clean_email, otp_code)
         display_target = clean_email
 
+    # Security check: Never expose dev_otp in production, staging or when DEBUG is False
+    is_production = (settings.APP_ENV or "").strip().lower() in ("production", "prod", "staging") or not settings.DEBUG
+    safe_dev_otp = None if is_production else (otp_code if settings.OTP_DEV_MODE else None)
+
     return SendOtpResponse(
         success=True,
         message=f"Verification code sent to {display_target}. Valid for 10 minutes.",
         email=clean_email,
         expires_in_minutes=10,
-        dev_otp=otp_code if settings.OTP_DEV_MODE else None,
+        dev_otp=safe_dev_otp,
     )
 
 
@@ -221,6 +298,7 @@ def verify_otp(req: VerifyOtpRequest, db: Session = Depends(get_db)):
     """
     Verifies the submitted 6-digit OTP. If valid, provisions or retrieves the user
     and issues an authentication JWT access token.
+    Enforces maximum 5 attempts and expiry checks.
     """
     clean_email = req.email.lower().strip()
     code = req.otp_code.strip()
@@ -235,15 +313,31 @@ def verify_otp(req: VerifyOtpRequest, db: Session = Depends(get_db)):
         .first()
     )
 
-    if not latest_unused or latest_unused.otp_code != code:
-        if latest_unused:
-            latest_unused.attempts = (latest_unused.attempts or 0) + 1
-            if latest_unused.attempts >= 5:
-                latest_unused.is_used = True
-            db.commit()
+    if not latest_unused:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid verification code. Please check and try again.",
+            detail="No active verification code found. Please request a new code.",
+        )
+
+    # Brute-force protection: check attempts limit
+    current_attempts = latest_unused.attempts or 0
+    if current_attempts >= 5:
+        latest_unused.is_used = True
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Too many incorrect attempts. This verification code has been invalidated for security. Please request a new code.",
+        )
+
+    if latest_unused.otp_code != code:
+        latest_unused.attempts = current_attempts + 1
+        if latest_unused.attempts >= 5:
+            latest_unused.is_used = True
+        db.commit()
+        remaining = max(0, 5 - latest_unused.attempts)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid verification code. {remaining} attempt{'s' if remaining != 1 else ''} remaining.",
         )
 
     record = latest_unused
