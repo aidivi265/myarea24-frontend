@@ -11,6 +11,7 @@ router = APIRouter(prefix="/api/v1", tags=["Civic Market Rates & Bulletins"])
 
 
 @router.get("/market-rates", response_model=Dict[str, Any])
+@router.get("/market/rates", response_model=Dict[str, Any])
 def get_market_rates(
     search: Optional[str] = Query(None, description="Search commodity name, variety or mandi"),
     area: Optional[str] = Query(None, description="User selected locality or area name"),
